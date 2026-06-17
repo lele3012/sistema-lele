@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sistema Lelé da Kuka</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1a;min-height:100vh}
@@ -401,17 +403,53 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 <div class="toast" id="toast"></div>
 
 <script>
+// ===== FIREBASE =====
+var firebaseConfig = {
+  databaseURL: "https://lele-da-kuka-sistema-default-rtdb.firebaseio.com"
+};
+firebase.initializeApp(firebaseConfig);
+var db = firebase.database();
+
 // ===== DADOS =====
 var D = {clientes:[], entregas:[], caixas:[], producao:[]};
 var editIdx = null;
 var baixaEntregaId = null;
+var _salvando = false;
 
 var PRECO = {bola:8.50, integral:8.50, las250:11.00, las500:14.50, mini:2.30};
 var NOME = {bola:'Pao Bola', integral:'Pao Integral', las250:'Lasanha 250g', las500:'Lasanha 500g', mini:'Mini Sanduiche'};
 var MESES = ['','Janeiro','Fevereiro','Marco','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
-function salvar() { localStorage.setItem('ldk', JSON.stringify(D)); }
-function carregar() { var r = localStorage.getItem('ldk'); if(r) { try { D = JSON.parse(r); if(!D.producao) D.producao=[]; } catch(e){} } }
+function salvar() {
+  db.ref('dados').set(D).catch(function(e){ console.error('Erro ao salvar:', e); toast('Erro ao salvar!'); });
+}
+
+function carregar() {
+  var loading = document.createElement('div');
+  loading.id = 'loading';
+  loading.style.cssText = 'position:fixed;inset:0;background:rgba(255,255,255,.9);z-index:99999;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#2a7a3b';
+  loading.textContent = 'Carregando dados...';
+  document.body.appendChild(loading);
+
+  db.ref('dados').on('value', function(snap) {
+    var val = snap.val();
+    if(val) {
+      D = val;
+      if(!D.producao) D.producao=[];
+      if(!D.clientes) D.clientes=[];
+      if(!D.entregas) D.entregas=[];
+      if(!D.caixas) D.caixas=[];
+    }
+    var el = document.getElementById('loading');
+    if(el) el.remove();
+    renderClis();
+    popSelCli();
+    var hoje=new Date().toISOString().split('T')[0];
+    document.getElementById('e-data').value=hoje;
+    document.getElementById('cx-data').value=hoje;
+    document.getElementById('prod-data').value=hoje;
+  });
+}
 function fmt(n) { return 'R$ ' + (n||0).toFixed(2).replace('.',','); }
 function fdata(s) { var p=s.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
 function toast(msg, t) { var el=document.getElementById('toast'); el.textContent=msg; el.className='toast on'; setTimeout(function(){el.className='toast';}, t||2500); }
@@ -851,12 +889,6 @@ function renderDash() {
 
 // ===== INIT =====
 carregar();
-renderClis();
-popSelCli();
-var hoje=new Date().toISOString().split('T')[0];
-document.getElementById('e-data').value=hoje;
-document.getElementById('cx-data').value=hoje;
-document.getElementById('prod-data').value=hoje;
 </script>
 </body>
 </html>

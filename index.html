@@ -861,6 +861,8 @@ document.getElementById('btn-gerar-rel').addEventListener('click', function() {
   }).join('');
   html+='<div class="rg"><div class="rbox"><label>Entregas</label><b>'+ents.length+'</b></div><div class="rbox hl"><label>Total a pagar</label><b>'+fmt(total)+'</b></div></div>';
   area.innerHTML=html;
+  document.getElementById('btn-pdf-area').style.display='block';
+  window._relData={cli:cli,ents:ents,mes:mes,ano:ano,total:total,trocaTotal:trocaTotal};
 });
 
 // ===== DASHBOARD =====
@@ -890,33 +892,7 @@ function renderDash() {
 }
 
 // ===== PDF RELATORIO =====
-document.getElementById('btn-gerar-rel').addEventListener('click', function() {
-  var cliId=parseInt(document.getElementById('rel-cli').value);
-  var mes=parseInt(document.getElementById('rel-mes').value);
-  var ano=parseInt(document.getElementById('rel-ano').value);
-  var area=document.getElementById('area-relatorio');
-  var pdfArea=document.getElementById('btn-pdf-area');
-  if(!cliId){area.innerHTML='<div class="alert alert-r">Selecione o cliente.</div>';pdfArea.style.display='none';return;}
-  var cli=D.clientes.find(function(c){return c.id===cliId;});
-  var ents=D.entregas.filter(function(e){
-    var d=new Date(e.data+'T00:00:00');
-    return e.clienteId===cliId&&d.getMonth()+1===mes&&d.getFullYear()===ano;
-  }).sort(function(a,b){return a.data.localeCompare(b.data);});
-  if(!ents.length){area.innerHTML='<div class="alert alert-y">Nenhuma entrega neste periodo.</div>';pdfArea.style.display='none';return;}
-  var total=0,trocaTotal=0;
-  var html='<div class="stitle">'+MESES[mes]+' '+ano+' — '+(cli.fantasia||cli.nome)+'</div>';
-  html+=ents.map(function(e){
-    total+=e.valorTotal;trocaTotal+=e.valorTroca||0;
-    var prods=Object.keys(e.produtos).map(function(k){return NOME[k]+': '+e.produtos[k]+'un';}).join(', ');
-    var pgtos={prazo:'A prazo',boleto7:'Boleto 7 dias',vista:'A vista',pix:'PIX'};
-    return '<div class="hitem"><div class="hhead"><span class="hdata">'+fdata(e.data)+(e.boleto?' | #'+e.boleto:'')+'</span><span class="hval">'+fmt(e.valorTotal)+'</span></div><div class="hprod">'+prods+'</div><div style="font-size:11px;color:#888;margin-top:4px">'+pgtos[e.pagamento]+(e.valorTroca>0?'  |  Troca: '+fmt(e.valorTroca):'')+'</div></div>';
-  }).join('');
-  html+='<div class="rg"><div class="rbox"><label>Entregas</label><b>'+ents.length+'</b></div><div class="rbox hl"><label>Total a pagar</label><b>'+fmt(total)+'</b></div></div>';
-  area.innerHTML=html;
-  pdfArea.style.display='block';
-  // Store for PDF
-  window._relData = {cli:cli, ents:ents, mes:mes, ano:ano, total:total, trocaTotal:trocaTotal};
-});
+;
 
 document.getElementById('btn-pdf-rel').addEventListener('click', function() {
   if(!window._relData) return;

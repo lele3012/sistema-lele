@@ -121,9 +121,9 @@
   .toast.erro { background: var(--vermelho); }
 
   /* MODAL */
-  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 500; align-items: flex-end; justify-content: center; }
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 9000; align-items: flex-end; justify-content: center; }
   .modal-bg.ativo { display: flex; }
-  .modal { background: white; border-radius: 20px 20px 0 0; padding: 24px 20px 40px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
+  .modal { background: white; border-radius: 20px 20px 0 0; padding: 24px 20px 40px; width: 100%; max-width: 600px; max-height: 90vh; overflow-y: auto; position: relative; z-index: 9001; }
   .modal-title { font-size: 17px; font-weight: 800; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between; }
   .modal-fechar { background: #f0ede8; border: none; width: 30px; height: 30px; border-radius: 50%; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
 
@@ -1861,6 +1861,7 @@ function toast(msg, tipo) {
 var clienteEditandoIdx = null;
 
 function abrirModalCliente(idx) {
+  console.log('abrirModalCliente chamado', idx);
   clienteEditandoIdx = idx !== undefined ? idx : null;
   document.getElementById('modal-cliente-titulo').textContent = clienteEditandoIdx !== null ? 'Editar cliente' : 'Novo cliente';
   if (clienteEditandoIdx !== null) {
@@ -3545,36 +3546,34 @@ function gerarDashboard() {
 }
 
 // ============ INIT ============
-// Wrap in try-catch to surface any hidden errors
-try {
 
-// Bind all buttons safely (avoids CSP issues with inline onclick)
-document.getElementById('btn-novo-cliente').addEventListener('click', function() { abrirModalCliente(); });
-document.getElementById('btn-fechar-modal-cliente').addEventListener('click', function() { fecharModalCliente(); });
-document.getElementById('btn-cancelar-cliente').addEventListener('click', function() { fecharModalCliente(); });
-document.getElementById('btn-salvar-cliente').addEventListener('click', function() { salvarCliente(); });
-document.getElementById('btn-buscar-cnpj').addEventListener('click', function() { buscarCNPJ(); });
+// Global click handler - catches all button clicks regardless of timing
+document.addEventListener('click', function(ev) {
+  var el = ev.target;
+  var id = el.id || (el.closest ? (el.closest('[id]')||{}).id : '');
+  if (!id && el.closest) { var p = el.closest('button[id]'); if(p) id = p.id; }
+  if (id === 'btn-novo-cliente')        { ev.preventDefault(); abrirModalCliente(); }
+  if (id === 'btn-fechar-modal-cliente'){ ev.preventDefault(); fecharModalCliente(); }
+  if (id === 'btn-cancelar-cliente')    { ev.preventDefault(); fecharModalCliente(); }
+  if (id === 'btn-salvar-cliente')      { ev.preventDefault(); salvarCliente(); }
+  if (id === 'btn-buscar-cnpj')         { ev.preventDefault(); buscarCNPJ(); }
+});
 
-carregarDados();
-renderClientes();
-popularSelectClientes();
-if (dados.producao === undefined) dados.producao = [];
-renderProducao();
-renderCobrancas();
+// Init each section with individual try-catch so one failure doesn't block others
+try { carregarDados(); } catch(e) { console.error('carregarDados:', e); }
+try { if (!dados.producao) dados.producao = []; } catch(e) {}
+try { renderClientes(); } catch(e) { console.error('renderClientes:', e); }
+try { popularSelectClientes(); } catch(e) { console.error('popularSelectClientes:', e); }
+try { renderProducao(); } catch(e) { console.error('renderProducao:', e); }
+try { renderCobrancas(); } catch(e) { console.error('renderCobrancas:', e); }
 
 // Data de hoje nos campos de data
-var hoje = new Date().toISOString().split('T')[0];
-document.getElementById('e-data').value = hoje;
-document.getElementById('cx-data').value = hoje;
-document.getElementById('prod-data').value = hoje;
-
-} catch(err) {
-  // Show error visibly so we can debug
-  var errDiv = document.createElement('div');
-  errDiv.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#c0392b;color:white;padding:16px;font-size:13px;z-index:9999;word-break:break-all';
-  errDiv.textContent = 'ERRO JS: ' + err.message + ' — ' + (err.stack||'').substring(0,200);
-  document.body.appendChild(errDiv);
-}
+try {
+  var hoje = new Date().toISOString().split('T')[0];
+  document.getElementById('e-data').value = hoje;
+  document.getElementById('cx-data').value = hoje;
+  document.getElementById('prod-data').value = hoje;
+} catch(e) { console.error('data init:', e); }
 </script>
 </body>
 </html>

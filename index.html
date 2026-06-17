@@ -292,6 +292,28 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   <button class="btn btn-o" id="btn-limpar-prod" style="margin-top:6px">Limpar</button>
 </div>
 
+
+<!-- HISTORICO -->
+<div class="pnl" id="pnl-historico">
+  <div class="stitle" style="margin-top:0">Historico de entregas</div>
+  <div class="card">
+    <div class="row2">
+      <div class="field"><label>Cliente</label><select class="inp" id="hist-cli"><option value="">Todos</option></select></div>
+      <div class="field"><label>Mes</label>
+        <select class="inp" id="hist-mes">
+          <option value="0">Todos</option>
+          <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
+          <option value="4">Abril</option><option value="5">Maio</option><option value="6" selected>Junho</option>
+          <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+          <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-g" id="btn-filtrar-hist">Filtrar</button>
+  </div>
+  <div id="lista-hist"><div class="empty"><div class="ico">📋</div><p>Nenhuma entrega encontrada.</p></div></div>
+</div>
+
 <!-- RELATORIO -->
 <div class="pnl" id="pnl-relatorio">
   <div class="stitle" style="margin-top:0">Relatorio por cliente</div>
@@ -471,7 +493,8 @@ document.querySelectorAll('.tab').forEach(function(t) {
     this.classList.add('on');
     document.getElementById('pnl-'+id).classList.add('on');
     window.scrollTo(0,0);
-    if(id==='entrega'||id==='relatorio') popSelCli();
+    if(id==='entrega'||id==='relatorio'||id==='historico') popSelCli();
+    if(id==='historico') renderHist();
     if(id==='cobrancas') renderCob();
     if(id==='producao') renderProd();
     if(id==='dashboard') renderDash();
@@ -970,6 +993,80 @@ document.getElementById('btn-pdf-rel').addEventListener('click', function() {
   doc.save('Lele_'+nomeArq+'_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.pdf');
   toast('PDF gerado!');
 });
+
+
+// ===== HISTORICO =====
+function popHistCli() {
+  var sel = document.getElementById('hist-cli');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">Todos</option>';
+  D.clientes.forEach(function(c) {
+    sel.innerHTML += '<option value="'+c.id+'">'+(c.fantasia||c.nome)+'</option>';
+  });
+}
+
+function renderHist() {
+  popHistCli();
+  var cliId = parseInt(document.getElementById('hist-cli').value)||0;
+  var mes = parseInt(document.getElementById('hist-mes').value)||0;
+  var lista = document.getElementById('lista-hist');
+
+  var ents = D.entregas.filter(function(e) {
+    if(cliId && e.clienteId !== cliId) return false;
+    if(mes) {
+      var d = new Date(e.data+'T00:00:00');
+      if(d.getMonth()+1 !== mes) return false;
+    }
+    return true;
+  }).sort(function(a,b){ return b.data.localeCompare(a.data); });
+
+  if(!ents.length) {
+    lista.innerHTML = '<div class="empty"><div class="ico">📋</div><p>Nenhuma entrega encontrada.</p></div>';
+    return;
+  }
+
+  var pgtoNomes = {prazo:'A prazo', boleto7:'Boleto 7 dias', vista:'A vista', pix:'PIX'};
+  lista.innerHTML = ents.map(function(e) {
+    var cli = D.clientes.find(function(c){return c.id===e.clienteId;});
+    var nomeC = cli ? (cli.fantasia||cli.nome) : '?';
+    var prods = Object.keys(e.produtos).map(function(k){return NOME[k]+': '+e.produtos[k]+'un';}).join(', ');
+    var status = e.pago ? '<span class="badge badge-g">Pago</span>' : '<span class="badge badge-r">Em aberto</span>';
+    return '<div class="hitem" style="border:1.5px solid var(--b)">' +
+      '<div class="hhead">' +
+        '<div>' +
+          '<div style="font-size:14px;font-weight:800">'+nomeC+'</div>' +
+          '<div class="hdata">'+fdata(e.data)+(e.boleto?' | #'+e.boleto:'')+'</div>' +
+        '</div>' +
+        '<div style="text-align:right">' +
+          '<div class="hval">'+fmt(e.valorTotal)+'</div>' +
+          status +
+        '</div>' +
+      '</div>' +
+      '<div class="hprod" style="margin:6px 0">'+prods+'</div>' +
+      '<div style="font-size:11px;color:#888;margin-bottom:10px">'+(pgtoNomes[e.pagamento]||e.pagamento)+(e.valorTroca>0?' | Troca: '+fmt(e.valorTroca):'')+'</div>' +
+      '<button class="btn btn-r btn-sm btn-del-ent" data-id="'+e.id+'" style="width:100%">Excluir entrega</button>' +
+    '</div>';
+  }).join('');
+
+  // Bind delete buttons
+  document.querySelectorAll('.btn-del-ent').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var id = this.getAttribute('data-id');
+      var cli = D.entregas.find(function(e){return e.id==id;});
+      var nomeC = '';
+      if(cli) { var c = D.clientes.find(function(x){return x.id===cli.clienteId;}); nomeC = c?(c.fantasia||c.nome):'?'; }
+    if(!confirm("Excluir esta entrega?\n\nCliente: "+nomeC+"\n\nEssa acao nao pode ser desfeita.")) return;
+
+
+      D.entregas = D.entregas.filter(function(e){return e.id!=id;});
+      salvar();
+      renderHist();
+      toast('Entrega excluida!');
+    });
+  });
+}
+
+document.getElementById('btn-filtrar-hist').addEventListener('click', renderHist);
 
 // ===== INIT =====
 carregar();

@@ -6,6 +6,7 @@
 <title>Sistema Lelé da Kuka</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1a;min-height:100vh}
@@ -310,6 +311,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <button class="btn btn-g" id="btn-gerar-rel">Gerar relatorio</button>
   </div>
   <div id="area-relatorio"></div>
+  <div id="btn-pdf-area" style="display:none;margin-top:12px"><button class="btn btn-g" id="btn-pdf-rel">Baixar PDF para enviar ao cliente</button></div>
 </div>
 
 <!-- DASHBOARD -->
@@ -886,6 +888,112 @@ function renderDash() {
   html+='</div>';
   area.innerHTML=html;
 }
+
+// ===== PDF RELATORIO =====
+document.getElementById('btn-gerar-rel').addEventListener('click', function() {
+  var cliId=parseInt(document.getElementById('rel-cli').value);
+  var mes=parseInt(document.getElementById('rel-mes').value);
+  var ano=parseInt(document.getElementById('rel-ano').value);
+  var area=document.getElementById('area-relatorio');
+  var pdfArea=document.getElementById('btn-pdf-area');
+  if(!cliId){area.innerHTML='<div class="alert alert-r">Selecione o cliente.</div>';pdfArea.style.display='none';return;}
+  var cli=D.clientes.find(function(c){return c.id===cliId;});
+  var ents=D.entregas.filter(function(e){
+    var d=new Date(e.data+'T00:00:00');
+    return e.clienteId===cliId&&d.getMonth()+1===mes&&d.getFullYear()===ano;
+  }).sort(function(a,b){return a.data.localeCompare(b.data);});
+  if(!ents.length){area.innerHTML='<div class="alert alert-y">Nenhuma entrega neste periodo.</div>';pdfArea.style.display='none';return;}
+  var total=0,trocaTotal=0;
+  var html='<div class="stitle">'+MESES[mes]+' '+ano+' — '+(cli.fantasia||cli.nome)+'</div>';
+  html+=ents.map(function(e){
+    total+=e.valorTotal;trocaTotal+=e.valorTroca||0;
+    var prods=Object.keys(e.produtos).map(function(k){return NOME[k]+': '+e.produtos[k]+'un';}).join(', ');
+    var pgtos={prazo:'A prazo',boleto7:'Boleto 7 dias',vista:'A vista',pix:'PIX'};
+    return '<div class="hitem"><div class="hhead"><span class="hdata">'+fdata(e.data)+(e.boleto?' | #'+e.boleto:'')+'</span><span class="hval">'+fmt(e.valorTotal)+'</span></div><div class="hprod">'+prods+'</div><div style="font-size:11px;color:#888;margin-top:4px">'+pgtos[e.pagamento]+(e.valorTroca>0?'  |  Troca: '+fmt(e.valorTroca):'')+'</div></div>';
+  }).join('');
+  html+='<div class="rg"><div class="rbox"><label>Entregas</label><b>'+ents.length+'</b></div><div class="rbox hl"><label>Total a pagar</label><b>'+fmt(total)+'</b></div></div>';
+  area.innerHTML=html;
+  pdfArea.style.display='block';
+  // Store for PDF
+  window._relData = {cli:cli, ents:ents, mes:mes, ano:ano, total:total, trocaTotal:trocaTotal};
+});
+
+document.getElementById('btn-pdf-rel').addEventListener('click', function() {
+  if(!window._relData) return;
+  if(typeof window.jspdf === 'undefined') { toast('PDF indisponivel. Tente recarregar a pagina.'); return; }
+  var d = window._relData;
+  var { jsPDF } = window.jspdf;
+  var doc = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  var pw=210, m=16, cw=178, y=0;
+
+  // Header
+  doc.setFillColor(42,122,59); doc.rect(0,0,pw,36,'F');
+  doc.setTextColor(255,255,255); doc.setFontSize(18); doc.setFont('helvetica','bold');
+  doc.text('LELE DA KUKA', m, 13);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(200,240,210);
+  doc.text('Relatorio de Pedidos — '+MESES[d.mes]+'/'+d.ano, m, 20);
+  doc.text('CNPJ: 10.597.121/0001-16  |  (82) 99673-5051', m, 26);
+  var agora = new Date();
+  doc.text('Gerado: '+agora.toLocaleDateString('pt-BR'), pw-m, 26, {align:'right'});
+  y=44;
+
+  // Cliente
+  doc.setFillColor(247,245,241); doc.roundedRect(m,y,cw,20,3,3,'F');
+  doc.setTextColor(42,122,59); doc.setFontSize(8); doc.setFont('helvetica','bold');
+  doc.text('CLIENTE', m+4, y+6);
+  doc.setTextColor(26,26,26); doc.setFontSize(12); doc.setFont('helvetica','bold');
+  doc.text(d.cli.fantasia||d.cli.nome, m+4, y+13);
+  if(d.cli.cnpj) { doc.setFontSize(8); doc.setFont('helvetica','normal'); doc.setTextColor(120,120,120); doc.text('CNPJ: '+d.cli.cnpj, m+4, y+18); }
+  y+=28;
+
+  // Entregas
+  doc.setTextColor(42,122,59); doc.setFontSize(9); doc.setFont('helvetica','bold');
+  doc.text('DETALHAMENTO DAS ENTREGAS', m, y); y+=4;
+  doc.setDrawColor(224,219,211); doc.setLineWidth(0.3); doc.line(m,y,pw-m,y); y+=6;
+
+  var pgtoNomes={prazo:'A prazo',boleto7:'Boleto 7 dias',vista:'A vista',pix:'PIX'};
+  d.ents.forEach(function(e) {
+    if(y>255){doc.addPage();y=20;}
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(26,26,26);
+    doc.text(fdata(e.data)+(e.boleto?' | Boleto #'+e.boleto:''), m, y);
+    doc.setTextColor(42,122,59);
+    doc.text(fmt(e.valorTotal), pw-m, y, {align:'right'});
+    y+=5;
+    Object.keys(e.produtos).forEach(function(k) {
+      if(y>265){doc.addPage();y=20;}
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,80);
+      doc.text('  '+(NOME[k]||k)+': '+e.produtos[k]+' un x '+fmt(PRECO[k])+' = '+fmt(e.produtos[k]*getPreco(e.clienteId,k)), m+2, y);
+      y+=4.5;
+    });
+    if(e.valorTroca>0) {
+      doc.setTextColor(133,100,4); doc.setFont('helvetica','italic'); doc.setFontSize(8);
+      doc.text('  Troca: -'+fmt(e.valorTroca), m+2, y); y+=4.5;
+    }
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(120,120,120);
+    doc.text('  '+( pgtoNomes[e.pagamento]||e.pagamento), m+2, y);
+    doc.setDrawColor(240,237,232); doc.setLineWidth(0.2); doc.line(m,y+2,pw-m,y+2); y+=7;
+  });
+
+  // Total
+  y+=4;
+  if(y>240){doc.addPage();y=20;}
+  doc.setFillColor(42,122,59); doc.roundedRect(m,y,cw,22,3,3,'F');
+  doc.setTextColor(200,240,210); doc.setFontSize(8); doc.setFont('helvetica','normal');
+  doc.text('Total de entregas: '+d.ents.length+(d.trocaTotal>0?' | Trocas: '+fmt(d.trocaTotal):''), m+4, y+7);
+  doc.setTextColor(255,255,255); doc.setFontSize(13); doc.setFont('helvetica','bold');
+  doc.text('TOTAL A PAGAR: '+fmt(d.total), m+4, y+17);
+  y+=30;
+
+  // Footer
+  doc.setDrawColor(224,219,211); doc.setLineWidth(0.3); doc.line(m,283,pw-m,283);
+  doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(160,160,160);
+  doc.text('Lele da Kuka  |  CNPJ: 10.597.121/0001-16  |  Maceio, Alagoas', m, 287);
+  doc.text('(82) 99673-5051', pw-m, 287, {align:'right'});
+
+  var nomeArq = (d.cli.fantasia||d.cli.nome).replace(/[^a-zA-Z0-9]/g,'_');
+  doc.save('Lele_'+nomeArq+'_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.pdf');
+  toast('PDF gerado!');
+});
 
 // ===== INIT =====
 carregar();

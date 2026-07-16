@@ -134,6 +134,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   <div class="tab" data-tab="cobrancas"><span>🔔</span>Cobranças</div>
   <div class="tab" data-tab="caixa"><span>💵</span>Caixa</div>
   <div class="tab" data-tab="producao"><span>🏭</span>Produção</div>
+  <div class="tab" data-tab="historico"><span>📋</span>Histórico</div>
   <div class="tab" data-tab="relatorio"><span>📊</span>Relatório</div>
   <div class="tab" data-tab="dashboard"><span>📈</span>Dashboard</div>
 </div>
@@ -435,17 +436,58 @@ firebase.initializeApp(firebaseConfig);
 var db = firebase.database();
 
 // ===== DADOS =====
+// A partir de agora cada coleção vive no seu proprio caminho no Firebase
+// (clientes/entregas/caixas/producao) e cada salvamento grava so o registro
+// que mudou -- isso evita que dois usuarios ao mesmo tempo apaguem a
+// alteracao um do outro (o que acontecia quando tudo era salvo junto em 'dados').
 var D = {clientes:[], entregas:[], caixas:[], producao:[]};
 var editIdx = null;
+var editEntregaKey = null;
 var baixaEntregaId = null;
-var _salvando = false;
 
 var PRECO = {bola:8.50, integral:8.50, las250:11.00, las500:14.50, mini:2.30};
 var NOME = {bola:'Pao Bola', integral:'Pao Integral', las250:'Lasanha 250g', las500:'Lasanha 500g', mini:'Mini Sanduiche'};
 var MESES = ['','Janeiro','Fevereiro','Marco','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
-function salvar() {
-  db.ref('dados').set(D).catch(function(e){ console.error('Erro ao salvar:', e); toast('Erro ao salvar!'); });
+function snapToArray(val) {
+  if(!val) return [];
+  return Object.keys(val).map(function(k){ var o=val[k]; o._key=k; return o; });
+}
+
+// Cria/atualiza um registro. Se 'key' for informado, sobrescreve so aquele
+// registro (edicao); se nao, cria um registro novo com chave unica do Firebase.
+function salvarRegistro(colecao, obj, key) {
+  if(key) {
+    return db.ref(colecao+'/'+key).set(obj).catch(function(e){ console.error('Erro ao salvar:',e); toast('Erro ao salvar! Verifique a internet.'); });
+  }
+  var ref = db.ref(colecao).push();
+  return ref.set(obj).catch(function(e){ console.error('Erro ao salvar:',e); toast('Erro ao salvar! Verifique a internet.'); });
+}
+function atualizarRegistro(colecao, key, patch) {
+  return db.ref(colecao+'/'+key).update(patch).catch(function(e){ console.error('Erro ao salvar:',e); toast('Erro ao salvar! Verifique a internet.'); });
+}
+function excluirRegistro(colecao, key) {
+  return db.ref(colecao+'/'+key).remove().catch(function(e){ console.error('Erro ao excluir:',e); toast('Erro ao excluir! Verifique a internet.'); });
+}
+
+// Migracao automatica e unica: se ainda existirem dados no formato antigo
+// (tudo dentro de 'dados') e as colecoes novas ainda estiverem vazias,
+// copia tudo para o formato novo. Isso preserva 100% do historico existente.
+function migrarSeNecessario(callback) {
+  db.ref('dados').once('value').then(function(snapOld) {
+    var old = snapOld.val();
+    if(!old) { callback(); return; }
+    db.ref('clientes').once('value').then(function(snapNovo) {
+      if(snapNovo.val()) { callback(); return; } // ja migrado antes
+      var updates = {};
+      (old.clientes||[]).forEach(function(c){ updates['clientes/'+db.ref('clientes').push().key]=c; });
+      (old.entregas||[]).forEach(function(e){ updates['entregas/'+db.ref('entregas').push().key]=e; });
+      (old.caixas||[]).forEach(function(c){ updates['caixas/'+db.ref('caixas').push().key]=c; });
+      (old.producao||[]).forEach(function(p){ updates['producao/'+db.ref('producao').push().key]=p; });
+      if(!Object.keys(updates).length) { callback(); return; }
+      db.ref().update(updates).then(callback).catch(function(e){ console.error('Erro na migracao:',e); callback(); });
+    });
+  }).catch(function(){ callback(); });
 }
 
 function carregar() {
@@ -455,23 +497,37 @@ function carregar() {
   loading.textContent = 'Carregando dados...';
   document.body.appendChild(loading);
 
-  db.ref('dados').on('value', function(snap) {
-    var val = snap.val();
-    if(val) {
-      D = val;
-      if(!D.producao) D.producao=[];
-      if(!D.clientes) D.clientes=[];
-      if(!D.entregas) D.entregas=[];
-      if(!D.caixas) D.caixas=[];
-    }
-    var el = document.getElementById('loading');
-    if(el) el.remove();
-    renderClis();
-    popSelCli();
-    var hoje=new Date().toISOString().split('T')[0];
-    document.getElementById('e-data').value=hoje;
-    document.getElementById('cx-data').value=hoje;
-    document.getElementById('prod-data').value=hoje;
+  var hoje=new Date().toISOString().split('T')[0];
+  document.getElementById('e-data').value=hoje;
+  document.getElementById('cx-data').value=hoje;
+  document.getElementById('prod-data').value=hoje;
+
+  migrarSeNecessario(function() {
+    var pendentes = 4;
+    function pronto() { pendentes--; if(pendentes<=0) { var el=document.getElementById('loading'); if(el) el.remove(); } }
+
+    db.ref('clientes').on('value', function(snap) {
+      D.clientes = snapToArray(snap.val());
+      renderClis(); popSelCli(); pronto();
+    });
+    db.ref('entregas').on('value', function(snap) {
+      D.entregas = snapToArray(snap.val());
+      var abaAtiva = document.querySelector('.tab.on');
+      var id = abaAtiva ? abaAtiva.getAttribute('data-tab') : '';
+      if(id==='cobrancas') renderCob();
+      if(id==='historico') renderHist();
+      pronto();
+    });
+    db.ref('caixas').on('value', function(snap) {
+      D.caixas = snapToArray(snap.val());
+      pronto();
+    });
+    db.ref('producao').on('value', function(snap) {
+      D.producao = snapToArray(snap.val());
+      var abaAtiva = document.querySelector('.tab.on');
+      if(abaAtiva && abaAtiva.getAttribute('data-tab')==='producao') renderProd();
+      pronto();
+    });
   });
 }
 function fmt(n) { return 'R$ ' + (n||0).toFixed(2).replace('.',','); }
@@ -581,8 +637,10 @@ document.getElementById('btn-salvar-cli').addEventListener('click', function() {
     obs: document.getElementById('c-obs').value.trim(),
     precos: precos
   };
+  var key = editIdx!==null ? D.clientes[editIdx]._key : null;
   if(editIdx!==null) D.clientes[editIdx]=cli; else D.clientes.push(cli);
-  salvar(); fecharModal(); renderClis(); popSelCli();
+  salvarRegistro('clientes', cli, key);
+  fecharModal(); renderClis(); popSelCli();
   toast(editIdx!==null ? 'Cliente atualizado!' : 'Cliente salvo!');
 });
 
@@ -674,13 +732,24 @@ document.getElementById('btn-salvar-ent').addEventListener('click', function() {
     var q = parseInt(document.getElementById('q-t-'+k).value)||0;
     if(q>0) { trocas[k]=q; trocaVal += q*getPreco(parseInt(cliId),k); }
   });
-  D.entregas.push({
-    id:Date.now(), clienteId:parseInt(cliId), data:data,
+  var ent = {
+    id: editEntregaKey ? document.getElementById('btn-salvar-ent').getAttribute('data-orig-id')*1 : Date.now(),
+    clienteId:parseInt(cliId), data:data,
     boleto:document.getElementById('e-bol').value.trim(),
     produtos:prods, trocas:trocas, pagamento:document.getElementById('e-pgto').value,
-    valorTotal:totalVal-trocaVal, valorTroca:trocaVal, pago:false
-  });
-  salvar(); toast('Entrega salva!');
+    valorTotal:totalVal-trocaVal, valorTroca:trocaVal,
+    pago: editEntregaKey ? (document.getElementById('btn-salvar-ent').getAttribute('data-orig-pago')==='1') : false
+  };
+  if(editEntregaKey) {
+    var idx = D.entregas.findIndex(function(e){return e._key===editEntregaKey;});
+    if(idx>=0) D.entregas[idx]=Object.assign({_key:editEntregaKey}, ent);
+    salvarRegistro('entregas', ent, editEntregaKey);
+    toast('Entrega atualizada!');
+  } else {
+    D.entregas.push(ent);
+    salvarRegistro('entregas', ent);
+    toast('Entrega salva!');
+  }
   limparEnt();
 });
 
@@ -691,6 +760,36 @@ function limparEnt() {
   document.getElementById('e-resumo').style.display='none';
   document.getElementById('e-bol').value='';
   document.getElementById('e-pgto').value='prazo';
+  editEntregaKey = null;
+  var btn = document.getElementById('btn-salvar-ent');
+  btn.textContent = '✅ Salvar entrega';
+  btn.removeAttribute('data-orig-id');
+  btn.removeAttribute('data-orig-pago');
+}
+
+// Preenche o formulario de Entrega com os dados de uma entrega existente para edicao
+function editarEntrega(key) {
+  var e = D.entregas.find(function(x){return x._key===key;});
+  if(!e) return;
+  document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('on');});
+  document.querySelectorAll('.pnl').forEach(function(x){x.classList.remove('on');});
+  document.querySelector('.tab[data-tab="entrega"]').classList.add('on');
+  document.getElementById('pnl-entrega').classList.add('on');
+  window.scrollTo(0,0);
+  popSelCli();
+  document.getElementById('e-cli').value = e.clienteId;
+  document.getElementById('e-data').value = e.data;
+  document.getElementById('e-bol').value = e.boleto||'';
+  document.getElementById('e-pgto').value = e.pagamento||'prazo';
+  ['bola','integral','mini','las250','las500'].forEach(function(k){ document.getElementById('q-'+k).value = (e.produtos&&e.produtos[k])||0; });
+  ['bola','integral','las250','las500'].forEach(function(k){ document.getElementById('q-t-'+k).value = (e.trocas&&e.trocas[k])||0; });
+  calcResumo();
+  editEntregaKey = key;
+  var btn = document.getElementById('btn-salvar-ent');
+  btn.textContent = '💾 Atualizar entrega';
+  btn.setAttribute('data-orig-id', e.id);
+  btn.setAttribute('data-orig-pago', e.pago ? '1':'0');
+  toast('Editando entrega — altere e clique em Atualizar');
 }
 
 // ===== COBRANCAS =====
@@ -743,7 +842,7 @@ function renderCob() {
     btn.addEventListener('click', function() {
       if(!confirm('Desfazer pagamento?')) return;
       var e = D.entregas.find(function(x){return x.id==this.getAttribute('data-id');},this);
-      if(e) { e.pago=false; e.pgData=null; e.pgObs=''; salvar(); renderCob(); toast('Desfeito'); }
+      if(e) { e.pago=false; e.pgData=null; e.pgObs=''; atualizarRegistro('entregas', e._key, {pago:false,pgData:null,pgObs:''}); renderCob(); toast('Desfeito'); }
     });
   });
 }
@@ -766,7 +865,12 @@ document.getElementById('btn-baixa-confirmar').addEventListener('click', functio
   if(!data) { toast('Informe a data'); return; }
   document.getElementById('modal-baixa').classList.remove('on');
   var e = D.entregas.find(function(x){return x.id==baixaEntregaId;});
-  if(e) { e.pago=true; e.pgData=data; e.pgObs=document.getElementById('baixa-obs').value.trim(); salvar(); renderCob(); toast('Pagamento registrado!'); }
+  if(e) {
+    var obs = document.getElementById('baixa-obs').value.trim();
+    e.pago=true; e.pgData=data; e.pgObs=obs;
+    atualizarRegistro('entregas', e._key, {pago:true,pgData:data,pgObs:obs});
+    renderCob(); toast('Pagamento registrado!');
+  }
 });
 
 // ===== CAIXA =====
@@ -812,8 +916,10 @@ document.getElementById('btn-salvar-cx').addEventListener('click', function() {
     var ins = row.querySelectorAll('input');
     if(ins[1]&&ins[1].value) desp.push({desc:ins[0].value, valor:parseFloat(ins[1].value)||0});
   });
-  D.caixas.push({id:Date.now(), data:data, b1:document.getElementById('cx-b1').value, b2:document.getElementById('cx-b2').value, vista:parseFloat(document.getElementById('cx-vista').value)||0, pix:parseFloat(document.getElementById('cx-pix').value)||0, prazo:parseFloat(document.getElementById('cx-prazo').value)||0, despesas:desp});
-  salvar(); toast('Caixa salvo!');
+  var cx = {id:Date.now(), data:data, b1:document.getElementById('cx-b1').value, b2:document.getElementById('cx-b2').value, vista:parseFloat(document.getElementById('cx-vista').value)||0, pix:parseFloat(document.getElementById('cx-pix').value)||0, prazo:parseFloat(document.getElementById('cx-prazo').value)||0, despesas:desp};
+  D.caixas.push(cx);
+  salvarRegistro('caixas', cx);
+  toast('Caixa salvo!');
 });
 
 // ===== PRODUCAO =====
@@ -850,9 +956,17 @@ document.getElementById('btn-salvar-prod').addEventListener('click', function() 
   });
   if(!tot){toast('Adicione pelo menos um produto');return;}
   var idx=D.producao.findIndex(function(p){return p.data===data;});
-  if(idx>=0){if(!confirm('Ja existe producao nessa data. Substituir?'))return;D.producao[idx]={id:Date.now(),data:data,produtos:prods};}
-  else D.producao.push({id:Date.now(),data:data,produtos:prods});
-  salvar();renderProd();limparProd();toast('Producao salva!');
+  var prod={id:Date.now(),data:data,produtos:prods};
+  if(idx>=0){
+    if(!confirm('Ja existe producao nessa data. Substituir?'))return;
+    var key=D.producao[idx]._key;
+    D.producao[idx]=Object.assign({_key:key},prod);
+    salvarRegistro('producao',prod,key);
+  } else {
+    D.producao.push(prod);
+    salvarRegistro('producao',prod);
+  }
+  renderProd();limparProd();toast('Producao salva!');
 });
 
 document.getElementById('btn-limpar-prod').addEventListener('click', limparProd);
@@ -961,7 +1075,7 @@ document.getElementById('btn-pdf-rel').addEventListener('click', function() {
     Object.keys(e.produtos).forEach(function(k) {
       if(y>265){doc.addPage();y=20;}
       doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,80);
-      doc.text('  '+(NOME[k]||k)+': '+e.produtos[k]+' un x '+fmt(PRECO[k])+' = '+fmt(e.produtos[k]*getPreco(e.clienteId,k)), m+2, y);
+      doc.text('  '+(NOME[k]||k)+': '+e.produtos[k]+' un x '+fmt(getPreco(e.clienteId,k))+' = '+fmt(e.produtos[k]*getPreco(e.clienteId,k)), m+2, y);
       y+=4.5;
     });
     if(e.valorTroca>0) {
@@ -1044,22 +1158,29 @@ function renderHist() {
       '</div>' +
       '<div class="hprod" style="margin:6px 0">'+prods+'</div>' +
       '<div style="font-size:11px;color:#888;margin-bottom:10px">'+(pgtoNomes[e.pagamento]||e.pagamento)+(e.valorTroca>0?' | Troca: '+fmt(e.valorTroca):'')+'</div>' +
-      '<button class="btn btn-r btn-sm btn-del-ent" data-id="'+e.id+'" style="width:100%">Excluir entrega</button>' +
+      '<div style="display:flex;gap:8px">' +
+        '<button class="btn btn-o btn-sm btn-edit-ent" data-key="'+e._key+'" style="flex:1">Editar</button>' +
+        '<button class="btn btn-r btn-sm btn-del-ent" data-key="'+e._key+'" style="flex:1">Excluir</button>' +
+      '</div>' +
     '</div>';
   }).join('');
+
+  // Bind edit buttons
+  document.querySelectorAll('.btn-edit-ent').forEach(function(btn) {
+    btn.addEventListener('click', function() { editarEntrega(this.getAttribute('data-key')); });
+  });
 
   // Bind delete buttons
   document.querySelectorAll('.btn-del-ent').forEach(function(btn) {
     btn.addEventListener('click', function() {
-      var id = this.getAttribute('data-id');
-      var cli = D.entregas.find(function(e){return e.id==id;});
+      var key = this.getAttribute('data-key');
+      var ent = D.entregas.find(function(e){return e._key==key;});
       var nomeC = '';
-      if(cli) { var c = D.clientes.find(function(x){return x.id===cli.clienteId;}); nomeC = c?(c.fantasia||c.nome):'?'; }
-    if(!confirm("Excluir esta entrega?\n\nCliente: "+nomeC+"\n\nEssa acao nao pode ser desfeita.")) return;
+      if(ent) { var c = D.clientes.find(function(x){return x.id===ent.clienteId;}); nomeC = c?(c.fantasia||c.nome):'?'; }
+      if(!confirm("Excluir esta entrega?\n\nCliente: "+nomeC+"\n\nEssa acao nao pode ser desfeita.")) return;
 
-
-      D.entregas = D.entregas.filter(function(e){return e.id!=id;});
-      salvar();
+      D.entregas = D.entregas.filter(function(e){return e._key!=key;});
+      excluirRegistro('entregas', key);
       renderHist();
       toast('Entrega excluida!');
     });

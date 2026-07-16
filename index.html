@@ -7,6 +7,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1a;min-height:100vh}
@@ -355,6 +356,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <button class="btn btn-g" id="btn-gerar-dash">Gerar dashboard</button>
   </div>
   <div id="area-dashboard"></div>
+  <div id="btn-xls-area" style="display:none;margin-top:12px"><button class="btn btn-o" id="btn-xls-dash">📥 Exportar Excel do mês</button></div>
 </div>
 
 <!-- MODAL CLIENTE -->
@@ -1009,12 +1011,18 @@ function renderDash() {
   var ano=parseInt(document.getElementById('dash-ano').value);
   var area=document.getElementById('area-dashboard');
   var ents=D.entregas.filter(function(e){var d=new Date(e.data+'T00:00:00');return d.getMonth()+1===mes&&d.getFullYear()===ano;});
-  if(!ents.length){area.innerHTML='<div class="alert alert-y">Nenhuma entrega em '+MESES[mes]+'/'+ano+'.</div>';return;}
+  if(!ents.length){area.innerHTML='<div class="alert alert-y">Nenhuma entrega em '+MESES[mes]+'/'+ano+'.</div>';document.getElementById('btn-xls-area').style.display='none';return;}
   var totalFat=ents.reduce(function(s,e){return s+e.valorTotal;},0);
   var totalUn=0; ents.forEach(function(e){Object.values(e.produtos).forEach(function(q){totalUn+=q;});});
   var totalTroca=ents.reduce(function(s,e){return s+(e.valorTroca||0);},0);
   var prodTots={bola:0,integral:0,mini:0,las250:0,las500:0};
   ents.forEach(function(e){Object.keys(e.produtos).forEach(function(k){if(prodTots[k]!==undefined)prodTots[k]+=e.produtos[k];});});
+  var prodTrocas={bola:0,integral:0,las250:0,las500:0};
+  var totalUnTroca=0;
+  ents.forEach(function(e){if(e.trocas)Object.keys(e.trocas).forEach(function(k){if(prodTrocas[k]!==undefined){prodTrocas[k]+=e.trocas[k];totalUnTroca+=e.trocas[k];}});});
+  var pgtoNomes={prazo:'A prazo (mensal)',boleto7:'Boleto 7 dias',vista:'A vista',pix:'PIX'};
+  var pagamentos={prazo:0,boleto7:0,vista:0,pix:0};
+  ents.forEach(function(e){if(pagamentos[e.pagamento]!==undefined)pagamentos[e.pagamento]+=e.valorTotal;});
   var cliVol={};ents.forEach(function(e){cliVol[e.clienteId]=(cliVol[e.clienteId]||0)+e.valorTotal;});
   var ranking=Object.keys(cliVol).map(function(id){var c=D.clientes.find(function(x){return x.id==id;});return{nome:c?c.fantasia||c.nome:'?',val:cliVol[id]};}).sort(function(a,b){return b.val-a.val;});
   var medals=['🥇','🥈','🥉'];
@@ -1022,11 +1030,68 @@ function renderDash() {
   html+='<div class="rg"><div class="rbox hl"><label>Faturamento</label><b>'+fmt(totalFat)+'</b></div><div class="rbox"><label>Entregas</label><b>'+ents.length+'</b></div><div class="rbox"><label>Unidades</label><b>'+totalUn+'</b></div><div class="rbox" style="background:#fffbe6"><label style="color:#856404">Trocas</label><b style="color:#856404">'+fmt(totalTroca)+'</b></div></div>';
   html+='<div class="stitle">Produtos vendidos</div><div class="card">';
   Object.keys(prodTots).forEach(function(k){if(prodTots[k]>0)html+='<div class="pline"><span class="pname">'+NOME[k]+'</span><span style="font-weight:800;color:var(--g)">'+prodTots[k]+' un</span></div>';});
+  html+='</div><div class="stitle">Formas de pagamento</div><div class="card">';
+  Object.keys(pagamentos).forEach(function(k){if(pagamentos[k]>0)html+='<div class="pline"><span class="pname">'+pgtoNomes[k]+'</span><span style="font-weight:800;color:var(--g)">'+fmt(pagamentos[k])+'</span></div>';});
   html+='</div><div class="stitle">Ranking de clientes</div><div class="card">';
   ranking.forEach(function(r,i){html+='<div class="pline"><span class="pname">'+(medals[i]||i+1+'º')+' '+r.nome+'</span><span style="font-weight:800;color:var(--g)">'+fmt(r.val)+'</span></div>';});
   html+='</div>';
   area.innerHTML=html;
+  window._dashData={mes:mes,ano:ano,ents:ents,totalFat:totalFat,totalUn:totalUn,totalTroca:totalTroca,totalUnTroca:totalUnTroca,prodTots:prodTots,prodTrocas:prodTrocas,pagamentos:pagamentos,pgtoNomes:pgtoNomes,ranking:ranking};
+  document.getElementById('btn-xls-area').style.display='block';
 }
+
+// ===== EXPORTAR EXCEL DO MES =====
+document.getElementById('btn-xls-dash').addEventListener('click', function() {
+  if(!window._dashData) return;
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var d = window._dashData;
+  var wb = XLSX.utils.book_new();
+
+  // Aba Resumo
+  var resumo = [
+    ['Lele da Kuka — Relatorio de vendas', MESES[d.mes]+'/'+d.ano],
+    [],
+    ['Faturamento total (R$)', d.totalFat],
+    ['Total de entregas', d.ents.length],
+    ['Total de unidades vendidas', d.totalUn],
+    ['Total de unidades trocadas', d.totalUnTroca],
+    ['Valor total em trocas (R$)', d.totalTroca]
+  ];
+  var wsResumo = XLSX.utils.aoa_to_sheet(resumo);
+  wsResumo['!cols'] = [{wch:30},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo');
+
+  // Aba Produtos (vendidos x trocados)
+  var prods = [['Produto','Unidades vendidas','Unidades trocadas']];
+  Object.keys(d.prodTots).forEach(function(k){
+    if(d.prodTots[k]>0 || (d.prodTrocas[k]||0)>0) prods.push([NOME[k], d.prodTots[k], d.prodTrocas[k]||0]);
+  });
+  var wsProd = XLSX.utils.aoa_to_sheet(prods);
+  wsProd['!cols'] = [{wch:20},{wch:18},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, wsProd, 'Produtos');
+
+  // Aba Formas de pagamento
+  var pgto = [['Forma de pagamento','Valor (R$)']];
+  Object.keys(d.pagamentos).forEach(function(k){ if(d.pagamentos[k]>0) pgto.push([d.pgtoNomes[k], d.pagamentos[k]]); });
+  pgto.push(['TOTAL', d.totalFat]);
+  var wsPgto = XLSX.utils.aoa_to_sheet(pgto);
+  wsPgto['!cols'] = [{wch:22},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, wsPgto, 'Pagamentos');
+
+  // Aba Entregas detalhadas
+  var det = [['Data','Cliente','Boleto','Produtos','Pagamento','Valor (R$)','Troca (R$)']];
+  d.ents.slice().sort(function(a,b){return a.data.localeCompare(b.data);}).forEach(function(e){
+    var c = D.clientes.find(function(x){return x.id===e.clienteId;});
+    var prodStr = Object.keys(e.produtos).map(function(k){return NOME[k]+': '+e.produtos[k];}).join(', ');
+    det.push([fdata(e.data), c?(c.fantasia||c.nome):'?', e.boleto||'', prodStr, d.pgtoNomes[e.pagamento]||e.pagamento, e.valorTotal, e.valorTroca||0]);
+  });
+  var wsDet = XLSX.utils.aoa_to_sheet(det);
+  wsDet['!cols'] = [{wch:12},{wch:26},{wch:12},{wch:45},{wch:18},{wch:12},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsDet, 'Entregas');
+
+  XLSX.writeFile(wb, 'Lele_Vendas_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.xlsx');
+  toast('Excel gerado!');
+});
 
 // ===== PDF RELATORIO =====
 ;

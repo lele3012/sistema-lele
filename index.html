@@ -313,6 +313,13 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     </div>
     <button class="btn btn-g" id="btn-filtrar-hist">Filtrar</button>
   </div>
+  <div class="stitle">Importar histórico</div>
+  <div class="card">
+    <div class="alert alert-i">Preencha a planilha modelo e importe aqui para cadastrar várias entregas de uma vez.</div>
+    <div class="field"><label>Arquivo Excel (.xlsx)</label><input type="file" class="inp" id="imp-file" accept=".xlsx,.xls"></div>
+    <button class="btn btn-o" id="btn-importar-hist">📥 Importar planilha</button>
+    <div id="imp-resultado" style="margin-top:10px"></div>
+  </div>
   <div id="lista-hist"><div class="empty"><div class="ico">📋</div><p>Nenhuma entrega encontrada.</p></div></div>
 </div>
 
@@ -478,18 +485,35 @@ function excluirRegistro(colecao, key) {
 function migrarSeNecessario(callback) {
   db.ref('dados').once('value').then(function(snapOld) {
     var old = snapOld.val();
-    if(!old) { callback(); return; }
-    db.ref('clientes').once('value').then(function(snapNovo) {
-      if(snapNovo.val()) { callback(); return; } // ja migrado antes
+    if(!old) return;
+    return db.ref('clientes').once('value').then(function(snapNovo) {
+      if(snapNovo.val()) return; // ja migrado antes
       var updates = {};
       (old.clientes||[]).forEach(function(c){ updates['clientes/'+db.ref('clientes').push().key]=c; });
       (old.entregas||[]).forEach(function(e){ updates['entregas/'+db.ref('entregas').push().key]=e; });
       (old.caixas||[]).forEach(function(c){ updates['caixas/'+db.ref('caixas').push().key]=c; });
       (old.producao||[]).forEach(function(p){ updates['producao/'+db.ref('producao').push().key]=p; });
-      if(!Object.keys(updates).length) { callback(); return; }
-      db.ref().update(updates).then(callback).catch(function(e){ console.error('Erro na migracao:',e); callback(); });
+      if(!Object.keys(updates).length) return;
+      return db.ref().update(updates);
     });
-  }).catch(function(){ callback(); });
+  }).then(function(){ callback(); }).catch(function(e){
+    console.error('Erro na migracao:', e);
+    mostrarErroCarregamento(e);
+    callback();
+  });
+}
+
+function mostrarErroCarregamento(err) {
+  var el = document.getElementById('loading');
+  if(!el) return;
+  var msg = (err && err.message) ? err.message : String(err);
+  el.innerHTML = '<div style="max-width:420px;text-align:center;padding:20px">' +
+    '<div style="font-size:32px;margin-bottom:10px">⚠️</div>' +
+    '<div style="margin-bottom:8px">Não foi possível carregar os dados.</div>' +
+    '<div style="font-size:12px;font-weight:400;color:#999;margin-bottom:14px">'+msg+'</div>' +
+    '<div style="font-size:12px;font-weight:400;color:#999">Se o erro mencionar "permission_denied", as regras do Firebase precisam ser atualizadas. Tire um print desta tela e envie para ajustar.</div>' +
+    '<button onclick="location.reload()" style="margin-top:14px;padding:8px 16px;border:none;border-radius:8px;background:#2a7a3b;color:#fff;font-weight:700;cursor:pointer">Tentar de novo</button>' +
+  '</div>';
 }
 
 function carregar() {
@@ -504,14 +528,27 @@ function carregar() {
   document.getElementById('cx-data').value=hoje;
   document.getElementById('prod-data').value=hoje;
 
+  // Se depois de 12s ainda estiver carregando, mostra erro em vez de travar para sempre
+  var travouTimeout = setTimeout(function() {
+    var el = document.getElementById('loading');
+    if(el && el.textContent.indexOf('Carregando')>=0) mostrarErroCarregamento('Tempo de espera excedido (possível bloqueio de permissão no Firebase).');
+  }, 12000);
+
   migrarSeNecessario(function() {
     var pendentes = 4;
-    function pronto() { pendentes--; if(pendentes<=0) { var el=document.getElementById('loading'); if(el) el.remove(); } }
+    function pronto() { pendentes--; if(pendentes<=0) { clearTimeout(travouTimeout); var el=document.getElementById('loading'); if(el) el.remove(); } }
+    function erroLeitura(caminho) {
+      return function(err) {
+        console.error('Erro ao ler "'+caminho+'":', err);
+        clearTimeout(travouTimeout);
+        mostrarErroCarregamento(err);
+      };
+    }
 
     db.ref('clientes').on('value', function(snap) {
       D.clientes = snapToArray(snap.val());
       renderClis(); popSelCli(); pronto();
-    });
+    }, erroLeitura('clientes'));
     db.ref('entregas').on('value', function(snap) {
       D.entregas = snapToArray(snap.val());
       var abaAtiva = document.querySelector('.tab.on');
@@ -519,17 +556,17 @@ function carregar() {
       if(id==='cobrancas') renderCob();
       if(id==='historico') renderHist();
       pronto();
-    });
+    }, erroLeitura('entregas'));
     db.ref('caixas').on('value', function(snap) {
       D.caixas = snapToArray(snap.val());
       pronto();
-    });
+    }, erroLeitura('caixas'));
     db.ref('producao').on('value', function(snap) {
       D.producao = snapToArray(snap.val());
       var abaAtiva = document.querySelector('.tab.on');
       if(abaAtiva && abaAtiva.getAttribute('data-tab')==='producao') renderProd();
       pronto();
-    });
+    }, erroLeitura('producao'));
   });
 }
 function fmt(n) { return 'R$ ' + (n||0).toFixed(2).replace('.',','); }
@@ -1253,6 +1290,138 @@ function renderHist() {
 }
 
 document.getElementById('btn-filtrar-hist').addEventListener('click', renderHist);
+
+// ===== IMPORTAR HISTORICO (PLANILHA) =====
+function normalizar(s) {
+  return (s||'').toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+var PGTO_MAP = {'a prazo':'prazo','boleto 7 dias':'boleto7','a vista':'vista','pix':'pix'};
+var PROD_COLS = [
+  {idx:3, key:'bola'}, {idx:4, key:'integral'}, {idx:5, key:'mini'}, {idx:6, key:'las250'}, {idx:7, key:'las500'}
+];
+var TROCA_COLS = [
+  {idx:8, key:'bola'}, {idx:9, key:'integral'}, {idx:10, key:'las250'}, {idx:11, key:'las500'}
+];
+
+function parseDataImp(v) {
+  if(!v) return null;
+  if(v instanceof Date) {
+    return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0')+'-'+String(v.getDate()).padStart(2,'0');
+  }
+  var s = v.toString().trim();
+  var m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  var m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m2) return s;
+  return null;
+}
+
+document.getElementById('btn-importar-hist').addEventListener('click', function() {
+  var fileInput = document.getElementById('imp-file');
+  var resDiv = document.getElementById('imp-resultado');
+  if(!fileInput.files.length) { resDiv.innerHTML='<div class="alert alert-r">Escolha um arquivo primeiro.</div>'; return; }
+  if(typeof XLSX === 'undefined') { resDiv.innerHTML='<div class="alert alert-r">Excel indisponivel. Recarregue a pagina.</div>'; return; }
+
+  var btn = this;
+  btn.disabled = true; btn.textContent = 'Importando...';
+  resDiv.innerHTML = '<div class="alert alert-i">Lendo planilha...</div>';
+
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      var wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array', cellDates:true});
+      var ws = wb.Sheets['Entregas'] || wb.Sheets[wb.SheetNames[0]];
+      var linhas = XLSX.utils.sheet_to_json(ws, {header:1, defval:'', raw:true});
+
+      var novos = [];       // entregas prontas para gravar
+      var erros = [];       // {linha, motivo}
+      var duplicadas = 0;
+
+      for(var i=1; i<linhas.length; i++) {   // pula o cabecalho (linha 0)
+        var row = linhas[i];
+        var numLinha = i+1; // numero da linha na planilha (1-indexado, contando cabecalho)
+        if(!row || row.every(function(c){return c===''||c===null||c===undefined;})) continue;
+
+        var dataRaw = row[0], clienteRaw = row[1], boletoRaw = row[2];
+        var pgtoRaw = row[12], pagoRaw = row[13], dataPgtoRaw = row[14];
+
+        var data = parseDataImp(dataRaw);
+        if(!data) { erros.push({linha:numLinha, motivo:'Data invalida ou em branco'}); continue; }
+
+        var nomeCli = normalizar(clienteRaw);
+        if(!nomeCli) { erros.push({linha:numLinha, motivo:'Cliente em branco'}); continue; }
+        var cli = D.clientes.find(function(c){ return normalizar(c.fantasia)===nomeCli || normalizar(c.nome)===nomeCli; });
+        if(!cli) { erros.push({linha:numLinha, motivo:'Cliente "'+clienteRaw+'" nao encontrado no cadastro'}); continue; }
+
+        var prods={}, totalVal=0;
+        PROD_COLS.forEach(function(pc){ var q=parseInt(row[pc.idx])||0; if(q>0){ prods[pc.key]=q; totalVal+=q*getPreco(cli.id,pc.key); } });
+        var trocas={}, trocaVal=0;
+        TROCA_COLS.forEach(function(tc){ var q=parseInt(row[tc.idx])||0; if(q>0){ trocas[tc.key]=q; trocaVal+=q*getPreco(cli.id,tc.key); } });
+        if(!Object.keys(prods).length) { erros.push({linha:numLinha, motivo:'Nenhum produto informado'}); continue; }
+
+        var pgtoNorm = PGTO_MAP[normalizar(pgtoRaw)] || 'prazo';
+        var pago = normalizar(pagoRaw)==='sim';
+        var pgData = pago ? parseDataImp(dataPgtoRaw) : null;
+
+        // Evita duplicar entregas ja existentes (mesmo cliente + data + boleto)
+        var boletoStr = (boletoRaw||'').toString().trim();
+        var jaExiste = D.entregas.some(function(e){
+          return e.clienteId===cli.id && e.data===data && (e.boleto||'')===boletoStr;
+        }) || novos.some(function(e){
+          return e.clienteId===cli.id && e.data===data && (e.boleto||'')===boletoStr;
+        });
+        if(jaExiste) { duplicadas++; continue; }
+
+        novos.push({
+          id: Date.now()+i, clienteId:cli.id, data:data, boleto:boletoStr,
+          produtos:prods, trocas:trocas, pagamento:pgtoNorm,
+          valorTotal:totalVal-trocaVal, valorTroca:trocaVal,
+          pago:pago, pgData:pgData, pgObs:''
+        });
+      }
+
+      if(!novos.length) {
+        var msg = '<div class="alert alert-y">Nenhuma entrega nova para importar.';
+        if(duplicadas) msg += ' ('+duplicadas+' ja existiam e foram ignoradas.)';
+        msg += '</div>';
+        if(erros.length) msg += '<div class="alert alert-r">'+erros.length+' linha(s) com problema:<br>'+erros.slice(0,15).map(function(e){return 'Linha '+e.linha+': '+e.motivo;}).join('<br>')+'</div>';
+        resDiv.innerHTML = msg;
+        btn.disabled=false; btn.textContent='📥 Importar planilha';
+        return;
+      }
+
+      // Grava tudo de uma vez no Firebase (uma chave nova por entrega)
+      var updates = {};
+      novos.forEach(function(ent) {
+        var key = db.ref('entregas').push().key;
+        ent._key = key;
+        updates['entregas/'+key] = (function(o){ var c=Object.assign({},o); delete c._key; return c; })(ent);
+      });
+      db.ref().update(updates).then(function() {
+        novos.forEach(function(ent){ D.entregas.push(ent); });
+        var msg = '<div class="alert alert-g">'+novos.length+' entrega(s) importada(s) com sucesso!';
+        if(duplicadas) msg += ' ('+duplicadas+' ja existiam e foram ignoradas.)';
+        msg += '</div>';
+        if(erros.length) msg += '<div class="alert alert-y">'+erros.length+' linha(s) ignorada(s):<br>'+erros.slice(0,15).map(function(e){return 'Linha '+e.linha+': '+e.motivo;}).join('<br>')+(erros.length>15?'<br>...e mais '+(erros.length-15):'')+'</div>';
+        resDiv.innerHTML = msg;
+        fileInput.value = '';
+        renderHist();
+        toast(novos.length+' entrega(s) importada(s)!');
+      }).catch(function(e) {
+        console.error(e);
+        resDiv.innerHTML = '<div class="alert alert-r">Erro ao gravar no Firebase. Verifique a internet e tente de novo.</div>';
+      }).finally(function() {
+        btn.disabled=false; btn.textContent='📥 Importar planilha';
+      });
+
+    } catch(e) {
+      console.error(e);
+      resDiv.innerHTML = '<div class="alert alert-r">Nao foi possivel ler o arquivo. Confira se e o modelo .xlsx correto.</div>';
+      btn.disabled=false; btn.textContent='📥 Importar planilha';
+    }
+  };
+  reader.readAsArrayBuffer(fileInput.files[0]);
+});
 
 // ===== INIT =====
 carregar();

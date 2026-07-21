@@ -333,7 +333,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 <div class="pnl" id="pnl-relatorio">
   <div class="stitle" style="margin-top:0">Relatorio por cliente</div>
   <div class="card">
-    <div class="field"><label>Cliente</label><select class="inp" id="rel-cli"><option value="">Selecione...</option></select></div>
+    <div class="field" style="position:relative">
+      <label>Cliente</label>
+      <input type="text" class="inp" id="rel-cli-busca" placeholder="Buscar cliente..." autocomplete="off">
+      <select class="inp" id="rel-cli" style="display:none"><option value="">Selecione...</option></select>
+      <div id="rel-cli-drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:8px;max-height:220px;overflow-y:auto;z-index:20;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
+    </div>
     <div class="row2">
       <div class="field"><label>Mes</label>
         <select class="inp" id="rel-mes">
@@ -777,11 +782,12 @@ function calcResumo() {
 
 document.getElementById('e-cli').addEventListener('change', calcResumo);
 
-function popCliBusca() {
-  var busca = document.getElementById('e-cli-busca');
-  var drop = document.getElementById('e-cli-drop');
-  var sel = document.getElementById('e-cli');
+function setupBuscaCliente(buscaId, dropId, selId) {
+  var busca = document.getElementById(buscaId);
+  var drop = document.getElementById(dropId);
+  var sel = document.getElementById(selId);
   if(!busca || !drop || !sel) return;
+  var itemClass = buscaId + '-item';
   function mostrarLista(termo) {
     var t = (termo||'').toLowerCase().trim();
     var itens = D.clientes.filter(function(c) {
@@ -789,14 +795,14 @@ function popCliBusca() {
       return !t || nome.indexOf(t)!==-1;
     });
     drop.innerHTML = itens.length ? itens.map(function(c) {
-      return '<div class="e-cli-item" data-id="'+c.id+'" style="padding:10px;cursor:pointer;border-bottom:1px solid #f0f0f0;font-size:13px">'+(c.fantasia||c.nome)+'</div>';
+      return '<div class="'+itemClass+'" data-id="'+c.id+'" style="padding:10px;cursor:pointer;border-bottom:1px solid #f0f0f0;font-size:13px">'+(c.fantasia||c.nome)+'</div>';
     }).join('') : '<div style="padding:10px;color:#888;font-size:13px">Nenhum cliente encontrado</div>';
     drop.style.display = 'block';
   }
   busca.addEventListener('focus', function() { mostrarLista(busca.value); });
   busca.addEventListener('input', function() { mostrarLista(busca.value); });
   drop.addEventListener('click', function(e) {
-    var item = e.target.closest('.e-cli-item');
+    var item = e.target.closest('.'+itemClass);
     if(!item) return;
     var id = item.getAttribute('data-id');
     var c = D.clientes.find(function(x){ return String(x.id)===String(id); });
@@ -809,7 +815,8 @@ function popCliBusca() {
     if(e.target!==busca && !drop.contains(e.target)) drop.style.display='none';
   });
 }
-popCliBusca();
+setupBuscaCliente('e-cli-busca','e-cli-drop','e-cli');
+setupBuscaCliente('rel-cli-busca','rel-cli-drop','rel-cli');
 
 document.getElementById('btn-salvar-ent').addEventListener('click', function() {
   var cliId = document.getElementById('e-cli').value;

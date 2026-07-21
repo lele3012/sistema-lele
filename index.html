@@ -142,8 +142,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 
 <!-- CLIENTES -->
 <div class="pnl on" id="pnl-clientes">
-  <div class="stitle" style="margin-top:0">Clientes cadastrados</div>
-  <div id="lista-clientes"><div class="empty"><div class="ico">👥</div><p>Nenhum cliente ainda.<br>Adicione abaixo.</p></div></div>
+ <div class="stitle" style="margin-top:0">Clientes cadastrados</div>
+<input type="text" class="inp" id="busca-cliente" placeholder="Buscar cliente..." style="margin-bottom:10px" oninput="renderClis()">
+<div id="lista-clientes"><div class="empty"><div class="ico">👥</div><p>Nenhum cliente ainda.<br>Adicione abaixo.</p></div></div>
   <button class="btn btn-g" id="btn-novo">+ Novo cliente</button>
 </div>
 
@@ -606,7 +607,16 @@ document.querySelectorAll('.tab').forEach(function(t) {
 function renderClis() {
   var el = document.getElementById('lista-clientes');
   if(!D.clientes.length) { el.innerHTML='<div class="empty"><div class="ico">👥</div><p>Nenhum cliente ainda.<br>Adicione abaixo.</p></div>'; return; }
-  el.innerHTML = D.clientes.map(function(c,i) {
+  var buscaEl = document.getElementById('busca-cliente');
+  var termo = buscaEl ? buscaEl.value.toLowerCase().trim() : '';
+  var filtrados = D.clientes.map(function(c,i){ return {c:c, i:i}; }).filter(function(o) {
+    var nome = (o.c.fantasia||o.c.nome||'').toLowerCase();
+    var cnpj = (o.c.cnpj||'').toLowerCase();
+    return !termo || nome.indexOf(termo)!==-1 || cnpj.indexOf(termo)!==-1;
+  });
+  if(!filtrados.length) { el.innerHTML='<div class="empty"><div class="ico">🔍</div><p>Nenhum cliente encontrado.</p></div>'; return; }
+  el.innerHTML = filtrados.map(function(o) {
+    var c = o.c, i = o.i;
     var ini = (c.fantasia||c.nome||'?').charAt(0).toUpperCase();
     var pgtos = {prazo:'A prazo', boleto7:'Boleto 7 dias', vista:'A vista', pix:'PIX'};
     var custom = c.precos && Object.values(c.precos).some(function(v){return v;}) ? ' | Preco personalizado' : '';

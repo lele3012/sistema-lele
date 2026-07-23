@@ -1263,6 +1263,38 @@ document.getElementById('btn-pdf-rel').addEventListener('click', function() {
   doc.text('TOTAL A PAGAR: '+fmt(d.total), m+4, y+17);
   y+=30;
 
+  // Total de produtos (comprados x trocados)
+  var prodTotais = {}, prodTrocaTotais = {};
+  d.ents.forEach(function(e) {
+    Object.keys(e.produtos||{}).forEach(function(k){ prodTotais[k]=(prodTotais[k]||0)+e.produtos[k]; });
+    Object.keys(e.trocas||{}).forEach(function(k){ prodTrocaTotais[k]=(prodTrocaTotais[k]||0)+e.trocas[k]; });
+  });
+  var chaves = Object.keys(prodTotais).filter(function(k){ return prodTotais[k]>0 || (prodTrocaTotais[k]||0)>0; });
+  if(chaves.length) {
+    if(y>245){doc.addPage();y=20;}
+    doc.setTextColor(42,122,59); doc.setFontSize(9); doc.setFont('helvetica','bold');
+    doc.text('TOTAL DE PRODUTOS NO PERIODO', m, y); y+=4;
+    doc.setDrawColor(224,219,211); doc.setLineWidth(0.3); doc.line(m,y,pw-m,y); y+=6;
+
+    doc.setFontSize(8); doc.setTextColor(120,120,120); doc.setFont('helvetica','bold');
+    doc.text('Produto', m, y);
+    doc.text('Comprado', m+110, y, {align:'right'});
+    doc.text('Trocado', pw-m, y, {align:'right'});
+    y+=5;
+    doc.setDrawColor(240,237,232); doc.line(m,y-2,pw-m,y-2);
+
+    chaves.forEach(function(k) {
+      if(y>270){doc.addPage();y=20;}
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(26,26,26);
+      doc.text(NOME[k]||k, m, y);
+      doc.text(String(prodTotais[k]||0)+' un', m+110, y, {align:'right'});
+      doc.setTextColor(prodTrocaTotais[k]?133:180, prodTrocaTotais[k]?100:180, prodTrocaTotais[k]?4:180);
+      doc.text(String(prodTrocaTotais[k]||0)+' un', pw-m, y, {align:'right'});
+      y+=6;
+    });
+    y+=4;
+  }
+
   // Footer
   doc.setDrawColor(224,219,211); doc.setLineWidth(0.3); doc.line(m,283,pw-m,283);
   doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(160,160,160);

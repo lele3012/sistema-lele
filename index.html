@@ -138,6 +138,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   <div class="tab" data-tab="historico"><span>📋</span>Histórico</div>
   <div class="tab" data-tab="relatorio"><span>📊</span>Relatório</div>
   <div class="tab" data-tab="dashboard"><span>📈</span>Dashboard</div>
+  <div class="tab" data-tab="financeiro"><span>💰</span>Financeiro</div>
 </div>
 
 <!-- CLIENTES -->
@@ -377,6 +378,129 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   <div id="btn-xls-area" style="display:none;margin-top:12px"><button class="btn btn-o" id="btn-xls-dash">📥 Exportar Excel do mês</button></div>
 </div>
 
+<!-- FINANCEIRO -->
+<div class="pnl" id="pnl-financeiro">
+  <div class="stitle" style="margin-top:0">Financeiro</div>
+  <div class="card" style="display:flex;gap:6px;flex-wrap:wrap;padding:10px">
+    <button class="btn btn-sm btn-g fin-tab-btn" data-fs="fdash">Resumo</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fboletos">Boletos a Pagar</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="frecor">Recorrentes</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fnotas">Notas Fiscais</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="finsumos">Insumos</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="ffichas">Fichas Técnicas</button>
+  </div>
+
+  <div class="fin-sub" id="fs-fdash">
+    <div id="fin-resumo-area"></div>
+  </div>
+
+  <div class="fin-sub" id="fs-fboletos" style="display:none">
+    <div class="stitle">Nova conta a pagar</div>
+    <div class="card">
+      <div class="field"><label>Fornecedor / Conta</label><input type="text" class="inp" id="bp-forn" placeholder="Ex: UP Distribuidora"></div>
+      <div class="field"><label>Descrição</label><input type="text" class="inp" id="bp-desc" placeholder="Ex: Compra de insumos"></div>
+      <div class="row2">
+        <div class="field"><label>Valor</label><input type="number" step="0.01" class="inp" id="bp-valor"></div>
+        <div class="field"><label>Vencimento</label><input type="date" class="inp" id="bp-venc"></div>
+      </div>
+      <button class="btn btn-g" id="btn-salvar-bp">✅ Salvar conta</button>
+      <button class="btn btn-o" id="btn-cancelar-bp" style="display:none">Cancelar edição</button>
+    </div>
+    <div class="stitle">Contas cadastradas</div>
+    <div id="lista-boletos"></div>
+  </div>
+
+  <div class="fin-sub" id="fs-frecor" style="display:none">
+    <div class="stitle">Nova conta recorrente</div>
+    <div class="card">
+      <div class="field"><label>Nome da conta</label><input type="text" class="inp" id="rc-nome" placeholder="Ex: Aluguel"></div>
+      <div class="row2">
+        <div class="field"><label>Valor</label><input type="number" step="0.01" class="inp" id="rc-valor"></div>
+        <div class="field"><label>Dia do vencimento</label><input type="number" min="1" max="31" class="inp" id="rc-dia"></div>
+      </div>
+      <button class="btn btn-g" id="btn-salvar-rc">✅ Salvar conta recorrente</button>
+      <button class="btn btn-o" id="btn-cancelar-rc" style="display:none">Cancelar edição</button>
+    </div>
+    <div class="stitle">Contas recorrentes cadastradas</div>
+    <div id="lista-recorrentes"></div>
+  </div>
+
+  <div class="fin-sub" id="fs-fnotas" style="display:none">
+    <div class="stitle">Nova nota fiscal de compra</div>
+    <div class="card">
+      <div class="field"><label>Fornecedor</label><input type="text" class="inp" id="nf-forn"></div>
+      <div class="row2">
+        <div class="field"><label>Número da nota</label><input type="text" class="inp" id="nf-num"></div>
+        <div class="field"><label>Data de emissão</label><input type="date" class="inp" id="nf-data"></div>
+      </div>
+      <div class="field"><label>Categoria</label>
+        <select class="inp" id="nf-cat">
+          <option value="materia_prima">Matéria-prima</option>
+          <option value="embalagem">Embalagem</option>
+          <option value="gas">Gás</option>
+          <option value="manutencao">Manutenção</option>
+          <option value="outros">Outros</option>
+        </select>
+      </div>
+      <div class="stitle">Itens da nota</div>
+      <datalist id="dl-insumos"></datalist>
+      <div id="nf-itens"></div>
+      <button class="btn btn-o btn-sm" id="btn-add-item-nf" type="button">+ Adicionar item</button>
+      <div style="padding:10px 0;display:flex;justify-content:space-between;font-weight:800"><span>Total:</span><span id="nf-total">R$ 0,00</span></div>
+      <div class="field"><label>Gerar conta a pagar (boleto)?</label>
+        <select class="inp" id="nf-gera-boleto">
+          <option value="nao">Não</option>
+          <option value="sim">Sim</option>
+        </select>
+      </div>
+      <div class="field" id="nf-venc-field" style="display:none"><label>Vencimento do boleto</label><input type="date" class="inp" id="nf-venc"></div>
+      <button class="btn btn-g" id="btn-salvar-nf">✅ Salvar nota fiscal</button>
+    </div>
+    <div class="stitle">Notas cadastradas</div>
+    <div id="lista-notas"></div>
+  </div>
+
+  <div class="fin-sub" id="fs-finsumos" style="display:none">
+    <div class="stitle">Novo insumo</div>
+    <div class="card">
+      <div class="field"><label>Nome do insumo</label><input type="text" class="inp" id="is-nome" placeholder="Ex: Farinha de trigo"></div>
+      <div class="row2">
+        <div class="field"><label>Unidade</label>
+          <select class="inp" id="is-unid">
+            <option value="kg">kg</option><option value="g">g</option><option value="un">un</option><option value="l">litro</option><option value="ml">ml</option>
+          </select>
+        </div>
+        <div class="field"><label>Custo unitário atual</label><input type="number" step="0.01" class="inp" id="is-custo"></div>
+      </div>
+      <button class="btn btn-g" id="btn-salvar-is">✅ Salvar insumo</button>
+      <button class="btn btn-o" id="btn-cancelar-is" style="display:none">Cancelar edição</button>
+    </div>
+    <div class="stitle">Insumos cadastrados</div>
+    <div id="lista-insumos"></div>
+  </div>
+
+  <div class="fin-sub" id="fs-ffichas" style="display:none">
+    <div class="stitle">Ficha técnica por produto</div>
+    <div class="card">
+      <div class="field"><label>Produto</label>
+        <select class="inp" id="ft-produto">
+          <option value="bola">Pão Bola</option>
+          <option value="integral">Pão Integral</option>
+          <option value="las250">Lasanha 250g</option>
+          <option value="las500">Lasanha 500g</option>
+          <option value="mini">Mini Sanduíche</option>
+        </select>
+      </div>
+      <div id="ft-itens"></div>
+      <button class="btn btn-o btn-sm" id="btn-add-item-ft" type="button">+ Adicionar insumo</button>
+      <div style="padding:10px 0;display:flex;justify-content:space-between;font-weight:800"><span>Custo de produção:</span><span id="ft-custo">R$ 0,00</span></div>
+      <button class="btn btn-g" id="btn-salvar-ft">✅ Salvar ficha técnica</button>
+    </div>
+    <div class="stitle">Margem por produto</div>
+    <div id="lista-fichas"></div>
+  </div>
+</div>
+
 <!-- MODAL CLIENTE -->
 <div class="modal" id="modal-cli">
   <div class="mbox">
@@ -460,10 +584,11 @@ var db = firebase.database();
 // (clientes/entregas/caixas/producao) e cada salvamento grava so o registro
 // que mudou -- isso evita que dois usuarios ao mesmo tempo apaguem a
 // alteracao um do outro (o que acontecia quando tudo era salvo junto em 'dados').
-var D = {clientes:[], entregas:[], caixas:[], producao:[]};
+var D = {clientes:[], entregas:[], caixas:[], producao:[], insumos:[], fichas:[], notasFiscais:[], boletos:[], recorrentes:[]};
 var editIdx = null;
 var editEntregaKey = null;
 var baixaEntregaId = null;
+var editBoletoKey = null, editRecorrenteKey = null, editInsumoKey = null;
 
 var PRECO = {bola:8.50, integral:8.50, las250:11.00, las500:14.50, mini:2.30};
 var NOME = {bola:'Pao Bola', integral:'Pao Integral', las250:'Lasanha 250g', las500:'Lasanha 500g', mini:'Mini Sanduiche'};
@@ -552,7 +677,7 @@ function carregar() {
   }, 12000);
 
   migrarSeNecessario(function() {
-    var pendentes = 4;
+    var pendentes = 9;
     function pronto() { pendentes--; if(pendentes<=0) { clearTimeout(travouTimeout); var el=document.getElementById('loading'); if(el) el.remove(); } }
     function erroLeitura(caminho) {
       return function(err) {
@@ -561,6 +686,37 @@ function carregar() {
         mostrarErroCarregamento(err);
       };
     }
+
+    db.ref('insumos').on('value', function(snap) {
+      D.insumos = snapToArray(snap.val());
+      var t = document.querySelector('.tab.on');
+      if(t && t.getAttribute('data-tab')==='financeiro') { renderInsumos(); popDatalistInsumos(); renderFichas(); renderFinDash(); }
+      pronto();
+    }, erroLeitura('insumos'));
+    db.ref('fichas').on('value', function(snap) {
+      D.fichas = snapToArray(snap.val());
+      var t = document.querySelector('.tab.on');
+      if(t && t.getAttribute('data-tab')==='financeiro') { renderFichas(); renderFinDash(); }
+      pronto();
+    }, erroLeitura('fichas'));
+    db.ref('notasFiscais').on('value', function(snap) {
+      D.notasFiscais = snapToArray(snap.val());
+      var t = document.querySelector('.tab.on');
+      if(t && t.getAttribute('data-tab')==='financeiro') { renderNotas(); renderFinDash(); }
+      pronto();
+    }, erroLeitura('notasFiscais'));
+    db.ref('boletos').on('value', function(snap) {
+      D.boletos = snapToArray(snap.val());
+      var t = document.querySelector('.tab.on');
+      if(t && t.getAttribute('data-tab')==='financeiro') { renderBoletos(); renderFinDash(); }
+      pronto();
+    }, erroLeitura('boletos'));
+    db.ref('recorrentes').on('value', function(snap) {
+      D.recorrentes = snapToArray(snap.val());
+      var t = document.querySelector('.tab.on');
+      if(t && t.getAttribute('data-tab')==='financeiro') { renderRecorrentes(); renderFinDash(); }
+      pronto();
+    }, erroLeitura('recorrentes'));
 
     db.ref('clientes').on('value', function(snap) {
       D.clientes = snapToArray(snap.val());
@@ -610,6 +766,20 @@ document.querySelectorAll('.tab').forEach(function(t) {
     if(id==='cobrancas') renderCob();
     if(id==='producao') renderProd();
     if(id==='dashboard') renderDash();
+    if(id==='financeiro') {
+      popDatalistInsumos();
+      renderBoletos(); renderRecorrentes(); renderNotas(); renderInsumos(); renderFichas(); renderFinDash();
+    }
+  });
+});
+
+document.querySelectorAll('.fin-tab-btn').forEach(function(b) {
+  b.addEventListener('click', function() {
+    var fs = this.getAttribute('data-fs');
+    document.querySelectorAll('.fin-tab-btn').forEach(function(x){ x.classList.remove('btn-g'); x.classList.add('btn-o'); });
+    this.classList.remove('btn-o'); this.classList.add('btn-g');
+    document.querySelectorAll('.fin-sub').forEach(function(x){ x.style.display='none'; });
+    document.getElementById('fs-'+fs).style.display='';
   });
 });
 
@@ -1518,6 +1688,345 @@ document.getElementById('btn-importar-hist').addEventListener('click', function(
   };
   reader.readAsArrayBuffer(fileInput.files[0]);
 });
+
+// ===== FINANCEIRO =====
+function fdataHoje() { return new Date().toISOString().split('T')[0]; }
+
+// --- INSUMOS ---
+function popDatalistInsumos() {
+  var dl = document.getElementById('dl-insumos');
+  if(!dl) return;
+  dl.innerHTML = D.insumos.map(function(i){ return '<option value="'+i.nome+'">'; }).join('');
+}
+function renderInsumos() {
+  var el = document.getElementById('lista-insumos'); if(!el) return;
+  if(!D.insumos.length) { el.innerHTML='<div class="empty"><div class="ico">🧺</div><p>Nenhum insumo ainda.</p></div>'; return; }
+  el.innerHTML = D.insumos.slice().sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');}).map(function(i) {
+    return '<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">'+
+      '<div><b>'+i.nome+'</b><div style="font-size:12px;color:#888">'+i.unidade+' | '+fmt(i.custoUnit)+'/'+i.unidade+'</div></div>'+
+      '<div style="display:flex;gap:6px">'+
+      '<button class="btn btn-sm btn-o" data-editis="'+i._key+'">Editar</button>'+
+      '<button class="btn btn-sm btn-r" data-delis="'+i._key+'">Excluir</button>'+
+      '</div></div>';
+  }).join('');
+  el.querySelectorAll('[data-editis]').forEach(function(b){ b.addEventListener('click', function(){
+    var i = D.insumos.find(function(x){return x._key===this.getAttribute('data-editis');},this);
+    i = D.insumos.find(function(x){return x._key===b.getAttribute('data-editis');});
+    editInsumoKey = i._key;
+    document.getElementById('is-nome').value=i.nome; document.getElementById('is-unid').value=i.unidade; document.getElementById('is-custo').value=i.custoUnit;
+    document.getElementById('btn-cancelar-is').style.display='';
+  });});
+  el.querySelectorAll('[data-delis]').forEach(function(b){ b.addEventListener('click', function(){
+    if(confirm('Excluir este insumo?')) excluirRegistro('insumos', b.getAttribute('data-delis'));
+  });});
+}
+document.getElementById('btn-salvar-is').addEventListener('click', function() {
+  var nome = document.getElementById('is-nome').value.trim();
+  if(!nome) { toast('Informe o nome do insumo'); return; }
+  var obj = { nome:nome, unidade:document.getElementById('is-unid').value, custoUnit: parseFloat(document.getElementById('is-custo').value)||0 };
+  if(!editInsumoKey) obj.id = Date.now();
+  salvarRegistro('insumos', obj, editInsumoKey).then(function(){
+    toast('Insumo salvo!'); document.getElementById('is-nome').value=''; document.getElementById('is-custo').value='';
+    editInsumoKey=null; document.getElementById('btn-cancelar-is').style.display='none';
+  });
+});
+document.getElementById('btn-cancelar-is').addEventListener('click', function(){
+  editInsumoKey=null; this.style.display='none';
+  document.getElementById('is-nome').value=''; document.getElementById('is-custo').value='';
+});
+
+// Busca (ou cria) um insumo pelo nome, e atualiza o custo unitario com o valor mais recente
+function upsertInsumoPorNome(nome, unidade, valorUnit) {
+  var existente = D.insumos.find(function(i){ return (i.nome||'').toLowerCase().trim()===nome.toLowerCase().trim(); });
+  if(existente) {
+    return atualizarRegistro('insumos', existente._key, {custoUnit: valorUnit});
+  }
+  return salvarRegistro('insumos', {id:Date.now()+Math.random(), nome:nome, unidade:unidade||'un', custoUnit:valorUnit});
+}
+
+// --- FICHAS TECNICAS ---
+function ftAddItem(insumoId, qtd) {
+  var wrap = document.getElementById('ft-itens');
+  var row = document.createElement('div');
+  row.className = 'row2 ft-item-row';
+  row.style.alignItems = 'flex-end';
+  var opts = D.insumos.map(function(i){ return '<option value="'+i.id+'"'+(String(i.id)===String(insumoId)?' selected':'')+'>'+i.nome+' ('+i.unidade+')</option>'; }).join('');
+  row.innerHTML = '<div class="field"><label>Insumo</label><select class="inp ft-insumo">'+opts+'</select></div>'+
+    '<div class="field" style="max-width:110px"><label>Qtd</label><input type="number" step="0.01" class="inp ft-qtd" value="'+(qtd||0)+'"></div>'+
+    '<button class="btn btn-r btn-sm" type="button" style="margin-bottom:12px" onclick="this.parentElement.remove();calcFtCusto();">✕</button>';
+  wrap.appendChild(row);
+  row.querySelector('.ft-insumo').addEventListener('change', calcFtCusto);
+  row.querySelector('.ft-qtd').addEventListener('input', calcFtCusto);
+  calcFtCusto();
+}
+document.getElementById('btn-add-item-ft').addEventListener('click', function(){ ftAddItem(); });
+function calcFtCusto() {
+  var total = 0;
+  document.querySelectorAll('.ft-item-row').forEach(function(row) {
+    var insId = row.querySelector('.ft-insumo').value;
+    var qtd = parseFloat(row.querySelector('.ft-qtd').value)||0;
+    var ins = D.insumos.find(function(i){return String(i.id)===String(insId);});
+    total += qtd * (ins?ins.custoUnit:0);
+  });
+  document.getElementById('ft-custo').textContent = fmt(total);
+  return total;
+}
+document.getElementById('ft-produto').addEventListener('change', function() {
+  document.getElementById('ft-itens').innerHTML = '';
+  var ficha = D.fichas.find(function(f){return f.produto===this.value;},this);
+  ficha = D.fichas.find(function(f){return f.produto===document.getElementById('ft-produto').value;});
+  if(ficha && ficha.itens) ficha.itens.forEach(function(it){ ftAddItem(it.insumoId, it.qtd); });
+  else calcFtCusto();
+});
+document.getElementById('btn-salvar-ft').addEventListener('click', function() {
+  var produto = document.getElementById('ft-produto').value;
+  var itens = [];
+  document.querySelectorAll('.ft-item-row').forEach(function(row) {
+    var insId = row.querySelector('.ft-insumo').value;
+    var qtd = parseFloat(row.querySelector('.ft-qtd').value)||0;
+    if(insId && qtd>0) itens.push({insumoId:insId, qtd:qtd});
+  });
+  var existente = D.fichas.find(function(f){return f.produto===produto;});
+  var obj = {id: existente?existente.id:Date.now(), produto:produto, itens:itens};
+  salvarRegistro('fichas', obj, existente?existente._key:null).then(function(){ toast('Ficha técnica salva!'); });
+});
+function custoProduto(produtoKey) {
+  var ficha = D.fichas.find(function(f){return f.produto===produtoKey;});
+  if(!ficha || !ficha.itens) return 0;
+  var total = 0;
+  ficha.itens.forEach(function(it) {
+    var ins = D.insumos.find(function(i){return String(i.id)===String(it.insumoId);});
+    total += (it.qtd||0) * (ins?ins.custoUnit:0);
+  });
+  return total;
+}
+function renderFichas() {
+  var el = document.getElementById('lista-fichas'); if(!el) return;
+  var chaves = ['bola','integral','las250','las500','mini'];
+  el.innerHTML = chaves.map(function(k) {
+    var custo = custoProduto(k);
+    var preco = PRECO[k]||0;
+    var margem = preco - custo;
+    var pct = preco>0 ? (margem/preco*100) : 0;
+    var cor = margem>=0 ? 'var(--g)' : 'var(--r)';
+    return '<div class="card" style="padding:12px 16px">'+
+      '<div style="display:flex;justify-content:space-between"><b>'+NOME[k]+'</b><span style="color:'+cor+';font-weight:800">'+pct.toFixed(0)+'%</span></div>'+
+      '<div style="font-size:12px;color:#888;margin-top:4px">Preço padrão: '+fmt(preco)+' | Custo: '+fmt(custo)+' | Margem: '+fmt(margem)+'</div>'+
+      '</div>';
+  }).join('');
+}
+
+// --- NOTAS FISCAIS ---
+function nfAddItem(nome, qtd, valorUnit) {
+  var wrap = document.getElementById('nf-itens');
+  var row = document.createElement('div');
+  row.className = 'row2 nf-item-row';
+  row.style.alignItems = 'flex-end';
+  row.innerHTML = '<div class="field"><label>Item</label><input type="text" class="inp nf-item-nome" list="dl-insumos" value="'+(nome||'')+'"></div>'+
+    '<div class="field" style="max-width:80px"><label>Qtd</label><input type="number" step="0.01" class="inp nf-item-qtd" value="'+(qtd||1)+'"></div>'+
+    '<div class="field" style="max-width:110px"><label>Vlr Unit.</label><input type="number" step="0.01" class="inp nf-item-valor" value="'+(valorUnit||0)+'"></div>'+
+    '<button class="btn btn-r btn-sm" type="button" style="margin-bottom:12px" onclick="this.parentElement.remove();calcNfTotal();">✕</button>';
+  wrap.appendChild(row);
+  row.querySelectorAll('input').forEach(function(inp){ inp.addEventListener('input', calcNfTotal); });
+  calcNfTotal();
+}
+document.getElementById('btn-add-item-nf').addEventListener('click', function(){ nfAddItem(); });
+function calcNfTotal() {
+  var total = 0;
+  document.querySelectorAll('.nf-item-row').forEach(function(row) {
+    var qtd = parseFloat(row.querySelector('.nf-item-qtd').value)||0;
+    var v = parseFloat(row.querySelector('.nf-item-valor').value)||0;
+    total += qtd*v;
+  });
+  document.getElementById('nf-total').textContent = fmt(total);
+  return total;
+}
+document.getElementById('nf-gera-boleto').addEventListener('change', function() {
+  document.getElementById('nf-venc-field').style.display = this.value==='sim' ? '' : 'none';
+});
+document.getElementById('btn-salvar-nf').addEventListener('click', function() {
+  var fornecedor = document.getElementById('nf-forn').value.trim();
+  if(!fornecedor) { toast('Informe o fornecedor'); return; }
+  var itens = [];
+  document.querySelectorAll('.nf-item-row').forEach(function(row) {
+    var nome = row.querySelector('.nf-item-nome').value.trim();
+    var qtd = parseFloat(row.querySelector('.nf-item-qtd').value)||0;
+    var valorUnit = parseFloat(row.querySelector('.nf-item-valor').value)||0;
+    if(nome) itens.push({nome:nome, qtd:qtd, valorUnit:valorUnit});
+  });
+  var total = calcNfTotal();
+  var geraBoleto = document.getElementById('nf-gera-boleto').value==='sim';
+  var venc = document.getElementById('nf-venc').value;
+  var nf = {
+    id: Date.now(), fornecedor:fornecedor, numero:document.getElementById('nf-num').value.trim(),
+    data:document.getElementById('nf-data').value || fdataHoje(), categoria:document.getElementById('nf-cat').value,
+    itens:itens, total:total
+  };
+  var proms = itens.map(function(it){ return upsertInsumoPorNome(it.nome, null, it.valorUnit); });
+  Promise.all(proms).then(function(){
+    return salvarRegistro('notasFiscais', nf);
+  }).then(function(){
+    if(geraBoleto && venc) {
+      return salvarRegistro('boletos', {id:Date.now()+1, fornecedor:fornecedor, desc:'Nota fiscal '+(nf.numero||''), valor:total, venc:venc, status:'pendente', origem:'nf'});
+    }
+  }).then(function(){
+    toast('Nota fiscal salva!');
+    document.getElementById('nf-forn').value=''; document.getElementById('nf-num').value=''; document.getElementById('nf-itens').innerHTML='';
+    document.getElementById('nf-total').textContent='R$ 0,00';
+  });
+});
+function renderNotas() {
+  var el = document.getElementById('lista-notas'); if(!el) return;
+  if(!D.notasFiscais.length) { el.innerHTML='<div class="empty"><div class="ico">🧾</div><p>Nenhuma nota lançada.</p></div>'; return; }
+  el.innerHTML = D.notasFiscais.slice().sort(function(a,b){return (b.data||'').localeCompare(a.data||'');}).map(function(n) {
+    return '<div class="card" style="padding:12px 16px">'+
+      '<div style="display:flex;justify-content:space-between"><b>'+n.fornecedor+'</b><span style="font-weight:800">'+fmt(n.total)+'</span></div>'+
+      '<div style="font-size:12px;color:#888;margin-top:4px">'+(n.data?fdata(n.data):'')+' | Nota #'+(n.numero||'-')+' | '+(n.itens?n.itens.length:0)+' item(ns)</div>'+
+      '<button class="btn btn-sm btn-r" style="margin-top:8px" data-delnf="'+n._key+'">Excluir</button>'+
+      '</div>';
+  }).join('');
+  el.querySelectorAll('[data-delnf]').forEach(function(b){ b.addEventListener('click', function(){
+    if(confirm('Excluir esta nota fiscal?')) excluirRegistro('notasFiscais', b.getAttribute('data-delnf'));
+  });});
+}
+
+// --- BOLETOS A PAGAR ---
+document.getElementById('btn-salvar-bp').addEventListener('click', function() {
+  var forn = document.getElementById('bp-forn').value.trim();
+  var venc = document.getElementById('bp-venc').value;
+  if(!forn || !venc) { toast('Informe fornecedor e vencimento'); return; }
+  var obj = {
+    fornecedor:forn, desc:document.getElementById('bp-desc').value.trim(),
+    valor:parseFloat(document.getElementById('bp-valor').value)||0, venc:venc,
+    status:'pendente', origem:'manual'
+  };
+  if(!editBoletoKey) obj.id = Date.now();
+  salvarRegistro('boletos', obj, editBoletoKey).then(function(){
+    toast('Conta salva!');
+    document.getElementById('bp-forn').value=''; document.getElementById('bp-desc').value=''; document.getElementById('bp-valor').value='';
+    document.getElementById('bp-venc').value='';
+    editBoletoKey=null; document.getElementById('btn-cancelar-bp').style.display='none';
+  });
+});
+document.getElementById('btn-cancelar-bp').addEventListener('click', function(){
+  editBoletoKey=null; this.style.display='none';
+  document.getElementById('bp-forn').value=''; document.getElementById('bp-desc').value=''; document.getElementById('bp-valor').value=''; document.getElementById('bp-venc').value='';
+});
+function renderBoletos() {
+  var el = document.getElementById('lista-boletos'); if(!el) return;
+  if(!D.boletos.length) { el.innerHTML='<div class="empty"><div class="ico">🔔</div><p>Nenhuma conta cadastrada.</p></div>'; return; }
+  var hoje = fdataHoje();
+  el.innerHTML = D.boletos.slice().sort(function(a,b){return (a.venc||'').localeCompare(b.venc||'');}).map(function(b) {
+    var atrasado = b.status==='pendente' && b.venc < hoje;
+    var badge = b.status==='pago' ? '<span class="badge badge-g">Pago</span>' : (atrasado ? '<span class="badge badge-r">Atrasado</span>' : '<span class="badge badge-y">Pendente</span>');
+    return '<div class="card" style="padding:12px 16px">'+
+      '<div style="display:flex;justify-content:space-between"><b>'+b.fornecedor+'</b>'+badge+'</div>'+
+      '<div style="font-size:12px;color:#888;margin-top:2px">'+(b.desc||'')+'</div>'+
+      '<div style="display:flex;justify-content:space-between;margin-top:6px"><span>Vence: '+fdata(b.venc)+'</span><span style="font-weight:800">'+fmt(b.valor)+'</span></div>'+
+      '<div style="display:flex;gap:6px;margin-top:8px">'+
+      (b.status==='pendente' ? '<button class="btn btn-sm btn-g" data-pagbol="'+b._key+'">Marcar como pago</button>' : '')+
+      '<button class="btn btn-sm btn-o" data-editbol="'+b._key+'">Editar</button>'+
+      '<button class="btn btn-sm btn-r" data-delbol="'+b._key+'">Excluir</button>'+
+      '</div></div>';
+  }).join('');
+  el.querySelectorAll('[data-pagbol]').forEach(function(btn){ btn.addEventListener('click', function(){
+    atualizarRegistro('boletos', btn.getAttribute('data-pagbol'), {status:'pago', dataPagamento:fdataHoje()}).then(function(){ toast('Marcado como pago!'); });
+  });});
+  el.querySelectorAll('[data-editbol]').forEach(function(btn){ btn.addEventListener('click', function(){
+    var b = D.boletos.find(function(x){return x._key===btn.getAttribute('data-editbol');});
+    editBoletoKey = b._key;
+    document.getElementById('bp-forn').value=b.fornecedor; document.getElementById('bp-desc').value=b.desc||'';
+    document.getElementById('bp-valor').value=b.valor; document.getElementById('bp-venc').value=b.venc;
+    document.getElementById('btn-cancelar-bp').style.display='';
+  });});
+  el.querySelectorAll('[data-delbol]').forEach(function(btn){ btn.addEventListener('click', function(){
+    if(confirm('Excluir esta conta?')) excluirRegistro('boletos', btn.getAttribute('data-delbol'));
+  });});
+}
+
+// --- CONTAS RECORRENTES ---
+document.getElementById('btn-salvar-rc').addEventListener('click', function() {
+  var nome = document.getElementById('rc-nome').value.trim();
+  var dia = parseInt(document.getElementById('rc-dia').value)||1;
+  if(!nome) { toast('Informe o nome da conta'); return; }
+  var obj = { nome:nome, valor:parseFloat(document.getElementById('rc-valor').value)||0, dia:dia };
+  if(!editRecorrenteKey) obj.id = Date.now();
+  salvarRegistro('recorrentes', obj, editRecorrenteKey).then(function(){
+    toast('Conta recorrente salva!');
+    document.getElementById('rc-nome').value=''; document.getElementById('rc-valor').value=''; document.getElementById('rc-dia').value='';
+    editRecorrenteKey=null; document.getElementById('btn-cancelar-rc').style.display='none';
+  });
+});
+document.getElementById('btn-cancelar-rc').addEventListener('click', function(){
+  editRecorrenteKey=null; this.style.display='none';
+  document.getElementById('rc-nome').value=''; document.getElementById('rc-valor').value=''; document.getElementById('rc-dia').value='';
+});
+function renderRecorrentes() {
+  var el = document.getElementById('lista-recorrentes'); if(!el) return;
+  if(!D.recorrentes.length) { el.innerHTML='<div class="empty"><div class="ico">🔁</div><p>Nenhuma conta recorrente.</p></div>'; return; }
+  var agora = new Date(); var mesAtual = agora.getMonth()+1, anoAtual = agora.getFullYear();
+  el.innerHTML = D.recorrentes.slice().sort(function(a,b){return a.dia-b.dia;}).map(function(r) {
+    var vencMes = anoAtual+'-'+String(mesAtual).padStart(2,'0')+'-'+String(r.dia).padStart(2,'0');
+    var jaLancado = D.boletos.some(function(b){ return b.origem==='recorrente' && b.recorrenteId===r.id && b.venc===vencMes; });
+    return '<div class="card" style="padding:12px 16px">'+
+      '<div style="display:flex;justify-content:space-between"><b>'+r.nome+'</b><span style="font-weight:800">'+fmt(r.valor)+'</span></div>'+
+      '<div style="font-size:12px;color:#888;margin-top:4px">Vence todo dia '+r.dia+'</div>'+
+      '<div style="display:flex;gap:6px;margin-top:8px">'+
+      (jaLancado ? '<span class="badge badge-g" style="padding:8px 12px">Já lançado este mês</span>' : '<button class="btn btn-sm btn-g" data-lancar="'+r._key+'">Lançar este mês</button>')+
+      '<button class="btn btn-sm btn-o" data-editrc="'+r._key+'">Editar</button>'+
+      '<button class="btn btn-sm btn-r" data-delrc="'+r._key+'">Excluir</button>'+
+      '</div></div>';
+  }).join('');
+  el.querySelectorAll('[data-lancar]').forEach(function(btn){ btn.addEventListener('click', function(){
+    var r = D.recorrentes.find(function(x){return x._key===btn.getAttribute('data-lancar');});
+    var vencMes = anoAtual+'-'+String(mesAtual).padStart(2,'0')+'-'+String(r.dia).padStart(2,'0');
+    salvarRegistro('boletos', {id:Date.now(), fornecedor:r.nome, desc:'Conta recorrente', valor:r.valor, venc:vencMes, status:'pendente', origem:'recorrente', recorrenteId:r.id}).then(function(){
+      toast('Conta lançada em Boletos a Pagar!');
+    });
+  });});
+  el.querySelectorAll('[data-editrc]').forEach(function(btn){ btn.addEventListener('click', function(){
+    var r = D.recorrentes.find(function(x){return x._key===btn.getAttribute('data-editrc');});
+    editRecorrenteKey = r._key;
+    document.getElementById('rc-nome').value=r.nome; document.getElementById('rc-valor').value=r.valor; document.getElementById('rc-dia').value=r.dia;
+    document.getElementById('btn-cancelar-rc').style.display='';
+  });});
+  el.querySelectorAll('[data-delrc]').forEach(function(btn){ btn.addEventListener('click', function(){
+    if(confirm('Excluir esta conta recorrente?')) excluirRegistro('recorrentes', btn.getAttribute('data-delrc'));
+  });});
+}
+
+// --- RESUMO / DASHBOARD FINANCEIRO ---
+function renderFinDash() {
+  var el = document.getElementById('fin-resumo-area'); if(!el) return;
+  var hoje = fdataHoje();
+  var pendentes = D.boletos.filter(function(b){return b.status==='pendente';});
+  var atrasadas = pendentes.filter(function(b){return b.venc<hoje;});
+  var em7dias = pendentes.filter(function(b){ var d1=new Date(hoje), d2=new Date(b.venc); var diff=(d2-d1)/86400000; return diff>=0 && diff<=7; });
+  var totalMes = pendentes.reduce(function(s,b){return s+(b.valor||0);},0);
+  var agora = new Date(); var mesAtual=agora.getMonth()+1, anoAtual=agora.getFullYear();
+  var custoMes = D.notasFiscais.filter(function(n){ var d=new Date((n.data||'')+'T00:00:00'); return d.getMonth()+1===mesAtual && d.getFullYear()===anoAtual; }).reduce(function(s,n){return s+(n.total||0);},0);
+
+  var html = '<div class="row2">'+
+    '<div class="card" style="text-align:center"><div style="font-size:11px;color:#888">ATRASADAS</div><div style="font-size:20px;font-weight:800;color:var(--r)">'+atrasadas.length+'</div></div>'+
+    '<div class="card" style="text-align:center"><div style="font-size:11px;color:#888">VENCEM EM 7 DIAS</div><div style="font-size:20px;font-weight:800;color:#856404">'+em7dias.length+'</div></div>'+
+    '</div>'+
+    '<div class="card"><div style="font-size:11px;color:#888">TOTAL PENDENTE A PAGAR</div><div style="font-size:22px;font-weight:800;color:var(--g)">'+fmt(totalMes)+'</div></div>'+
+    '<div class="card"><div style="font-size:11px;color:#888">CUSTO EM NOTAS FISCAIS ESTE MÊS</div><div style="font-size:22px;font-weight:800">'+fmt(custoMes)+'</div></div>';
+
+  if(atrasadas.length) {
+    html += '<div class="stitle">Contas atrasadas</div>';
+    atrasadas.forEach(function(b){
+      html += '<div class="card" style="padding:10px 16px;border:1.5px solid var(--r)"><div style="display:flex;justify-content:space-between"><b>'+b.fornecedor+'</b><span style="font-weight:800;color:var(--r)">'+fmt(b.valor)+'</span></div><div style="font-size:12px;color:#888">Venceu em '+fdata(b.venc)+'</div></div>';
+    });
+  }
+  if(em7dias.length) {
+    html += '<div class="stitle">Vencendo em breve</div>';
+    em7dias.forEach(function(b){
+      html += '<div class="card" style="padding:10px 16px"><div style="display:flex;justify-content:space-between"><b>'+b.fornecedor+'</b><span style="font-weight:800">'+fmt(b.valor)+'</span></div><div style="font-size:12px;color:#888">Vence em '+fdata(b.venc)+'</div></div>';
+    });
+  }
+  el.innerHTML = html;
+}
 
 // ===== INIT =====
 carregar();

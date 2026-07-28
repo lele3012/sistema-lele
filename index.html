@@ -484,13 +484,23 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <div id="nf-itens"></div>
       <button class="btn btn-o btn-sm" id="btn-add-item-nf" type="button">+ Adicionar item</button>
       <div style="padding:10px 0;display:flex;justify-content:space-between;font-weight:800"><span>Total:</span><span id="nf-total">R$ 0,00</span></div>
-      <div class="field"><label>Gerar conta a pagar (boleto)?</label>
+      <div class="field"><label>Gerar conta(s) a pagar (boleto)?</label>
         <select class="inp" id="nf-gera-boleto">
           <option value="nao">Não</option>
           <option value="sim">Sim</option>
         </select>
       </div>
-      <div class="field" id="nf-venc-field" style="display:none"><label>Vencimento do boleto</label><input type="date" class="inp" id="nf-venc"></div>
+      <div class="field" id="nf-parc-config" style="display:none">
+        <label>Parcelamento</label>
+        <div class="row2">
+          <div class="field"><label>Qtd de parcelas</label><input type="number" min="1" class="inp" id="nf-parc-qtd" value="1"></div>
+          <div class="field"><label>Intervalo entre venc. (dias)</label><input type="number" min="1" class="inp" id="nf-parc-intervalo" value="30"></div>
+        </div>
+        <div class="field"><label>1º vencimento</label><input type="date" class="inp" id="nf-parc-primeira"></div>
+        <button class="btn btn-o btn-sm" type="button" id="btn-gerar-parcelas">Gerar parcelas</button>
+        <div id="nf-parcelas" style="margin-top:8px"></div>
+        <div id="nf-parc-msg"></div>
+      </div>
       <button class="btn btn-g" id="btn-salvar-nf">✅ Salvar nota fiscal</button>
     </div>
     <div class="stitle">Notas cadastradas</div>
@@ -2015,7 +2025,46 @@ function calcNfTotal() {
   return total;
 }
 document.getElementById('nf-gera-boleto').addEventListener('change', function() {
-  document.getElementById('nf-venc-field').style.display = this.value==='sim' ? '' : 'none';
+  document.getElementById('nf-parc-config').style.display = this.value==='sim' ? '' : 'none';
+});
+function nfAddParcela(valor, venc) {
+  var wrap = document.getElementById('nf-parcelas');
+  var row = document.createElement('div');
+  row.className = 'row2 nf-parcela-row';
+  row.style.alignItems = 'flex-end';
+  row.innerHTML = '<div class="field"><label>Valor da parcela</label><input type="number" step="0.01" class="inp nf-parc-valor" value="'+(valor||0)+'"></div>'+
+    '<div class="field"><label>Vencimento</label><input type="date" class="inp nf-parc-venc" value="'+(venc||'')+'"></div>'+
+    '<button class="btn btn-r btn-sm" type="button" style="margin-bottom:12px" onclick="this.parentElement.remove();checarParcelas();">✕</button>';
+  wrap.appendChild(row);
+  row.querySelector('.nf-parc-valor').addEventListener('input', checarParcelas);
+  checarParcelas();
+}
+function checarParcelas() {
+  var totalNota = calcNfTotal();
+  var totalParc = 0;
+  document.querySelectorAll('.nf-parc-valor').forEach(function(i){ totalParc += parseFloat(i.value)||0; });
+  var msg = document.getElementById('nf-parc-msg');
+  if(!msg) return;
+  if(!document.querySelectorAll('.nf-parcela-row').length) { msg.innerHTML=''; return; }
+  var dif = Math.round((totalNota-totalParc)*100)/100;
+  if(Math.abs(dif) < 0.01) msg.innerHTML = '<div class="alert alert-g">Parcelas batem com o total da nota ('+fmt(totalNota)+').</div>';
+  else msg.innerHTML = '<div class="alert alert-r">Diferença de '+fmt(dif)+' entre as parcelas e o total da nota.</div>';
+}
+document.getElementById('btn-gerar-parcelas').addEventListener('click', function() {
+  var qtd = parseInt(document.getElementById('nf-parc-qtd').value)||1;
+  var intervalo = parseInt(document.getElementById('nf-parc-intervalo').value)||30;
+  var primeira = document.getElementById('nf-parc-primeira').value;
+  if(!primeira) { toast('Informe a data do 1º vencimento'); return; }
+  var total = calcNfTotal();
+  var valorParcela = Math.floor((total/qtd)*100)/100;
+  var resto = Math.round((total - valorParcela*qtd)*100)/100;
+  document.getElementById('nf-parcelas').innerHTML = '';
+  for(var i=0;i<qtd;i++) {
+    var v = valorParcela + (i===qtd-1 ? resto : 0);
+    var d = new Date(primeira+'T00:00:00');
+    d.setDate(d.getDate() + intervalo*i);
+    nfAddParcela(Math.round(v*100)/100, d.toISOString().split('T')[0]);
+  }
 });
 document.getElementById('btn-salvar-nf').addEventListener('click', function() {
   var fornecedor = document.getElementById('nf-forn').value.trim();
@@ -2029,7 +2078,12 @@ document.getElementById('btn-salvar-nf').addEventListener('click', function() {
   });
   var total = calcNfTotal();
   var geraBoleto = document.getElementById('nf-gera-boleto').value==='sim';
-  var venc = document.getElementById('nf-venc').value;
+  var parcelas = [];
+  document.querySelectorAll('.nf-parcela-row').forEach(function(row) {
+    var v = parseFloat(row.querySelector('.nf-parc-valor').value)||0;
+    var venc = row.querySelector('.nf-parc-venc').value;
+    if(venc && v>0) parcelas.push({valor:v, venc:venc});
+  });
   var nf = {
     id: Date.now(), fornecedor:fornecedor, numero:document.getElementById('nf-num').value.trim(),
     data:document.getElementById('nf-data').value || fdataHoje(), categoria:document.getElementById('nf-cat').value,
@@ -2039,13 +2093,22 @@ document.getElementById('btn-salvar-nf').addEventListener('click', function() {
   Promise.all(proms).then(function(){
     return salvarRegistro('notasFiscais', nf);
   }).then(function(){
-    if(geraBoleto && venc) {
-      return salvarRegistro('boletos', {id:Date.now()+1, fornecedor:fornecedor, desc:'Nota fiscal '+(nf.numero||''), valor:total, venc:venc, status:'pendente', origem:'nf'});
+    if(geraBoleto && parcelas.length) {
+      var provsBol = parcelas.map(function(p, idx){
+        return salvarRegistro('boletos', {
+          id: Date.now()+100+idx, fornecedor:fornecedor,
+          desc: 'Nota fiscal '+(nf.numero||'')+(parcelas.length>1 ? ' - Parcela '+(idx+1)+'/'+parcelas.length : ''),
+          valor:p.valor, venc:p.venc, status:'pendente', origem:'nf'
+        });
+      });
+      return Promise.all(provsBol);
     }
   }).then(function(){
-    toast('Nota fiscal salva!');
+    toast('Nota fiscal salva!'+(geraBoleto && parcelas.length>1 ? ' '+parcelas.length+' parcelas geradas.' : ''));
     document.getElementById('nf-forn').value=''; document.getElementById('nf-num').value=''; document.getElementById('nf-itens').innerHTML='';
     document.getElementById('nf-total').textContent='R$ 0,00';
+    document.getElementById('nf-parcelas').innerHTML=''; document.getElementById('nf-parc-msg').innerHTML='';
+    document.getElementById('nf-parc-qtd').value='1'; document.getElementById('nf-parc-intervalo').value='30'; document.getElementById('nf-parc-primeira').value='';
   });
 });
 function renderNotas() {

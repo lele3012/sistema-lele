@@ -384,6 +384,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   <div class="card" style="display:flex;gap:6px;flex-wrap:wrap;padding:10px">
     <button class="btn btn-sm btn-g fin-tab-btn" data-fs="fdash">Resumo</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fboletos">Boletos a Pagar</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="ffornecedores">Fornecedores</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="frecor">Recorrentes</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fnotas">Notas Fiscais</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="finsumos">Insumos</button>
@@ -397,7 +398,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   <div class="fin-sub" id="fs-fboletos" style="display:none">
     <div class="stitle">Nova conta a pagar</div>
     <div class="card">
-      <div class="field"><label>Fornecedor / Conta</label><input type="text" class="inp" id="bp-forn" placeholder="Ex: UP Distribuidora"></div>
+      <div class="field"><label>Fornecedor / Conta</label><input type="text" class="inp" id="bp-forn" list="dl-fornecedores" placeholder="Ex: UP Distribuidora"></div>
       <div class="field"><label>Descrição</label><input type="text" class="inp" id="bp-desc" placeholder="Ex: Compra de insumos"></div>
       <div class="row2">
         <div class="field"><label>Valor</label><input type="number" step="0.01" class="inp" id="bp-valor"></div>
@@ -408,6 +409,37 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     </div>
     <div class="stitle">Contas cadastradas</div>
     <div id="lista-boletos"></div>
+  </div>
+
+  <div class="fin-sub" id="fs-ffornecedores" style="display:none">
+    <datalist id="dl-fornecedores"></datalist>
+    <div class="stitle">Novo fornecedor</div>
+    <div class="card">
+      <div class="stitle" style="margin-top:0">Buscar por CNPJ</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input type="text" class="inp" id="fn-cnpj" placeholder="00.000.000/0001-00" style="flex:1">
+        <button class="btn btn-g btn-sm" id="btn-fn-cnpj">Buscar</button>
+      </div>
+      <div id="fn-cnpj-msg"></div>
+      <div class="field"><label>Nome / Razão social</label><input type="text" class="inp" id="fn-nome" placeholder="Nome do fornecedor"></div>
+      <div class="row2">
+        <div class="field"><label>Telefone</label><input type="text" class="inp" id="fn-tel"></div>
+        <div class="field"><label>Categoria</label>
+          <select class="inp" id="fn-cat">
+            <option value="materia_prima">Matéria-prima</option>
+            <option value="embalagem">Embalagem</option>
+            <option value="gas">Gás</option>
+            <option value="manutencao">Manutenção</option>
+            <option value="outros">Outros</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>Endereço</label><input type="text" class="inp" id="fn-end"></div>
+      <button class="btn btn-g" id="btn-salvar-fn">✅ Salvar fornecedor</button>
+      <button class="btn btn-o" id="btn-cancelar-fn" style="display:none">Cancelar edição</button>
+    </div>
+    <div class="stitle">Fornecedores cadastrados</div>
+    <div id="lista-fornecedores"></div>
   </div>
 
   <div class="fin-sub" id="fs-frecor" style="display:none">
@@ -428,7 +460,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   <div class="fin-sub" id="fs-fnotas" style="display:none">
     <div class="stitle">Nova nota fiscal de compra</div>
     <div class="card">
-      <div class="field"><label>Fornecedor</label><input type="text" class="inp" id="nf-forn"></div>
+      <div class="field"><label>Fornecedor</label><input type="text" class="inp" id="nf-forn" list="dl-fornecedores"></div>
       <div class="row2">
         <div class="field"><label>Número da nota</label><input type="text" class="inp" id="nf-num"></div>
         <div class="field"><label>Data de emissão</label><input type="date" class="inp" id="nf-data"></div>
@@ -584,11 +616,11 @@ var db = firebase.database();
 // (clientes/entregas/caixas/producao) e cada salvamento grava so o registro
 // que mudou -- isso evita que dois usuarios ao mesmo tempo apaguem a
 // alteracao um do outro (o que acontecia quando tudo era salvo junto em 'dados').
-var D = {clientes:[], entregas:[], caixas:[], producao:[], insumos:[], fichas:[], notasFiscais:[], boletos:[], recorrentes:[]};
+var D = {clientes:[], entregas:[], caixas:[], producao:[], insumos:[], fichas:[], notasFiscais:[], boletos:[], recorrentes:[], fornecedores:[]};
 var editIdx = null;
 var editEntregaKey = null;
 var baixaEntregaId = null;
-var editBoletoKey = null, editRecorrenteKey = null, editInsumoKey = null;
+var editBoletoKey = null, editRecorrenteKey = null, editInsumoKey = null, editFornecedorKey = null;
 
 var PRECO = {bola:8.50, integral:8.50, las250:11.00, las500:14.50, mini:2.30};
 var NOME = {bola:'Pao Bola', integral:'Pao Integral', las250:'Lasanha 250g', las500:'Lasanha 500g', mini:'Mini Sanduiche'};
@@ -677,7 +709,7 @@ function carregar() {
   }, 12000);
 
   migrarSeNecessario(function() {
-    var pendentes = 9;
+    var pendentes = 10;
     function pronto() { pendentes--; if(pendentes<=0) { clearTimeout(travouTimeout); var el=document.getElementById('loading'); if(el) el.remove(); } }
     function erroLeitura(caminho) {
       return function(err) {
@@ -686,6 +718,13 @@ function carregar() {
         mostrarErroCarregamento(err);
       };
     }
+
+    db.ref('fornecedores').on('value', function(snap) {
+      D.fornecedores = snapToArray(snap.val());
+      var t = document.querySelector('.tab.on');
+      if(t && t.getAttribute('data-tab')==='financeiro') { renderFornecedores(); popDatalistFornecedores(); }
+      pronto();
+    }, erroLeitura('fornecedores'));
 
     db.ref('insumos').on('value', function(snap) {
       D.insumos = snapToArray(snap.val());
@@ -767,8 +806,8 @@ document.querySelectorAll('.tab').forEach(function(t) {
     if(id==='producao') renderProd();
     if(id==='dashboard') renderDash();
     if(id==='financeiro') {
-      popDatalistInsumos();
-      renderBoletos(); renderRecorrentes(); renderNotas(); renderInsumos(); renderFichas(); renderFinDash();
+      popDatalistInsumos(); popDatalistFornecedores();
+      renderBoletos(); renderRecorrentes(); renderNotas(); renderInsumos(); renderFichas(); renderFinDash(); renderFornecedores();
     }
   });
 });
@@ -1691,6 +1730,77 @@ document.getElementById('btn-importar-hist').addEventListener('click', function(
 
 // ===== FINANCEIRO =====
 function fdataHoje() { return new Date().toISOString().split('T')[0]; }
+
+// --- FORNECEDORES ---
+function popDatalistFornecedores() {
+  var dl = document.getElementById('dl-fornecedores');
+  if(!dl) return;
+  dl.innerHTML = D.fornecedores.map(function(f){ return '<option value="'+f.nome+'">'; }).join('');
+}
+document.getElementById('btn-fn-cnpj').addEventListener('click', async function() {
+  var cnpj = document.getElementById('fn-cnpj').value.replace(/\D/g,'');
+  var msg = document.getElementById('fn-cnpj-msg');
+  if(cnpj.length!==14) { msg.innerHTML='<div class="alert alert-r">CNPJ inválido.</div>'; return; }
+  this.textContent='...'; this.disabled=true;
+  msg.innerHTML='<div class="alert alert-i">Buscando...</div>';
+  try {
+    var r = await fetch('https://brasilapi.com.br/api/cnpj/v1/'+cnpj);
+    if(!r.ok) throw new Error();
+    var j = await r.json();
+    document.getElementById('fn-nome').value = j.razao_social||j.nome_fantasia||'';
+    document.getElementById('fn-tel').value = j.ddd_telefone_1||'';
+    document.getElementById('fn-end').value = [j.descricao_tipo_logradouro,j.logradouro,j.numero,j.bairro,j.municipio].filter(Boolean).join(' ');
+    msg.innerHTML='<div class="alert alert-g">Dados encontrados!</div>';
+  } catch(e) {
+    msg.innerHTML='<div class="alert alert-r">Não encontrado. Preencha manualmente.</div>';
+  }
+  this.textContent='Buscar'; this.disabled=false;
+});
+document.getElementById('btn-salvar-fn').addEventListener('click', function() {
+  var nome = document.getElementById('fn-nome').value.trim();
+  if(!nome) { toast('Informe o nome do fornecedor'); return; }
+  var obj = {
+    nome:nome, cnpj:document.getElementById('fn-cnpj').value.trim(), telefone:document.getElementById('fn-tel').value.trim(),
+    categoria:document.getElementById('fn-cat').value, endereco:document.getElementById('fn-end').value.trim()
+  };
+  if(!editFornecedorKey) obj.id = Date.now();
+  salvarRegistro('fornecedores', obj, editFornecedorKey).then(function(){
+    toast('Fornecedor salvo!');
+    document.getElementById('fn-nome').value=''; document.getElementById('fn-cnpj').value=''; document.getElementById('fn-tel').value=''; document.getElementById('fn-end').value='';
+    document.getElementById('fn-cnpj-msg').innerHTML='';
+    editFornecedorKey=null; document.getElementById('btn-cancelar-fn').style.display='none';
+  });
+});
+document.getElementById('btn-cancelar-fn').addEventListener('click', function(){
+  editFornecedorKey=null; this.style.display='none';
+  document.getElementById('fn-nome').value=''; document.getElementById('fn-cnpj').value=''; document.getElementById('fn-tel').value=''; document.getElementById('fn-end').value='';
+  document.getElementById('fn-cnpj-msg').innerHTML='';
+});
+function renderFornecedores() {
+  var el = document.getElementById('lista-fornecedores'); if(!el) return;
+  if(!D.fornecedores.length) { el.innerHTML='<div class="empty"><div class="ico">🏢</div><p>Nenhum fornecedor ainda.</p></div>'; return; }
+  el.innerHTML = D.fornecedores.slice().sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');}).map(function(f) {
+    return '<div class="card" style="padding:12px 16px">'+
+      '<b>'+f.nome+'</b>'+
+      '<div style="font-size:12px;color:#888;margin-top:4px">'+(f.cnpj?f.cnpj+' | ':'')+(f.telefone||'')+'</div>'+
+      (f.endereco?'<div style="font-size:12px;color:#888">'+f.endereco+'</div>':'')+
+      '<div style="display:flex;gap:6px;margin-top:8px">'+
+      '<button class="btn btn-sm btn-o" data-editfn="'+f._key+'">Editar</button>'+
+      '<button class="btn btn-sm btn-r" data-delfn="'+f._key+'">Excluir</button>'+
+      '</div></div>';
+  }).join('');
+  el.querySelectorAll('[data-editfn]').forEach(function(b){ b.addEventListener('click', function(){
+    var f = D.fornecedores.find(function(x){return x._key===b.getAttribute('data-editfn');});
+    editFornecedorKey = f._key;
+    document.getElementById('fn-nome').value=f.nome; document.getElementById('fn-cnpj').value=f.cnpj||'';
+    document.getElementById('fn-tel').value=f.telefone||''; document.getElementById('fn-cat').value=f.categoria||'outros';
+    document.getElementById('fn-end').value=f.endereco||'';
+    document.getElementById('btn-cancelar-fn').style.display='';
+  });});
+  el.querySelectorAll('[data-delfn]').forEach(function(b){ b.addEventListener('click', function(){
+    if(confirm('Excluir este fornecedor?')) excluirRegistro('fornecedores', b.getAttribute('data-delfn'));
+  });});
+}
 
 // --- INSUMOS ---
 function popDatalistInsumos() {

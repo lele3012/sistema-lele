@@ -458,6 +458,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   </div>
 
   <div class="fin-sub" id="fs-fnotas" style="display:none">
+    <div class="stitle" style="margin-top:0">Importar XML da nota (opcional)</div>
+    <div class="card" style="background:var(--gl);border:1.5px dashed var(--g)">
+      <div class="field"><label>📎 Selecione o arquivo XML da NFe</label><input type="file" accept=".xml" class="inp" id="nf-xml-file"></div>
+      <div style="font-size:12px;color:#666">Os campos abaixo serão preenchidos automaticamente. Confira antes de salvar.</div>
+    </div>
     <div class="stitle">Nova nota fiscal de compra</div>
     <div class="card">
       <div class="field"><label>Fornecedor</label><input type="text" class="inp" id="nf-forn" list="dl-fornecedores"></div>
@@ -1925,6 +1930,64 @@ function renderFichas() {
       '</div>';
   }).join('');
 }
+
+// --- IMPORTAR XML DA NFE ---
+document.getElementById('nf-xml-file').addEventListener('change', function(e) {
+  var file = e.target.files[0];
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      var parser = new DOMParser();
+      var xml = parser.parseFromString(ev.target.result, 'text/xml');
+      if(xml.getElementsByTagName('parsererror').length) throw new Error('XML invalido');
+
+      function txt(tag, parent) { var el=(parent||xml).getElementsByTagName(tag)[0]; return el?el.textContent:''; }
+
+      var emit = xml.getElementsByTagName('emit')[0];
+      if(!emit) throw new Error('Nao parece ser um XML de NFe valido');
+      var cnpjForn = txt('CNPJ', emit);
+      var nomeForn = txt('xNome', emit) || txt('xFant', emit);
+
+      var ide = xml.getElementsByTagName('ide')[0];
+      var numero = txt('nNF', ide);
+      var dhEmi = txt('dhEmi', ide) || txt('dEmi', ide);
+      var dataEmissao = dhEmi ? dhEmi.substring(0,10) : fdataHoje();
+
+      var totalTag = xml.getElementsByTagName('ICMSTot')[0];
+      var valorTotal = parseFloat(txt('vNF', totalTag))||0;
+
+      document.getElementById('nf-forn').value = nomeForn;
+      document.getElementById('nf-num').value = numero;
+      document.getElementById('nf-data').value = dataEmissao;
+      document.getElementById('nf-itens').innerHTML = '';
+
+      var dets = xml.getElementsByTagName('det');
+      for(var i=0;i<dets.length;i++) {
+        var prod = dets[i].getElementsByTagName('prod')[0];
+        if(!prod) continue;
+        var nomeItem = txt('xProd', prod);
+        var qtd = parseFloat(txt('qCom', prod))||1;
+        var vUnit = parseFloat(txt('vUnCom', prod))||0;
+        nfAddItem(nomeItem, qtd, vUnit);
+      }
+      calcNfTotal();
+
+      if(cnpjForn) {
+        var jaExiste = D.fornecedores.some(function(f){ return (f.cnpj||'').replace(/\D/g,'')===cnpjForn; });
+        if(!jaExiste) {
+          salvarRegistro('fornecedores', {id:Date.now(), nome:nomeForn, cnpj:cnpjForn, telefone:'', categoria:'materia_prima', endereco:''});
+        }
+      }
+      toast('XML importado! Confira os dados antes de salvar.');
+    } catch(err) {
+      console.error(err);
+      toast('Nao foi possivel ler este XML. Confira se e o arquivo correto da NFe.');
+    }
+    document.getElementById('nf-xml-file').value = '';
+  };
+  reader.readAsText(file);
+});
 
 // --- NOTAS FISCAIS ---
 function nfAddItem(nome, qtd, valorUnit) {

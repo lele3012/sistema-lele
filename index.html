@@ -181,7 +181,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   <div class="stitle">🍹 Kits Complementares</div>
   <div class="card">
     <div class="pline"><span class="pname">🍊 Suco de Laranja</span><div class="qctrl"><button class="qbtn" data-key="suco" data-op="-">−</button><input type="number" class="qinp" id="q-suco" value="0" min="0"><button class="qbtn" data-key="suco" data-op="+">+</button></div></div>
+    <div class="field" style="margin:-4px 0 12px"><label style="font-size:11px">Valor unitário do suco (R$)</label><input type="number" step="0.01" min="0" class="inp" id="p-suco" placeholder="0.00" value="0"></div>
     <div class="pline"><span class="pname">🍇 Salada de Frutas</span><div class="qctrl"><button class="qbtn" data-key="salada" data-op="-">−</button><input type="number" class="qinp" id="q-salada" value="0" min="0"><button class="qbtn" data-key="salada" data-op="+">+</button></div></div>
+    <div class="field" style="margin:-4px 0 0"><label style="font-size:11px">Valor unitário da salada (R$)</label><input type="number" step="0.01" min="0" class="inp" id="p-salada" placeholder="0.00" value="0"></div>
   </div>
 
   <div class="stitle">🔄 Trocas (vencidos devolvidos)</div>
@@ -233,6 +235,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 <div class="pnl" id="pnl-cobrancas">
   <div class="stitle" style="margin-top:0">Boletos em aberto</div>
   <div id="resumo-cob"></div>
+  <div id="cob-lote-bar" style="display:none;position:sticky;top:0;z-index:5;background:#fff;padding:10px;margin-bottom:10px;border-radius:10px;border:1.5px solid var(--g)">
+    <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <span style="font-size:13px;font-weight:700"><b id="cob-lote-count">0</b> selecionado(s) — <span id="cob-lote-total">R$ 0</span></span>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm btn-o" id="btn-cob-limpar-sel">Limpar</button>
+        <button class="btn btn-sm btn-g" id="btn-cob-baixar-lote">✅ Baixar selecionados</button>
+      </div>
+    </div>
+  </div>
+  <div id="cob-sel-todos-box" style="margin-bottom:8px;display:none"><label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer"><input type="checkbox" id="cob-sel-todos" style="width:auto"> Selecionar todos os boletos em aberto</label></div>
   <div id="lista-cob"><div class="empty"><div class="ico">🔔</div><p>Nenhum boleto em aberto.</p></div></div>
   <div class="stitle">Boletos pagos</div>
   <div id="lista-pagos"><div class="empty"><div class="ico">✅</div><p>Nenhum pagamento registrado.</p></div></div>
@@ -695,6 +707,17 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 </div>
 
 <!-- MODAL BAIXA -->
+<div class="modal" id="modal-baixa-lote">
+  <div class="mbox">
+    <div class="mhead"><h2>Baixar em lote</h2><button class="mclose" id="btn-baixalote-close">x</button></div>
+    <div id="baixalote-info" class="card" style="margin-bottom:16px"></div>
+    <div class="field"><label>Data do pagamento (aplicada a todos)</label><input type="date" class="inp" id="baixalote-data"></div>
+    <div class="field"><label>Observação (opcional, aplicada a todos)</label><input type="text" class="inp" id="baixalote-obs" placeholder="Ex: Pago via PIX"></div>
+    <button class="btn btn-g" id="btn-baixalote-confirmar">Confirmar pagamento de todos</button>
+    <button class="btn btn-o" id="btn-baixalote-cancelar" style="margin-top:6px">Cancelar</button>
+  </div>
+</div>
+
 <div class="modal" id="modal-baixa">
   <div class="mbox">
     <div class="mhead"><h2>Baixar pagamento</h2><button class="mclose" id="btn-baixa-close">x</button></div>
@@ -756,6 +779,7 @@ var D = {clientes:[], entregas:[], caixas:[], producao:[], insumos:[], fichas:[]
 var editIdx = null;
 var editEntregaKey = null;
 var baixaEntregaId = null;
+var cobSelecionados = new Set();
 var pagBolKey = null;
 var lancarRecKey = null;
 var editBoletoKey = null, editRecorrenteKey = null, editInsumoKey = null, editFornecedorKey = null;
@@ -934,6 +958,17 @@ function getPreco(cliId, key) {
   var c = D.clientes.find(function(x){return x.id==cliId;});
   if(c && c.precos && c.precos[key]) return c.precos[key];
   return PRECO[key] || 0;
+}
+
+// Suco e salada tem preco digitado na hora da entrega (kits variam de preco).
+// Para os demais produtos, usa o preco do cliente/padrao normalmente.
+function precoDoItem(k, cliId) {
+  if(k==='suco' || k==='salada') {
+    var el = document.getElementById('p-'+k);
+    var v = el ? parseFloat(el.value) : NaN;
+    return isNaN(v) ? 0 : v;
+  }
+  return cliId ? getPreco(cliId,k) : PRECO[k];
 }
 
 // ===== NAVEGACAO =====
@@ -1131,7 +1166,7 @@ function calcResumo() {
   prods.forEach(function(k) {
     var q = parseInt(document.getElementById('q-'+k).value)||0;
     totalUn += q;
-    totalVal += q * (cliId ? getPreco(cliId,k) : PRECO[k]);
+    totalVal += q * precoDoItem(k, cliId);
   });
   ['bola','integral','las250','las500'].forEach(function(k) {
     var q = parseInt(document.getElementById('q-t-'+k).value)||0;
@@ -1140,7 +1175,7 @@ function calcResumo() {
   prods.forEach(function(k) {
     var q = parseInt(document.getElementById('q-bf-'+k).value)||0;
     bonifUn += q;
-    bonifVal += q * (cliId ? getPreco(cliId,k) : PRECO[k]);
+    bonifVal += q * precoDoItem(k, cliId);
   });
   var el = document.getElementById('e-resumo');
   if(totalUn>0||trocaVal>0||bonifUn>0) {
@@ -1156,7 +1191,20 @@ function calcResumo() {
   } else { el.style.display='none'; }
 }
 
-document.getElementById('e-cli').addEventListener('change', calcResumo);
+document.getElementById('e-cli').addEventListener('change', function() {
+  var cliId = parseInt(document.getElementById('e-cli').value)||null;
+  ['suco','salada'].forEach(function(k) {
+    var el = document.getElementById('p-'+k);
+    if(el && (!el.value || parseFloat(el.value)===0)) {
+      var sugestao = cliId ? getPreco(cliId,k) : 0;
+      if(sugestao>0) el.value = sugestao;
+    }
+  });
+  calcResumo();
+});
+['p-suco','p-salada'].forEach(function(id) {
+  document.getElementById(id).addEventListener('input', calcResumo);
+});
 
 function setupBuscaCliente(buscaId, dropId, selId) {
   var busca = document.getElementById(buscaId);
@@ -1199,10 +1247,15 @@ document.getElementById('btn-salvar-ent').addEventListener('click', function() {
   var data = document.getElementById('e-data').value;
   if(!cliId) { toast('Selecione o cliente'); return; }
   if(!data) { toast('Informe a data'); return; }
-  var prods={}, totalVal=0, trocas={}, trocaVal=0, bonificacao={};
+  var prods={}, totalVal=0, trocas={}, trocaVal=0, bonificacao={}, precosUsados={};
   ['bola','integral','mini','las250','las500','suco','salada'].forEach(function(k) {
     var q = parseInt(document.getElementById('q-'+k).value)||0;
-    if(q>0) { prods[k]=q; totalVal += q*getPreco(parseInt(cliId),k); }
+    if(q>0) {
+      prods[k]=q;
+      var preco = precoDoItem(k, parseInt(cliId));
+      totalVal += q*preco;
+      if(k==='suco'||k==='salada') precosUsados[k]=preco;
+    }
   });
   ['bola','integral','mini','las250','las500','suco','salada'].forEach(function(k) {
     var q = parseInt(document.getElementById('q-bf-'+k).value)||0;
@@ -1217,7 +1270,7 @@ document.getElementById('btn-salvar-ent').addEventListener('click', function() {
     id: editEntregaKey ? document.getElementById('btn-salvar-ent').getAttribute('data-orig-id')*1 : Date.now(),
     clienteId:parseInt(cliId), data:data,
     boleto:document.getElementById('e-bol').value.trim(),
-    produtos:prods, trocas:trocas, bonificacao:bonificacao, pagamento:document.getElementById('e-pgto').value,
+    produtos:prods, trocas:trocas, bonificacao:bonificacao, precosUsados:precosUsados, pagamento:document.getElementById('e-pgto').value,
     valorTotal:totalVal-trocaVal, valorTroca:trocaVal,
     pago: editEntregaKey ? (document.getElementById('btn-salvar-ent').getAttribute('data-orig-pago')==='1') : false
   };
@@ -1239,6 +1292,7 @@ function limparEnt() {
   ['bola','integral','mini','las250','las500','suco','salada'].forEach(function(k){document.getElementById('q-'+k).value=0;});
   ['bola','integral','las250','las500'].forEach(function(k){document.getElementById('q-t-'+k).value=0;});
   ['bola','integral','mini','las250','las500','suco','salada'].forEach(function(k){document.getElementById('q-bf-'+k).value=0;});
+  document.getElementById('p-suco').value=0; document.getElementById('p-salada').value=0;
   document.getElementById('e-resumo').style.display='none';
   document.getElementById('e-bol').value='';
   document.getElementById('e-pgto').value='prazo';
@@ -1268,6 +1322,8 @@ function editarEntrega(key) {
   ['bola','integral','mini','las250','las500','suco','salada'].forEach(function(k){ document.getElementById('q-'+k).value = (e.produtos&&e.produtos[k])||0; });
   ['bola','integral','las250','las500'].forEach(function(k){ document.getElementById('q-t-'+k).value = (e.trocas&&e.trocas[k])||0; });
   ['bola','integral','mini','las250','las500','suco','salada'].forEach(function(k){ document.getElementById('q-bf-'+k).value = (e.bonificacao&&e.bonificacao[k])||0; });
+  document.getElementById('p-suco').value = (e.precosUsados&&e.precosUsados.suco)||0;
+  document.getElementById('p-salada').value = (e.precosUsados&&e.precosUsados.salada)||0;
   calcResumo();
   editEntregaKey = key;
   var btn = document.getElementById('btn-salvar-ent');
@@ -1300,16 +1356,22 @@ function renderCob() {
   rEl.innerHTML = aberto.length ? '<div class="rg"><div class="rbox hl"><label>Total em aberto</label><b>'+fmt(totalAb)+'</b></div><div class="rbox" style="background:var(--rl)"><label style="color:var(--r)">Vencidos</label><b style="color:var(--r)">'+fmt(totalVenc)+'</b></div></div>' : '';
 
   var lEl = document.getElementById('lista-cob');
-  if(!aberto.length) { lEl.innerHTML='<div class="empty"><div class="ico">🔔</div><p>Nenhum boleto em aberto.</p></div>'; }
+  var selBox = document.getElementById('cob-sel-todos-box');
+  if(!aberto.length) { lEl.innerHTML='<div class="empty"><div class="ico">🔔</div><p>Nenhum boleto em aberto.</p></div>'; selBox.style.display='none'; }
   else {
+    selBox.style.display='block';
     lEl.innerHTML = aberto.map(function(item) {
       var vd = item.venc<hoje;
       var dias = vd ? Math.floor((hoje-item.venc)/86400000) : Math.ceil((item.venc-hoje)/86400000);
       var cls = vd?'vencido':dias<=3?'aviso':'';
       var status = vd ? '<span class="badge badge-r">'+dias+' dia(s) em atraso</span>' : dias===0 ? '<span class="badge badge-y">Vence hoje</span>' : '<span style="font-size:11px;color:#888">Vence em '+dias+' dia(s)</span>';
-      return '<div class="citem '+cls+'"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px"><div><div style="font-size:14px;font-weight:800">'+item.cliente+'</div><div style="font-size:11px;color:#888;margin-top:2px">'+item.tipo+' | Entrega '+fdata(item.data)+(item.boleto?' | Boleto #'+item.boleto:'')+'</div></div><div style="font-size:16px;font-weight:900;color:'+(vd?'var(--r)':'var(--g)')+'">'+fmt(item.valor)+'</div></div><div style="display:flex;justify-content:space-between;align-items:center">'+status+'<button class="btn btn-g btn-sm btn-baixar" data-id="'+item.id+'">Baixar</button></div></div>';
+      return '<div class="citem '+cls+'"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px"><div style="display:flex;gap:8px;align-items:flex-start"><input type="checkbox" class="cob-check" data-id="'+item.id+'" data-valor="'+item.valor+'" style="margin-top:4px;width:auto"><div><div style="font-size:14px;font-weight:800">'+item.cliente+'</div><div style="font-size:11px;color:#888;margin-top:2px">'+item.tipo+' | Entrega '+fdata(item.data)+(item.boleto?' | Boleto #'+item.boleto:'')+'</div></div></div><div style="font-size:16px;font-weight:900;color:'+(vd?'var(--r)':'var(--g)')+'">'+fmt(item.valor)+'</div></div><div style="display:flex;justify-content:space-between;align-items:center">'+status+'<button class="btn btn-g btn-sm btn-baixar" data-id="'+item.id+'">Baixar</button></div></div>';
     }).join('');
   }
+
+  // Remove da selecao itens que nao estao mais em aberto (ja foram pagos/excluidos)
+  var idsAtuais = {}; aberto.forEach(function(i){ idsAtuais[String(i.id)] = true; });
+  Array.from(cobSelecionados).forEach(function(id){ if(!idsAtuais[String(id)]) cobSelecionados.delete(id); });
 
   var pEl = document.getElementById('lista-pagos');
   if(!pagos.length) { pEl.innerHTML='<div class="empty"><div class="ico">✅</div><p>Nenhum pagamento registrado.</p></div>'; }
@@ -1330,6 +1392,32 @@ function renderCob() {
       if(e) { e.pago=false; e.pgData=null; e.pgObs=''; atualizarRegistro('entregas', e._key, {pago:false,pgData:null,pgObs:''}); renderCob(); toast('Desfeito'); }
     });
   });
+  document.querySelectorAll('.cob-check').forEach(function(cb) {
+    cb.checked = cobSelecionados.has(cb.getAttribute('data-id'));
+    cb.addEventListener('change', function() {
+      var id = this.getAttribute('data-id');
+      if(this.checked) cobSelecionados.add(id); else cobSelecionados.delete(id);
+      var todas = document.querySelectorAll('.cob-check');
+      var marcadas = document.querySelectorAll('.cob-check:checked');
+      var selTodos = document.getElementById('cob-sel-todos');
+      if(selTodos) selTodos.checked = todas.length>0 && todas.length===marcadas.length;
+      atualizarBarraCob();
+    });
+  });
+  atualizarBarraCob();
+}
+
+function atualizarBarraCob() {
+  var bar = document.getElementById('cob-lote-bar');
+  var count = cobSelecionados.size;
+  if(count===0) { bar.style.display='none'; return; }
+  bar.style.display='block';
+  var total = 0;
+  document.querySelectorAll('.cob-check').forEach(function(cb) {
+    if(cobSelecionados.has(cb.getAttribute('data-id'))) total += parseFloat(cb.getAttribute('data-valor'))||0;
+  });
+  document.getElementById('cob-lote-count').textContent = count;
+  document.getElementById('cob-lote-total').textContent = fmt(total);
 }
 
 function abrirBaixa(id) {
@@ -1356,6 +1444,53 @@ document.getElementById('btn-baixa-confirmar').addEventListener('click', functio
     atualizarRegistro('entregas', e._key, {pago:true,pgData:data,pgObs:obs});
     renderCob(); toast('Pagamento registrado!');
   }
+});
+
+document.getElementById('cob-sel-todos').addEventListener('change', function() {
+  var marcar = this.checked;
+  document.querySelectorAll('.cob-check').forEach(function(cb) {
+    cb.checked = marcar;
+    var id = cb.getAttribute('data-id');
+    if(marcar) cobSelecionados.add(id); else cobSelecionados.delete(id);
+  });
+  atualizarBarraCob();
+});
+document.getElementById('btn-cob-limpar-sel').addEventListener('click', function() {
+  cobSelecionados.clear();
+  document.querySelectorAll('.cob-check').forEach(function(cb){ cb.checked=false; });
+  var selTodos = document.getElementById('cob-sel-todos'); if(selTodos) selTodos.checked=false;
+  atualizarBarraCob();
+});
+document.getElementById('btn-cob-baixar-lote').addEventListener('click', function() {
+  if(!cobSelecionados.size) return;
+  var total = 0;
+  document.querySelectorAll('.cob-check').forEach(function(cb) {
+    if(cobSelecionados.has(cb.getAttribute('data-id'))) total += parseFloat(cb.getAttribute('data-valor'))||0;
+  });
+  document.getElementById('baixalote-info').innerHTML = '<div style="font-size:14px;font-weight:700">'+cobSelecionados.size+' boleto(s) selecionado(s)</div><div style="font-size:18px;font-weight:900;color:var(--g);margin-top:6px">'+fmt(total)+'</div>';
+  document.getElementById('baixalote-data').value = new Date().toISOString().split('T')[0];
+  document.getElementById('baixalote-obs').value = '';
+  document.getElementById('modal-baixa-lote').classList.add('on');
+});
+document.getElementById('btn-baixalote-close').addEventListener('click', function(){ document.getElementById('modal-baixa-lote').classList.remove('on'); });
+document.getElementById('btn-baixalote-cancelar').addEventListener('click', function(){ document.getElementById('modal-baixa-lote').classList.remove('on'); });
+document.getElementById('btn-baixalote-confirmar').addEventListener('click', function() {
+  var data = document.getElementById('baixalote-data').value;
+  if(!data) { toast('Informe a data'); return; }
+  var obs = document.getElementById('baixalote-obs').value.trim();
+  document.getElementById('modal-baixa-lote').classList.remove('on');
+  var qtd = 0;
+  Array.from(cobSelecionados).forEach(function(id) {
+    var e = D.entregas.find(function(x){return x.id==id;});
+    if(e && !e.pago) {
+      e.pago=true; e.pgData=data; e.pgObs=obs;
+      atualizarRegistro('entregas', e._key, {pago:true,pgData:data,pgObs:obs});
+      qtd++;
+    }
+  });
+  cobSelecionados.clear();
+  renderCob();
+  toast(qtd+' boleto(s) marcado(s) como pago!');
 });
 
 // ===== CAIXA =====
@@ -1625,7 +1760,8 @@ document.getElementById('btn-pdf-rel').addEventListener('click', function() {
     Object.keys(e.produtos||{}).forEach(function(k) {
       if(y>265){doc.addPage();y=20;}
       doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,80);
-      doc.text('  '+(NOME[k]||k)+': '+e.produtos[k]+' un x '+fmt(getPreco(e.clienteId,k))+' = '+fmt(e.produtos[k]*getPreco(e.clienteId,k)), m+2, y);
+      var precoLinha = (e.precosUsados && e.precosUsados[k]) || getPreco(e.clienteId,k);
+      doc.text('  '+(NOME[k]||k)+': '+e.produtos[k]+' un x '+fmt(precoLinha)+' = '+fmt(e.produtos[k]*precoLinha), m+2, y);
       y+=4.5;
     });
     if(e.valorTroca>0) {

@@ -187,6 +187,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <div class="pline"><span class="pname">🫕 Lasanha 500g</span><div class="qctrl"><button class="qbtn" data-key="t-las500" data-op="-">−</button><input type="number" class="qinp" id="q-t-las500" value="0" min="0"><button class="qbtn" data-key="t-las500" data-op="+">+</button></div></div>
   </div>
 
+  <div class="stitle">🎁 Bonificação (cortesia, não cobrada)</div>
+  <div class="card">
+    <div class="alert alert-i">Sanduíches/lasanhas enviados de graça pra esse cliente. Contam pra produção e custo, mas não entram no valor cobrado.</div>
+    <div class="pline"><span class="pname">⬜ Pão Bola</span><div class="qctrl"><button class="qbtn" data-key="bf-bola" data-op="-">−</button><input type="number" class="qinp" id="q-bf-bola" value="0" min="0"><button class="qbtn" data-key="bf-bola" data-op="+">+</button></div></div>
+    <div class="pline"><span class="pname">🟫 Pão Integral</span><div class="qctrl"><button class="qbtn" data-key="bf-integral" data-op="-">−</button><input type="number" class="qinp" id="q-bf-integral" value="0" min="0"><button class="qbtn" data-key="bf-integral" data-op="+">+</button></div></div>
+    <div class="pline"><span class="pname">🥪 Mini Sanduíche</span><div class="qctrl"><button class="qbtn" data-key="bf-mini" data-op="-">−</button><input type="number" class="qinp" id="q-bf-mini" value="0" min="0"><button class="qbtn" data-key="bf-mini" data-op="+">+</button></div></div>
+    <div class="pline"><span class="pname">🫕 Lasanha 250g</span><div class="qctrl"><button class="qbtn" data-key="bf-las250" data-op="-">−</button><input type="number" class="qinp" id="q-bf-las250" value="0" min="0"><button class="qbtn" data-key="bf-las250" data-op="+">+</button></div></div>
+    <div class="pline"><span class="pname">🫕 Lasanha 500g</span><div class="qctrl"><button class="qbtn" data-key="bf-las500" data-op="-">−</button><input type="number" class="qinp" id="q-bf-las500" value="0" min="0"><button class="qbtn" data-key="bf-las500" data-op="+">+</button></div></div>
+  </div>
+
   <div class="stitle">💳 Pagamento</div>
   <div class="card">
     <div class="field"><label>Forma</label>
@@ -203,6 +213,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
         <div class="rbox"><label>Total unidades</label><b id="r-un">0</b></div>
         <div class="rbox hl"><label>Valor total</label><b id="r-val">R$ 0</b></div>
       </div>
+      <div id="r-bonif-box" style="display:none;margin-top:8px"><span class="badge badge-y">🎁 Bonificação: <b id="r-bonif-un">0</b> un (<b id="r-bonif-val">R$ 0</b> não cobrado)</span></div>
     </div>
   </div>
 
@@ -1101,7 +1112,7 @@ document.querySelectorAll('.qinp').forEach(function(inp) {
 function calcResumo() {
   var cliId = parseInt(document.getElementById('e-cli').value)||null;
   var prods = ['bola','integral','mini','las250','las500'];
-  var totalUn=0, totalVal=0, trocaVal=0;
+  var totalUn=0, totalVal=0, trocaVal=0, bonifUn=0, bonifVal=0;
   prods.forEach(function(k) {
     var q = parseInt(document.getElementById('q-'+k).value)||0;
     totalUn += q;
@@ -1111,11 +1122,22 @@ function calcResumo() {
     var q = parseInt(document.getElementById('q-t-'+k).value)||0;
     trocaVal += q * (cliId ? getPreco(cliId,k) : PRECO[k]);
   });
+  prods.forEach(function(k) {
+    var q = parseInt(document.getElementById('q-bf-'+k).value)||0;
+    bonifUn += q;
+    bonifVal += q * (cliId ? getPreco(cliId,k) : PRECO[k]);
+  });
   var el = document.getElementById('e-resumo');
-  if(totalUn>0||trocaVal>0) {
+  if(totalUn>0||trocaVal>0||bonifUn>0) {
     el.style.display='block';
     document.getElementById('r-un').textContent = totalUn+' un';
     document.getElementById('r-val').textContent = fmt(totalVal-trocaVal);
+    var bonifBox = document.getElementById('r-bonif-box');
+    if(bonifUn>0) {
+      bonifBox.style.display='block';
+      document.getElementById('r-bonif-un').textContent = bonifUn;
+      document.getElementById('r-bonif-val').textContent = fmt(bonifVal);
+    } else { bonifBox.style.display='none'; }
   } else { el.style.display='none'; }
 }
 
@@ -1162,12 +1184,16 @@ document.getElementById('btn-salvar-ent').addEventListener('click', function() {
   var data = document.getElementById('e-data').value;
   if(!cliId) { toast('Selecione o cliente'); return; }
   if(!data) { toast('Informe a data'); return; }
-  var prods={}, totalVal=0, trocas={}, trocaVal=0;
+  var prods={}, totalVal=0, trocas={}, trocaVal=0, bonificacao={};
   ['bola','integral','mini','las250','las500'].forEach(function(k) {
     var q = parseInt(document.getElementById('q-'+k).value)||0;
     if(q>0) { prods[k]=q; totalVal += q*getPreco(parseInt(cliId),k); }
   });
-  if(!Object.keys(prods).length) { toast('Adicione pelo menos um produto'); return; }
+  ['bola','integral','mini','las250','las500'].forEach(function(k) {
+    var q = parseInt(document.getElementById('q-bf-'+k).value)||0;
+    if(q>0) bonificacao[k]=q;
+  });
+  if(!Object.keys(prods).length && !Object.keys(bonificacao).length) { toast('Adicione pelo menos um produto'); return; }
   ['bola','integral','las250','las500'].forEach(function(k) {
     var q = parseInt(document.getElementById('q-t-'+k).value)||0;
     if(q>0) { trocas[k]=q; trocaVal += q*getPreco(parseInt(cliId),k); }
@@ -1176,7 +1202,7 @@ document.getElementById('btn-salvar-ent').addEventListener('click', function() {
     id: editEntregaKey ? document.getElementById('btn-salvar-ent').getAttribute('data-orig-id')*1 : Date.now(),
     clienteId:parseInt(cliId), data:data,
     boleto:document.getElementById('e-bol').value.trim(),
-    produtos:prods, trocas:trocas, pagamento:document.getElementById('e-pgto').value,
+    produtos:prods, trocas:trocas, bonificacao:bonificacao, pagamento:document.getElementById('e-pgto').value,
     valorTotal:totalVal-trocaVal, valorTroca:trocaVal,
     pago: editEntregaKey ? (document.getElementById('btn-salvar-ent').getAttribute('data-orig-pago')==='1') : false
   };
@@ -1197,6 +1223,7 @@ document.getElementById('btn-limpar-ent').addEventListener('click', limparEnt);
 function limparEnt() {
   ['bola','integral','mini','las250','las500'].forEach(function(k){document.getElementById('q-'+k).value=0;});
   ['bola','integral','las250','las500'].forEach(function(k){document.getElementById('q-t-'+k).value=0;});
+  ['bola','integral','mini','las250','las500'].forEach(function(k){document.getElementById('q-bf-'+k).value=0;});
   document.getElementById('e-resumo').style.display='none';
   document.getElementById('e-bol').value='';
   document.getElementById('e-pgto').value='prazo';
@@ -1225,6 +1252,7 @@ function editarEntrega(key) {
   document.getElementById('e-pgto').value = e.pagamento||'prazo';
   ['bola','integral','mini','las250','las500'].forEach(function(k){ document.getElementById('q-'+k).value = (e.produtos&&e.produtos[k])||0; });
   ['bola','integral','las250','las500'].forEach(function(k){ document.getElementById('q-t-'+k).value = (e.trocas&&e.trocas[k])||0; });
+  ['bola','integral','mini','las250','las500'].forEach(function(k){ document.getElementById('q-bf-'+k).value = (e.bonificacao&&e.bonificacao[k])||0; });
   calcResumo();
   editEntregaKey = key;
   var btn = document.getElementById('btn-salvar-ent');
@@ -1684,6 +1712,7 @@ function renderHist() {
     var cli = D.clientes.find(function(c){return c.id===e.clienteId;});
     var nomeC = cli ? (cli.fantasia||cli.nome) : '?';
     var prods = Object.keys(e.produtos).map(function(k){return NOME[k]+': '+e.produtos[k]+'un';}).join(', ');
+    var bonifStr = e.bonificacao && Object.keys(e.bonificacao).length ? Object.keys(e.bonificacao).map(function(k){return NOME[k]+': '+e.bonificacao[k]+'un';}).join(', ') : '';
     var status = e.pago ? '<span class="badge badge-g">Pago</span>' : '<span class="badge badge-r">Em aberto</span>';
     return '<div class="hitem" style="border:1.5px solid var(--b)">' +
       '<div class="hhead">' +
@@ -1697,6 +1726,7 @@ function renderHist() {
         '</div>' +
       '</div>' +
       '<div class="hprod" style="margin:6px 0">'+prods+'</div>' +
+      (bonifStr ? '<div style="margin:4px 0"><span class="badge badge-y">🎁 Bonificação: '+bonifStr+'</span></div>' : '') +
       '<div style="font-size:11px;color:#888;margin-bottom:10px">'+(pgtoNomes[e.pagamento]||e.pagamento)+(e.valorTroca>0?' | Troca: '+fmt(e.valorTroca):'')+'</div>' +
       '<div style="display:flex;gap:8px">' +
         '<button class="btn btn-o btn-sm btn-edit-ent" data-key="'+e._key+'" style="flex:1">Editar</button>' +
@@ -2481,8 +2511,9 @@ function gerarDRE() {
   var receita = ents.reduce(function(s,e){return s+(e.valorTotal||0);},0);
   var cmv = 0;
   ents.forEach(function(e){
-    Object.keys(e.produtos||{}).forEach(function(k){
-      var qtdLiquida = (e.produtos[k]||0) - ((e.trocas&&e.trocas[k])||0);
+    var chaves = Object.assign({}, e.produtos, e.bonificacao);
+    Object.keys(chaves).forEach(function(k){
+      var qtdLiquida = (e.produtos[k]||0) - ((e.trocas&&e.trocas[k])||0) + ((e.bonificacao&&e.bonificacao[k])||0);
       if(qtdLiquida<0) qtdLiquida = 0;
       cmv += qtdLiquida * custoProduto(k);
     });
@@ -2531,8 +2562,9 @@ function gerarRanking() {
     var id = e.clienteId;
     if(!porCliente[id]) porCliente[id] = {fat:0, cmv:0};
     porCliente[id].fat += (e.valorTotal||0);
-    Object.keys(e.produtos||{}).forEach(function(k){
-      var qtdLiquida = (e.produtos[k]||0) - ((e.trocas&&e.trocas[k])||0);
+    var chaves = Object.assign({}, e.produtos, e.bonificacao);
+    Object.keys(chaves).forEach(function(k){
+      var qtdLiquida = (e.produtos[k]||0) - ((e.trocas&&e.trocas[k])||0) + ((e.bonificacao&&e.bonificacao[k])||0);
       if(qtdLiquida<0) qtdLiquida = 0;
       porCliente[id].cmv += qtdLiquida*custoProduto(k);
     });

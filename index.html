@@ -1453,6 +1453,7 @@ document.getElementById('btn-gerar-rel').addEventListener('click', function() {
   var area=document.getElementById('area-relatorio');
   if(!cliId){area.innerHTML='<div class="alert alert-r">Selecione o cliente.</div>';return;}
   var cli=D.clientes.find(function(c){return c.id===cliId;});
+  if(!cli) { area.innerHTML='<div class="alert alert-r">Cliente não encontrado (pode ter sido excluído). Atualize a página e tente novamente.</div>'; return; }
   var ents=D.entregas.filter(function(e){
     var d=new Date(e.data+'T00:00:00');
     return e.clienteId===cliId&&d.getMonth()+1===mes&&d.getFullYear()===ano;
@@ -1462,7 +1463,7 @@ document.getElementById('btn-gerar-rel').addEventListener('click', function() {
   var html='<div class="stitle">'+MESES[mes]+' '+ano+' — '+(cli.fantasia||cli.nome)+'</div>';
   html+=ents.map(function(e){
     total+=e.valorTotal;trocaTotal+=e.valorTroca||0;
-    var prods=Object.keys(e.produtos).map(function(k){return NOME[k]+': '+e.produtos[k]+'un';}).join(', ');
+    var prods=Object.keys(e.produtos||{}).map(function(k){return NOME[k]+': '+e.produtos[k]+'un';}).join(', ');
     var pgtos={prazo:'A prazo',boleto7:'Boleto 7 dias',vista:'A vista',pix:'PIX'};
     return '<div class="hitem"><div class="hhead"><span class="hdata">'+fdata(e.data)+(e.boleto?' | #'+e.boleto:'')+'</span><span class="hval">'+fmt(e.valorTotal)+'</span></div><div class="hprod">'+prods+'</div><div style="font-size:11px;color:#888;margin-top:4px">'+pgtos[e.pagamento]+(trocaTotal?'  |  Troca: '+fmt(e.valorTroca):'')+'</div></div>';
   }).join('');
@@ -1481,10 +1482,10 @@ function renderDash() {
   var ents=D.entregas.filter(function(e){var d=new Date(e.data+'T00:00:00');return d.getMonth()+1===mes&&d.getFullYear()===ano;});
   if(!ents.length){area.innerHTML='<div class="alert alert-y">Nenhuma entrega em '+MESES[mes]+'/'+ano+'.</div>';document.getElementById('btn-xls-area').style.display='none';return;}
   var totalFat=ents.reduce(function(s,e){return s+e.valorTotal;},0);
-  var totalUn=0; ents.forEach(function(e){Object.values(e.produtos).forEach(function(q){totalUn+=q;});});
+  var totalUn=0; ents.forEach(function(e){Object.values(e.produtos||{}).forEach(function(q){totalUn+=q;});});
   var totalTroca=ents.reduce(function(s,e){return s+(e.valorTroca||0);},0);
   var prodTots={bola:0,integral:0,mini:0,las250:0,las500:0};
-  ents.forEach(function(e){Object.keys(e.produtos).forEach(function(k){if(prodTots[k]!==undefined)prodTots[k]+=e.produtos[k];});});
+  ents.forEach(function(e){Object.keys(e.produtos||{}).forEach(function(k){if(prodTots[k]!==undefined)prodTots[k]+=e.produtos[k];});});
   var prodTrocas={bola:0,integral:0,las250:0,las500:0};
   var totalUnTroca=0;
   ents.forEach(function(e){if(e.trocas)Object.keys(e.trocas).forEach(function(k){if(prodTrocas[k]!==undefined){prodTrocas[k]+=e.trocas[k];totalUnTroca+=e.trocas[k];}});});
@@ -1550,7 +1551,7 @@ document.getElementById('btn-xls-dash').addEventListener('click', function() {
   var det = [['Data','Cliente','Boleto','Produtos','Pagamento','Valor (R$)','Troca (R$)']];
   d.ents.slice().sort(function(a,b){return a.data.localeCompare(b.data);}).forEach(function(e){
     var c = D.clientes.find(function(x){return x.id===e.clienteId;});
-    var prodStr = Object.keys(e.produtos).map(function(k){return NOME[k]+': '+e.produtos[k];}).join(', ');
+    var prodStr = Object.keys(e.produtos||{}).map(function(k){return NOME[k]+': '+e.produtos[k];}).join(', ');
     det.push([fdata(e.data), c?(c.fantasia||c.nome):'?', e.boleto||'', prodStr, d.pgtoNomes[e.pagamento]||e.pagamento, e.valorTotal, e.valorTroca||0]);
   });
   var wsDet = XLSX.utils.aoa_to_sheet(det);
@@ -1568,6 +1569,7 @@ document.getElementById('btn-pdf-rel').addEventListener('click', function() {
   if(!window._relData) return;
   if(typeof window.jspdf === 'undefined') { toast('PDF indisponivel. Tente recarregar a pagina.'); return; }
   var d = window._relData;
+  if(!d.cli) { toast('Cliente não encontrado. Gere o relatório novamente.'); return; }
   var { jsPDF } = window.jspdf;
   var doc = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
   var pw=210, m=16, cw=178, y=0;
@@ -1605,7 +1607,7 @@ document.getElementById('btn-pdf-rel').addEventListener('click', function() {
     doc.setTextColor(42,122,59);
     doc.text(fmt(e.valorTotal), pw-m, y, {align:'right'});
     y+=5;
-    Object.keys(e.produtos).forEach(function(k) {
+    Object.keys(e.produtos||{}).forEach(function(k) {
       if(y>265){doc.addPage();y=20;}
       doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(80,80,80);
       doc.text('  '+(NOME[k]||k)+': '+e.produtos[k]+' un x '+fmt(getPreco(e.clienteId,k))+' = '+fmt(e.produtos[k]*getPreco(e.clienteId,k)), m+2, y);
@@ -1711,7 +1713,7 @@ function renderHist() {
   lista.innerHTML = ents.map(function(e) {
     var cli = D.clientes.find(function(c){return c.id===e.clienteId;});
     var nomeC = cli ? (cli.fantasia||cli.nome) : '?';
-    var prods = Object.keys(e.produtos).map(function(k){return NOME[k]+': '+e.produtos[k]+'un';}).join(', ');
+    var prods = Object.keys(e.produtos||{}).map(function(k){return NOME[k]+': '+e.produtos[k]+'un';}).join(', ');
     var bonifStr = e.bonificacao && Object.keys(e.bonificacao).length ? Object.keys(e.bonificacao).map(function(k){return NOME[k]+': '+e.bonificacao[k]+'un';}).join(', ') : '';
     var status = e.pago ? '<span class="badge badge-g">Pago</span>' : '<span class="badge badge-r">Em aberto</span>';
     return '<div class="hitem" style="border:1.5px solid var(--b)">' +
@@ -2513,7 +2515,7 @@ function gerarDRE() {
   ents.forEach(function(e){
     var chaves = Object.assign({}, e.produtos, e.bonificacao);
     Object.keys(chaves).forEach(function(k){
-      var qtdLiquida = (e.produtos[k]||0) - ((e.trocas&&e.trocas[k])||0) + ((e.bonificacao&&e.bonificacao[k])||0);
+      var qtdLiquida = ((e.produtos&&e.produtos[k])||0) - ((e.trocas&&e.trocas[k])||0) + ((e.bonificacao&&e.bonificacao[k])||0);
       if(qtdLiquida<0) qtdLiquida = 0;
       cmv += qtdLiquida * custoProduto(k);
     });
@@ -2564,7 +2566,7 @@ function gerarRanking() {
     porCliente[id].fat += (e.valorTotal||0);
     var chaves = Object.assign({}, e.produtos, e.bonificacao);
     Object.keys(chaves).forEach(function(k){
-      var qtdLiquida = (e.produtos[k]||0) - ((e.trocas&&e.trocas[k])||0) + ((e.bonificacao&&e.bonificacao[k])||0);
+      var qtdLiquida = ((e.produtos&&e.produtos[k])||0) - ((e.trocas&&e.trocas[k])||0) + ((e.bonificacao&&e.bonificacao[k])||0);
       if(qtdLiquida<0) qtdLiquida = 0;
       porCliente[id].cmv += qtdLiquida*custoProduto(k);
     });

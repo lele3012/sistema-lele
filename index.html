@@ -436,6 +436,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <button class="btn btn-g" id="btn-gerar-rank">Gerar ranking</button>
     </div>
     <div id="ranking-area"></div>
+    <div id="btn-xls-rank-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-rank">📊 Exportar Excel</button></div>
   </div>
 
   <div class="fin-sub" id="fs-fboletos" style="display:none">
@@ -456,6 +457,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <button class="btn btn-sm btn-g bol-filtro-btn" data-filtro="todos">Todos</button>
       <button class="btn btn-sm btn-o bol-filtro-btn" data-filtro="pendente">Em aberto</button>
       <button class="btn btn-sm btn-o bol-filtro-btn" data-filtro="pago">Pagos</button>
+      <button class="btn btn-sm btn-o" id="btn-xls-boletos" style="margin-left:auto">📊 Exportar Excel</button>
     </div>
     <div id="lista-boletos"></div>
   </div>
@@ -497,9 +499,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <div class="card">
       <div class="field"><label>Nome da conta</label><input type="text" class="inp" id="rc-nome" placeholder="Ex: Aluguel"></div>
       <div class="row2">
-        <div class="field"><label>Valor</label><input type="number" step="0.01" class="inp" id="rc-valor"></div>
+        <div class="field"><label>Valor de referência</label><input type="number" step="0.01" class="inp" id="rc-valor"></div>
         <div class="field"><label>Dia do vencimento</label><input type="number" min="1" max="31" class="inp" id="rc-dia"></div>
       </div>
+      <div class="field"><label style="display:flex;align-items:center;gap:6px;font-weight:600"><input type="checkbox" id="rc-variavel" style="width:auto"> Valor varia todo mês (ex: luz, água, cartão)</label></div>
       <button class="btn btn-g" id="btn-salvar-rc">✅ Salvar conta recorrente</button>
       <button class="btn btn-o" id="btn-cancelar-rc" style="display:none">Cancelar edição</button>
     </div>
@@ -678,6 +681,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   </div>
 </div>
 
+<div class="modal" id="modal-lancarrec">
+  <div class="mbox">
+    <div class="mhead"><h2>Lançar conta do mês</h2><button class="mclose" id="btn-lancarrec-close">x</button></div>
+    <div id="lancarrec-info" class="card" style="margin-bottom:16px"></div>
+    <div class="field"><label>Valor deste mês</label><input type="number" step="0.01" class="inp" id="lancarrec-valor"></div>
+    <button class="btn btn-g" id="btn-lancarrec-confirmar">Lançar em Boletos a Pagar</button>
+    <button class="btn btn-o" id="btn-lancarrec-cancelar" style="margin-top:6px">Cancelar</button>
+  </div>
+</div>
+
 <div class="modal" id="modal-pagbol">
   <div class="mbox">
     <div class="mhead"><h2>Marcar como pago</h2><button class="mclose" id="btn-pagbol-close">x</button></div>
@@ -719,6 +732,7 @@ var editIdx = null;
 var editEntregaKey = null;
 var baixaEntregaId = null;
 var pagBolKey = null;
+var lancarRecKey = null;
 var editBoletoKey = null, editRecorrenteKey = null, editInsumoKey = null, editFornecedorKey = null;
 
 var PRECO = {bola:8.50, integral:8.50, las250:11.00, las500:14.50, mini:2.30};
@@ -2253,6 +2267,24 @@ document.getElementById('btn-cancelar-bp').addEventListener('click', function(){
   editBoletoKey=null; this.style.display='none';
   document.getElementById('bp-forn').value=''; document.getElementById('bp-desc').value=''; document.getElementById('bp-valor').value=''; document.getElementById('bp-venc').value='';
 });
+document.getElementById('btn-xls-boletos').addEventListener('click', function() {
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var lista = D.boletos.filter(function(b){ return filtroBoletos==='todos' || b.status===filtroBoletos; }).slice().sort(function(a,b){return (a.venc||'').localeCompare(b.venc||'');});
+  var linhas = [['Fornecedor/Conta','Descrição','Valor (R$)','Vencimento','Status','Data pagamento','Pago por']];
+  lista.forEach(function(b){
+    linhas.push([
+      b.fornecedor||'', b.desc||'', b.valor||0, b.venc?fdata(b.venc):'',
+      b.status==='pago'?'Pago':'Em aberto', b.dataPagamento?fdata(b.dataPagamento):'', b.contaPagamento||''
+    ]);
+  });
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(linhas);
+  ws['!cols'] = [{wch:28},{wch:28},{wch:14},{wch:14},{wch:12},{wch:16},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Boletos');
+  var sufixo = filtroBoletos==='pago' ? 'Pagos' : (filtroBoletos==='pendente' ? 'EmAberto' : 'Todos');
+  XLSX.writeFile(wb, 'Lele_Boletos_'+sufixo+'.xlsx');
+  toast('Excel gerado!');
+});
 function renderBoletos() {
   var el = document.getElementById('lista-boletos'); if(!el) return;
 
@@ -2326,17 +2358,17 @@ document.getElementById('btn-salvar-rc').addEventListener('click', function() {
   var nome = document.getElementById('rc-nome').value.trim();
   var dia = parseInt(document.getElementById('rc-dia').value)||1;
   if(!nome) { toast('Informe o nome da conta'); return; }
-  var obj = { nome:nome, valor:parseFloat(document.getElementById('rc-valor').value)||0, dia:dia };
+  var obj = { nome:nome, valor:parseFloat(document.getElementById('rc-valor').value)||0, dia:dia, variavel:document.getElementById('rc-variavel').checked };
   if(!editRecorrenteKey) obj.id = Date.now();
   salvarRegistro('recorrentes', obj, editRecorrenteKey).then(function(){
     toast('Conta recorrente salva!');
-    document.getElementById('rc-nome').value=''; document.getElementById('rc-valor').value=''; document.getElementById('rc-dia').value='';
+    document.getElementById('rc-nome').value=''; document.getElementById('rc-valor').value=''; document.getElementById('rc-dia').value=''; document.getElementById('rc-variavel').checked=false;
     editRecorrenteKey=null; document.getElementById('btn-cancelar-rc').style.display='none';
   });
 });
 document.getElementById('btn-cancelar-rc').addEventListener('click', function(){
   editRecorrenteKey=null; this.style.display='none';
-  document.getElementById('rc-nome').value=''; document.getElementById('rc-valor').value=''; document.getElementById('rc-dia').value='';
+  document.getElementById('rc-nome').value=''; document.getElementById('rc-valor').value=''; document.getElementById('rc-dia').value=''; document.getElementById('rc-variavel').checked=false;
 });
 function renderRecorrentes() {
   var el = document.getElementById('lista-recorrentes'); if(!el) return;
@@ -2347,7 +2379,7 @@ function renderRecorrentes() {
     var jaLancado = D.boletos.some(function(b){ return b.origem==='recorrente' && b.recorrenteId===r.id && b.venc===vencMes; });
     return '<div class="card" style="padding:12px 16px">'+
       '<div style="display:flex;justify-content:space-between"><b>'+r.nome+'</b><span style="font-weight:800">'+fmt(r.valor)+'</span></div>'+
-      '<div style="font-size:12px;color:#888;margin-top:4px">Vence todo dia '+r.dia+'</div>'+
+      '<div style="font-size:12px;color:#888;margin-top:4px">Vence todo dia '+r.dia+(r.variavel?' <span class="badge badge-y" style="margin-left:4px">Valor variável</span>':'')+'</div>'+
       '<div style="display:flex;gap:6px;margin-top:8px">'+
       (jaLancado ? '<span class="badge badge-g" style="padding:8px 12px">Já lançado este mês</span>' : '<button class="btn btn-sm btn-g" data-lancar="'+r._key+'">Lançar este mês</button>')+
       '<button class="btn btn-sm btn-o" data-editrc="'+r._key+'">Editar</button>'+
@@ -2356,6 +2388,7 @@ function renderRecorrentes() {
   }).join('');
   el.querySelectorAll('[data-lancar]').forEach(function(btn){ btn.addEventListener('click', function(){
     var r = D.recorrentes.find(function(x){return x._key===btn.getAttribute('data-lancar');});
+    if(r.variavel) { abrirLancarRec(r._key); return; }
     var vencMes = anoAtual+'-'+String(mesAtual).padStart(2,'0')+'-'+String(r.dia).padStart(2,'0');
     salvarRegistro('boletos', {id:Date.now(), fornecedor:r.nome, desc:'Conta recorrente', valor:r.valor, venc:vencMes, status:'pendente', origem:'recorrente', recorrenteId:r.id}).then(function(){
       toast('Conta lançada em Boletos a Pagar!');
@@ -2365,12 +2398,37 @@ function renderRecorrentes() {
     var r = D.recorrentes.find(function(x){return x._key===btn.getAttribute('data-editrc');});
     editRecorrenteKey = r._key;
     document.getElementById('rc-nome').value=r.nome; document.getElementById('rc-valor').value=r.valor; document.getElementById('rc-dia').value=r.dia;
+    document.getElementById('rc-variavel').checked = !!r.variavel;
     document.getElementById('btn-cancelar-rc').style.display='';
   });});
   el.querySelectorAll('[data-delrc]').forEach(function(btn){ btn.addEventListener('click', function(){
     if(confirm('Excluir esta conta recorrente?')) excluirRegistro('recorrentes', btn.getAttribute('data-delrc'));
   });});
 }
+
+function abrirLancarRec(key) {
+  var r = D.recorrentes.find(function(x){return x._key===key;});
+  if(!r) return;
+  lancarRecKey = key;
+  document.getElementById('lancarrec-info').innerHTML = '<div style="font-size:14px;font-weight:700">'+r.nome+'</div><div style="font-size:12px;color:#888;margin-top:2px">Valor do mês passado: '+fmt(r.valor)+'</div>';
+  document.getElementById('lancarrec-valor').value = r.valor;
+  document.getElementById('modal-lancarrec').classList.add('on');
+}
+document.getElementById('btn-lancarrec-close').addEventListener('click', function(){ document.getElementById('modal-lancarrec').classList.remove('on'); });
+document.getElementById('btn-lancarrec-cancelar').addEventListener('click', function(){ document.getElementById('modal-lancarrec').classList.remove('on'); });
+document.getElementById('btn-lancarrec-confirmar').addEventListener('click', function() {
+  var r = D.recorrentes.find(function(x){return x._key===lancarRecKey;});
+  if(!r) return;
+  var valor = parseFloat(document.getElementById('lancarrec-valor').value)||0;
+  if(valor<=0) { toast('Informe um valor válido'); return; }
+  var agora = new Date(); var mesAtual = agora.getMonth()+1, anoAtual = agora.getFullYear();
+  var vencMes = anoAtual+'-'+String(mesAtual).padStart(2,'0')+'-'+String(r.dia).padStart(2,'0');
+  document.getElementById('modal-lancarrec').classList.remove('on');
+  salvarRegistro('boletos', {id:Date.now(), fornecedor:r.nome, desc:'Conta recorrente', valor:valor, venc:vencMes, status:'pendente', origem:'recorrente', recorrenteId:r.id}).then(function(){
+    atualizarRegistro('recorrentes', r._key, {valor:valor});
+    toast('Conta lançada em Boletos a Pagar!');
+  });
+});
 
 // --- RESUMO / DASHBOARD FINANCEIRO ---
 function renderFinDash() {
@@ -2562,8 +2620,43 @@ function gerarRanking() {
   });
 
   document.getElementById('ranking-area').innerHTML = html;
+  window._rankData = {mes:mes, ano:ano, rankCli:rankCli, rankForn:rankForn, rankCat:rankCat, rankConta:rankConta};
+  document.getElementById('btn-xls-rank-area').style.display='block';
 }
 document.getElementById('btn-gerar-rank').addEventListener('click', gerarRanking);
+document.getElementById('btn-xls-rank').addEventListener('click', function() {
+  if(!window._rankData) return;
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var d = window._rankData;
+  var wb = XLSX.utils.book_new();
+
+  var cli = [['#','Cliente','Faturamento (R$)','Margem estimada (R$)','Margem (%)']];
+  d.rankCli.forEach(function(r,i){ cli.push([i+1, r.nome, r.fat, r.margem, r.pct.toFixed(1)]); });
+  var wsCli = XLSX.utils.aoa_to_sheet(cli);
+  wsCli['!cols'] = [{wch:5},{wch:26},{wch:18},{wch:18},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsCli, 'Clientes');
+
+  var forn = [['#','Fornecedor','Valor pago (R$)']];
+  d.rankForn.forEach(function(r,i){ forn.push([i+1, r.nome, r.valor]); });
+  var wsForn = XLSX.utils.aoa_to_sheet(forn);
+  wsForn['!cols'] = [{wch:5},{wch:30},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, wsForn, 'Fornecedores');
+
+  var cat = [['Categoria','Valor (R$)']];
+  d.rankCat.forEach(function(r){ cat.push([r.nome, r.valor]); });
+  var wsCat = XLSX.utils.aoa_to_sheet(cat);
+  wsCat['!cols'] = [{wch:22},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, wsCat, 'Categoria');
+
+  var conta = [['Conta/Banco','Valor pago (R$)']];
+  d.rankConta.forEach(function(r){ conta.push([r.nome, r.valor]); });
+  var wsConta = XLSX.utils.aoa_to_sheet(conta);
+  wsConta['!cols'] = [{wch:22},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, wsConta, 'Conta-Banco');
+
+  XLSX.writeFile(wb, 'Lele_Rankings_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.xlsx');
+  toast('Excel gerado!');
+});
 
 // --- FLUXO DE CAIXA (a pagar + a receber) ---
 function renderFluxo() {

@@ -383,6 +383,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   <div class="stitle" style="margin-top:0">Financeiro</div>
   <div class="card" style="display:flex;gap:6px;flex-wrap:wrap;padding:10px">
     <button class="btn btn-sm btn-g fin-tab-btn" data-fs="fdash">Resumo</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="ffluxo">Fluxo de Caixa</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fdre">DRE Mensal</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="franking">Rankings</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fboletos">Boletos a Pagar</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="ffornecedores">Fornecedores</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="frecor">Recorrentes</button>
@@ -393,6 +396,46 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 
   <div class="fin-sub" id="fs-fdash">
     <div id="fin-resumo-area"></div>
+  </div>
+
+  <div class="fin-sub" id="fs-ffluxo" style="display:none">
+    <div id="fluxo-area"></div>
+  </div>
+
+  <div class="fin-sub" id="fs-fdre" style="display:none">
+    <div class="card">
+      <div class="row2">
+        <div class="field"><label>Mes</label>
+          <select class="inp" id="dre-mes">
+            <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
+            <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+            <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+            <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+          </select>
+        </div>
+        <div class="field"><label>Ano</label><input type="number" class="inp" id="dre-ano" value="2026"></div>
+      </div>
+      <button class="btn btn-g" id="btn-gerar-dre">Gerar DRE</button>
+    </div>
+    <div id="dre-area"></div>
+  </div>
+
+  <div class="fin-sub" id="fs-franking" style="display:none">
+    <div class="card">
+      <div class="row2">
+        <div class="field"><label>Mes</label>
+          <select class="inp" id="rk-mes">
+            <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
+            <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+            <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+            <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+          </select>
+        </div>
+        <div class="field"><label>Ano</label><input type="number" class="inp" id="rk-ano" value="2026"></div>
+      </div>
+      <button class="btn btn-g" id="btn-gerar-rank">Gerar ranking</button>
+    </div>
+    <div id="ranking-area"></div>
   </div>
 
   <div class="fin-sub" id="fs-fboletos" style="display:none">
@@ -716,6 +759,10 @@ function carregar() {
   if(document.getElementById('rel-ano')) document.getElementById('rel-ano').value = anoAtual;
   if(document.getElementById('dash-mes')) document.getElementById('dash-mes').value = mesAtual;
   if(document.getElementById('dash-ano')) document.getElementById('dash-ano').value = anoAtual;
+  if(document.getElementById('dre-mes')) document.getElementById('dre-mes').value = mesAtual;
+  if(document.getElementById('dre-ano')) document.getElementById('dre-ano').value = anoAtual;
+  if(document.getElementById('rk-mes')) document.getElementById('rk-mes').value = mesAtual;
+  if(document.getElementById('rk-ano')) document.getElementById('rk-ano').value = anoAtual;
 
   // Se depois de 12s ainda estiver carregando, mostra erro em vez de travar para sempre
   var travouTimeout = setTimeout(function() {
@@ -762,7 +809,7 @@ function carregar() {
     db.ref('boletos').on('value', function(snap) {
       D.boletos = snapToArray(snap.val());
       var t = document.querySelector('.tab.on');
-      if(t && t.getAttribute('data-tab')==='financeiro') { renderBoletos(); renderFinDash(); }
+      if(t && t.getAttribute('data-tab')==='financeiro') { renderBoletos(); renderFinDash(); renderFluxo(); }
       pronto();
     }, erroLeitura('boletos'));
     db.ref('recorrentes').on('value', function(snap) {
@@ -782,6 +829,7 @@ function carregar() {
       var id = abaAtiva ? abaAtiva.getAttribute('data-tab') : '';
       if(id==='cobrancas') renderCob();
       if(id==='historico') renderHist();
+      if(id==='financeiro') renderFluxo();
       pronto();
     }, erroLeitura('entregas'));
     db.ref('caixas').on('value', function(snap) {
@@ -798,6 +846,7 @@ function carregar() {
 }
 function fmt(n) { return 'R$ ' + (n||0).toFixed(2).replace('.',','); }
 function fdata(s) { var p=s.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
+function fdataObj(d) { return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); }
 function toast(msg, t) { var el=document.getElementById('toast'); el.textContent=msg; el.className='toast on'; setTimeout(function(){el.className='toast';}, t||2500); }
 
 function getPreco(cliId, key) {
@@ -822,7 +871,7 @@ document.querySelectorAll('.tab').forEach(function(t) {
     if(id==='dashboard') renderDash();
     if(id==='financeiro') {
       popDatalistInsumos(); popDatalistFornecedores();
-      renderBoletos(); renderRecorrentes(); renderNotas(); renderInsumos(); renderFichas(); renderFinDash(); renderFornecedores();
+      renderBoletos(); renderRecorrentes(); renderNotas(); renderInsumos(); renderFichas(); renderFinDash(); renderFornecedores(); renderFluxo();
     }
   });
 });
@@ -2262,6 +2311,202 @@ function renderFinDash() {
     });
   }
   el.innerHTML = html;
+}
+
+// --- DRE MENSAL ---
+function gerarDRE() {
+  var mes = parseInt(document.getElementById('dre-mes').value);
+  var ano = parseInt(document.getElementById('dre-ano').value);
+  var ents = D.entregas.filter(function(e){ var d=new Date(e.data+'T00:00:00'); return d.getMonth()+1===mes && d.getFullYear()===ano; });
+
+  var receita = ents.reduce(function(s,e){return s+(e.valorTotal||0);},0);
+  var cmv = 0;
+  ents.forEach(function(e){
+    Object.keys(e.produtos||{}).forEach(function(k){
+      var qtdLiquida = (e.produtos[k]||0) - ((e.trocas&&e.trocas[k])||0);
+      if(qtdLiquida<0) qtdLiquida = 0;
+      cmv += qtdLiquida * custoProduto(k);
+    });
+  });
+  var lucroBruto = receita - cmv;
+
+  // Despesas pagas no mes, excluindo boletos originados de nota fiscal (ja contados no CMV via ficha tecnica)
+  var despesas = D.boletos.filter(function(b){
+    if(b.status!=='pago' || !b.dataPagamento) return false;
+    if(b.origem==='nf') return false;
+    var d = new Date(b.dataPagamento+'T00:00:00');
+    return d.getMonth()+1===mes && d.getFullYear()===ano;
+  }).reduce(function(s,b){return s+(b.valor||0);},0);
+
+  var resultado = lucroBruto - despesas;
+  var margemPct = receita>0 ? (resultado/receita*100) : 0;
+
+  function linha(label, valor, destaque, cor) {
+    return '<div class="card" style="padding:'+(destaque?'16px':'12px 16px')+'"><div style="display:flex;justify-content:space-between;align-items:center">'+
+      '<span style="font-size:'+(destaque?'14px':'13px')+';font-weight:'+(destaque?'800':'600')+'">'+label+'</span>'+
+      '<b style="font-size:'+(destaque?'18px':'15px')+';color:'+(cor||'#1a1a1a')+'">'+fmt(valor)+'</b></div></div>';
+  }
+
+  var html = '';
+  html += linha('Receita (vendas do mês)', receita, false, 'var(--g)');
+  html += linha('(-) Custo de produção (CMV)', -cmv, false, 'var(--r)');
+  html += linha('= Lucro bruto', lucroBruto, true);
+  html += linha('(-) Despesas pagas no mês', -despesas, false, 'var(--r)');
+  html += '<div class="div"></div>';
+  html += linha('= Resultado do mês', resultado, true, resultado>=0?'var(--g)':'var(--r)');
+  html += '<div class="card" style="text-align:center;padding:10px"><span style="font-size:11px;color:#888">Margem líquida do mês: </span><b style="color:'+(margemPct>=0?'var(--g)':'var(--r)')+'">'+margemPct.toFixed(1)+'%</b></div>';
+  html += '<div class="alert alert-i" style="margin-top:12px">O CMV é calculado pelas fichas técnicas × quantidade vendida. Boletos originados de nota fiscal (matéria-prima) não entram de novo em "despesas pagas", pra não contar o mesmo custo duas vezes. Só entram despesas operacionais (aluguel, recorrentes, boletos manuais).</div>';
+
+  document.getElementById('dre-area').innerHTML = html;
+}
+document.getElementById('btn-gerar-dre').addEventListener('click', gerarDRE);
+
+// --- RANKINGS (clientes e fornecedores) ---
+function gerarRanking() {
+  var mes = parseInt(document.getElementById('rk-mes').value);
+  var ano = parseInt(document.getElementById('rk-ano').value);
+
+  var ents = D.entregas.filter(function(e){ var d=new Date(e.data+'T00:00:00'); return d.getMonth()+1===mes && d.getFullYear()===ano; });
+  var porCliente = {};
+  ents.forEach(function(e){
+    var id = e.clienteId;
+    if(!porCliente[id]) porCliente[id] = {fat:0, cmv:0};
+    porCliente[id].fat += (e.valorTotal||0);
+    Object.keys(e.produtos||{}).forEach(function(k){
+      var qtdLiquida = (e.produtos[k]||0) - ((e.trocas&&e.trocas[k])||0);
+      if(qtdLiquida<0) qtdLiquida = 0;
+      porCliente[id].cmv += qtdLiquida*custoProduto(k);
+    });
+  });
+  var rankCli = Object.keys(porCliente).map(function(id){
+    var c = D.clientes.find(function(x){return x.id===id;}) || D.clientes.find(function(x){return String(x.id)===String(id);});
+    var margem = porCliente[id].fat - porCliente[id].cmv;
+    var pct = porCliente[id].fat>0 ? margem/porCliente[id].fat*100 : 0;
+    return {nome: c?(c.fantasia||c.nome):'Cliente', fat:porCliente[id].fat, margem:margem, pct:pct};
+  }).sort(function(a,b){return b.fat-a.fat;});
+
+  var porForn = {};
+  D.boletos.filter(function(b){
+    if(b.status!=='pago' || !b.dataPagamento) return false;
+    var d = new Date(b.dataPagamento+'T00:00:00');
+    return d.getMonth()+1===mes && d.getFullYear()===ano;
+  }).forEach(function(b){
+    var nome = b.fornecedor||'Outro';
+    porForn[nome] = (porForn[nome]||0) + (b.valor||0);
+  });
+  var rankForn = Object.keys(porForn).map(function(nome){return {nome:nome, valor:porForn[nome]};}).sort(function(a,b){return b.valor-a.valor;});
+
+  var html = '<div class="stitle" style="margin-top:0">Clientes por faturamento</div>';
+  if(!rankCli.length) html += '<div class="empty"><div class="ico">👥</div><p>Nenhuma venda no período.</p></div>';
+  else rankCli.forEach(function(r, i){
+    html += '<div class="card" style="padding:12px 16px"><div style="display:flex;justify-content:space-between;align-items:center">'+
+      '<div><span style="font-size:11px;color:#888">#'+(i+1)+'</span> <b style="font-size:14px">'+r.nome+'</b></div>'+
+      '<b style="font-size:15px;color:var(--g)">'+fmt(r.fat)+'</b></div>'+
+      '<div style="font-size:11px;color:#888;margin-top:4px">Margem estimada: '+fmt(r.margem)+' ('+r.pct.toFixed(0)+'%)</div></div>';
+  });
+
+  html += '<div class="stitle">Fornecedores por gasto</div>';
+  if(!rankForn.length) html += '<div class="empty"><div class="ico">🚚</div><p>Nenhum pagamento no período.</p></div>';
+  else rankForn.forEach(function(r, i){
+    html += '<div class="card" style="padding:12px 16px"><div style="display:flex;justify-content:space-between;align-items:center">'+
+      '<div><span style="font-size:11px;color:#888">#'+(i+1)+'</span> <b style="font-size:14px">'+r.nome+'</b></div>'+
+      '<b style="font-size:15px;color:var(--r)">'+fmt(r.valor)+'</b></div></div>';
+  });
+
+  document.getElementById('ranking-area').innerHTML = html;
+}
+document.getElementById('btn-gerar-rank').addEventListener('click', gerarRanking);
+
+// --- FLUXO DE CAIXA (a pagar + a receber) ---
+function renderFluxo() {
+  var el = document.getElementById('fluxo-area'); if(!el) return;
+  var hoje = new Date(); hoje.setHours(0,0,0,0);
+
+  // Junta pendencias de pagar (boletos) e de receber (entregas a prazo/boleto7 ainda nao pagas)
+  var movs = [];
+  D.boletos.filter(function(b){return b.status==='pendente';}).forEach(function(b){
+    if(!b.venc) return;
+    movs.push({tipo:'saida', venc:new Date(b.venc+'T00:00:00'), desc:b.fornecedor||'Conta'});
+    movs[movs.length-1].valor = b.valor||0;
+  });
+  D.entregas.forEach(function(e){
+    if(e.pagamento!=='prazo' && e.pagamento!=='boleto7') return;
+    if(e.pago) return;
+    var de = new Date(e.data+'T00:00:00');
+    var venc;
+    if(e.pagamento==='boleto7') { venc=new Date(de); venc.setDate(venc.getDate()+7); }
+    else { venc=new Date(de.getFullYear(),de.getMonth()+1,5); }
+    var c = D.clientes.find(function(x){return x.id===e.clienteId;});
+    movs.push({tipo:'entrada', venc:venc, desc:c?(c.fantasia||c.nome):'Cliente', valor:e.valorTotal||0});
+  });
+
+  function diasAte(d){ return Math.floor((d-hoje)/86400000); }
+  var faixas = [
+    {label:'Atrasado', test:function(dd){return dd<0;}},
+    {label:'Próximos 7 dias', test:function(dd){return dd>=0&&dd<=7;}},
+    {label:'8 a 15 dias', test:function(dd){return dd>=8&&dd<=15;}},
+    {label:'16 a 30 dias', test:function(dd){return dd>=16&&dd<=30;}},
+    {label:'31 a 60 dias', test:function(dd){return dd>=31&&dd<=60;}},
+    {label:'61 a 90 dias', test:function(dd){return dd>=61&&dd<=90;}},
+    {label:'Mais de 90 dias', test:function(dd){return dd>90;}}
+  ];
+
+  var totalReceber = movs.filter(function(m){return m.tipo==='entrada';}).reduce(function(s,m){return s+m.valor;},0);
+  var totalPagar = movs.filter(function(m){return m.tipo==='saida';}).reduce(function(s,m){return s+m.valor;},0);
+  var saldoProjetado = totalReceber - totalPagar;
+
+  var html = '<div class="rg">'+
+    '<div class="rbox" style="background:var(--gl)"><label style="color:var(--g)">Total a receber</label><b style="color:var(--g)">'+fmt(totalReceber)+'</b></div>'+
+    '<div class="rbox" style="background:var(--rl)"><label style="color:var(--r)">Total a pagar</label><b style="color:var(--r)">'+fmt(totalPagar)+'</b></div>'+
+    '</div>'+
+    '<div class="rbox hl" style="padding:12px;text-align:center;border-radius:10px;margin-bottom:12px"><label>Saldo projetado</label><b>'+fmt(saldoProjetado)+'</b></div>';
+
+  var acumulado = 0;
+  html += '<div class="stitle">Por período</div>';
+  faixas.forEach(function(f){
+    var itens = movs.filter(function(m){return f.test(diasAte(m.venc));});
+    var entradas = itens.filter(function(m){return m.tipo==='entrada';}).reduce(function(s,m){return s+m.valor;},0);
+    var saidas = itens.filter(function(m){return m.tipo==='saida';}).reduce(function(s,m){return s+m.valor;},0);
+    acumulado += (entradas - saidas);
+    var corAcum = acumulado>=0 ? 'var(--g)' : 'var(--r)';
+    html += '<div class="card" style="padding:12px 16px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<b style="font-size:13px">'+f.label+'</b>'+
+        '<span style="font-size:11px;color:#888">'+itens.length+' item(ns)</span>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;color:#888">'+
+        '<span>Entradas: <b style="color:var(--g)">'+fmt(entradas)+'</b></span>'+
+        '<span>Saídas: <b style="color:var(--r)">'+fmt(saidas)+'</b></span>'+
+      '</div>'+
+      '<div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid var(--b)">'+
+        '<span style="font-size:11px;color:#888">Saldo acumulado</span>'+
+        '<b style="color:'+corAcum+'">'+fmt(acumulado)+'</b>'+
+      '</div>'+
+    '</div>';
+  });
+
+  // Itens urgentes: atrasados + proximos 7 dias, com detalhe
+  var urgentes = movs.filter(function(m){ return diasAte(m.venc)<=7; }).sort(function(a,b){return a.venc-b.venc;});
+  if(urgentes.length) {
+    html += '<div class="stitle">Itens até 7 dias (ou atrasados)</div>';
+    urgentes.forEach(function(m){
+      var dd = diasAte(m.venc);
+      var vencido = dd<0;
+      var statusTxt = vencido ? Math.abs(dd)+' dia(s) em atraso' : (dd===0?'Vence hoje':'Vence em '+dd+' dia(s)');
+      var cor = m.tipo==='entrada' ? 'var(--g)' : 'var(--r)';
+      var sinal = m.tipo==='entrada' ? '+ ' : '- ';
+      html += '<div class="citem '+(vencido?'vencido':(dd<=3?'aviso':''))+'">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+          '<div><div style="font-size:13px;font-weight:700">'+m.desc+'</div>'+
+          '<div style="font-size:11px;color:#888;margin-top:2px">'+(m.tipo==='entrada'?'A receber':'A pagar')+' | '+fdataObj(m.venc)+'</div></div>'+
+          '<div style="font-size:14px;font-weight:800;color:'+cor+'">'+sinal+fmt(m.valor)+'</div>'+
+        '</div>'+
+        '<div style="margin-top:6px"><span class="badge '+(vencido?'badge-r':'badge-y')+'">'+statusTxt+'</span></div>'+
+      '</div>';
+    });
+  }
+
+  el.innerHTML = html || '<div class="empty"><div class="ico">💵</div><p>Nenhuma movimentação pendente.</p></div>';
 }
 
 // ===== INIT =====

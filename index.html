@@ -473,6 +473,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
             <option value="embalagem">Embalagem</option>
             <option value="gas">Gás</option>
             <option value="manutencao">Manutenção</option>
+            <option value="limpeza">Limpeza</option>
             <option value="outros">Outros</option>
           </select>
         </div>
@@ -519,6 +520,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
           <option value="embalagem">Embalagem</option>
           <option value="gas">Gás</option>
           <option value="manutencao">Manutenção</option>
+          <option value="limpeza">Limpeza</option>
           <option value="outros">Outros</option>
         </select>
       </div>
@@ -561,6 +563,17 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
           </select>
         </div>
         <div class="field"><label>Custo unitário atual</label><input type="number" step="0.01" class="inp" id="is-custo"></div>
+      </div>
+      <div class="field"><label>Categoria</label>
+        <select class="inp" id="is-cat">
+          <option value="">Não classificado</option>
+          <option value="materia_prima">Matéria-prima</option>
+          <option value="embalagem">Embalagem</option>
+          <option value="gas">Gás</option>
+          <option value="manutencao">Manutenção</option>
+          <option value="limpeza">Limpeza</option>
+          <option value="outros">Outros</option>
+        </select>
       </div>
       <button class="btn btn-g" id="btn-salvar-is">✅ Salvar insumo</button>
       <button class="btn btn-o" id="btn-cancelar-is" style="display:none">Cancelar edição</button>
@@ -659,6 +672,27 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   </div>
 </div>
 
+<div class="modal" id="modal-pagbol">
+  <div class="mbox">
+    <div class="mhead"><h2>Marcar como pago</h2><button class="mclose" id="btn-pagbol-close">x</button></div>
+    <div id="pagbol-info" class="card" style="margin-bottom:16px"></div>
+    <div class="field"><label>Data do pagamento</label><input type="date" class="inp" id="pagbol-data"></div>
+    <div class="field"><label>Pago por</label>
+      <select class="inp" id="pagbol-conta">
+        <option value="Bradesco">Bradesco</option>
+        <option value="Santander">Santander</option>
+        <option value="Asaas">Asaas</option>
+        <option value="Pix Santander">Pix Santander</option>
+        <option value="Pix Bradesco">Pix Bradesco</option>
+        <option value="Pix Asaas">Pix Asaas</option>
+        <option value="Dinheiro">Dinheiro</option>
+      </select>
+    </div>
+    <button class="btn btn-g" id="btn-pagbol-confirmar">Confirmar pagamento</button>
+    <button class="btn btn-o" id="btn-pagbol-cancelar" style="margin-top:6px">Cancelar</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -678,10 +712,12 @@ var D = {clientes:[], entregas:[], caixas:[], producao:[], insumos:[], fichas:[]
 var editIdx = null;
 var editEntregaKey = null;
 var baixaEntregaId = null;
+var pagBolKey = null;
 var editBoletoKey = null, editRecorrenteKey = null, editInsumoKey = null, editFornecedorKey = null;
 
 var PRECO = {bola:8.50, integral:8.50, las250:11.00, las500:14.50, mini:2.30};
 var NOME = {bola:'Pao Bola', integral:'Pao Integral', las250:'Lasanha 250g', las500:'Lasanha 500g', mini:'Mini Sanduiche'};
+var CAT_NOMES = {materia_prima:'Matéria-prima', embalagem:'Embalagem', gas:'Gás', manutencao:'Manutenção', limpeza:'Limpeza', outros:'Outros'};
 var MESES = ['','Janeiro','Fevereiro','Marco','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
 function snapToArray(val) {
@@ -1876,8 +1912,11 @@ function renderInsumos() {
   var el = document.getElementById('lista-insumos'); if(!el) return;
   if(!D.insumos.length) { el.innerHTML='<div class="empty"><div class="ico">🧺</div><p>Nenhum insumo ainda.</p></div>'; return; }
   el.innerHTML = D.insumos.slice().sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');}).map(function(i) {
+    var catTxt = i.categoria ? CAT_NOMES[i.categoria]||i.categoria : 'Não classificado';
+    var catCor = i.categoria ? '#888' : 'var(--r)';
     return '<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">'+
-      '<div><b>'+i.nome+'</b><div style="font-size:12px;color:#888">'+i.unidade+' | '+fmt(i.custoUnit)+'/'+i.unidade+'</div></div>'+
+      '<div><b>'+i.nome+'</b><div style="font-size:12px;color:#888">'+i.unidade+' | '+fmt(i.custoUnit)+'/'+i.unidade+'</div>'+
+      '<div style="font-size:11px;color:'+catCor+';margin-top:2px">'+catTxt+'</div></div>'+
       '<div style="display:flex;gap:6px">'+
       '<button class="btn btn-sm btn-o" data-editis="'+i._key+'">Editar</button>'+
       '<button class="btn btn-sm btn-r" data-delis="'+i._key+'">Excluir</button>'+
@@ -1888,6 +1927,7 @@ function renderInsumos() {
     i = D.insumos.find(function(x){return x._key===b.getAttribute('data-editis');});
     editInsumoKey = i._key;
     document.getElementById('is-nome').value=i.nome; document.getElementById('is-unid').value=i.unidade; document.getElementById('is-custo').value=i.custoUnit;
+    document.getElementById('is-cat').value=i.categoria||'';
     document.getElementById('btn-cancelar-is').style.display='';
   });});
   el.querySelectorAll('[data-delis]').forEach(function(b){ b.addEventListener('click', function(){
@@ -1897,16 +1937,16 @@ function renderInsumos() {
 document.getElementById('btn-salvar-is').addEventListener('click', function() {
   var nome = document.getElementById('is-nome').value.trim();
   if(!nome) { toast('Informe o nome do insumo'); return; }
-  var obj = { nome:nome, unidade:document.getElementById('is-unid').value, custoUnit: parseFloat(document.getElementById('is-custo').value)||0 };
+  var obj = { nome:nome, unidade:document.getElementById('is-unid').value, custoUnit: parseFloat(document.getElementById('is-custo').value)||0, categoria: document.getElementById('is-cat').value };
   if(!editInsumoKey) obj.id = Date.now();
   salvarRegistro('insumos', obj, editInsumoKey).then(function(){
-    toast('Insumo salvo!'); document.getElementById('is-nome').value=''; document.getElementById('is-custo').value='';
+    toast('Insumo salvo!'); document.getElementById('is-nome').value=''; document.getElementById('is-custo').value=''; document.getElementById('is-cat').value='';
     editInsumoKey=null; document.getElementById('btn-cancelar-is').style.display='none';
   });
 });
 document.getElementById('btn-cancelar-is').addEventListener('click', function(){
   editInsumoKey=null; this.style.display='none';
-  document.getElementById('is-nome').value=''; document.getElementById('is-custo').value='';
+  document.getElementById('is-nome').value=''; document.getElementById('is-custo').value=''; document.getElementById('is-cat').value='';
 });
 
 // Busca (ou cria) um insumo pelo nome, e atualiza o custo unitario com o valor mais recente
@@ -2208,6 +2248,7 @@ function renderBoletos() {
       '<div style="display:flex;justify-content:space-between"><b>'+b.fornecedor+'</b>'+badge+'</div>'+
       '<div style="font-size:12px;color:#888;margin-top:2px">'+(b.desc||'')+'</div>'+
       '<div style="display:flex;justify-content:space-between;margin-top:6px"><span>Vence: '+fdata(b.venc)+'</span><span style="font-weight:800">'+fmt(b.valor)+'</span></div>'+
+      (b.status==='pago' && b.contaPagamento ? '<div style="font-size:11px;color:#888;margin-top:2px">Pago por: '+b.contaPagamento+'</div>' : '')+
       '<div style="display:flex;gap:6px;margin-top:8px">'+
       (b.status==='pendente' ? '<button class="btn btn-sm btn-g" data-pagbol="'+b._key+'">Marcar como pago</button>' : '')+
       '<button class="btn btn-sm btn-o" data-editbol="'+b._key+'">Editar</button>'+
@@ -2215,7 +2256,7 @@ function renderBoletos() {
       '</div></div>';
   }).join('');
   el.querySelectorAll('[data-pagbol]').forEach(function(btn){ btn.addEventListener('click', function(){
-    atualizarRegistro('boletos', btn.getAttribute('data-pagbol'), {status:'pago', dataPagamento:fdataHoje()}).then(function(){ toast('Marcado como pago!'); });
+    abrirPagBol(btn.getAttribute('data-pagbol'));
   });});
   el.querySelectorAll('[data-editbol]').forEach(function(btn){ btn.addEventListener('click', function(){
     var b = D.boletos.find(function(x){return x._key===btn.getAttribute('data-editbol');});
@@ -2228,6 +2269,27 @@ function renderBoletos() {
     if(confirm('Excluir esta conta?')) excluirRegistro('boletos', btn.getAttribute('data-delbol'));
   });});
 }
+
+function abrirPagBol(key) {
+  pagBolKey = key;
+  var b = D.boletos.find(function(x){return x._key===key;});
+  if(!b) return;
+  document.getElementById('pagbol-info').innerHTML = '<div style="font-size:14px;font-weight:700">'+b.fornecedor+'</div>'+
+    (b.desc ? '<div style="font-size:12px;color:#888;margin-top:2px">'+b.desc+'</div>' : '')+
+    '<div style="font-size:18px;font-weight:900;color:var(--r);margin-top:6px">'+fmt(b.valor)+'</div>';
+  document.getElementById('pagbol-data').value = new Date().toISOString().split('T')[0];
+  document.getElementById('pagbol-conta').value = 'Bradesco';
+  document.getElementById('modal-pagbol').classList.add('on');
+}
+document.getElementById('btn-pagbol-close').addEventListener('click', function(){ document.getElementById('modal-pagbol').classList.remove('on'); });
+document.getElementById('btn-pagbol-cancelar').addEventListener('click', function(){ document.getElementById('modal-pagbol').classList.remove('on'); });
+document.getElementById('btn-pagbol-confirmar').addEventListener('click', function() {
+  var data = document.getElementById('pagbol-data').value;
+  if(!data) { toast('Informe a data'); return; }
+  var conta = document.getElementById('pagbol-conta').value;
+  document.getElementById('modal-pagbol').classList.remove('on');
+  atualizarRegistro('boletos', pagBolKey, {status:'pago', dataPagamento:data, contaPagamento:conta}).then(function(){ toast('Marcado como pago!'); });
+});
 
 // --- CONTAS RECORRENTES ---
 document.getElementById('btn-salvar-rc').addEventListener('click', function() {
@@ -2311,6 +2373,12 @@ function renderFinDash() {
     });
   }
   el.innerHTML = html;
+}
+
+// Acha a categoria do insumo correspondente ao nome de um item de nota fiscal (mesma logica de match do upsertInsumoPorNome)
+function getCategoriaPorNome(nome) {
+  var ins = D.insumos.find(function(i){ return (i.nome||'').toLowerCase().trim()===String(nome||'').toLowerCase().trim(); });
+  return ins ? (ins.categoria||'') : '';
 }
 
 // --- DRE MENSAL ---
@@ -2412,6 +2480,36 @@ function gerarRanking() {
       '<div><span style="font-size:11px;color:#888">#'+(i+1)+'</span> <b style="font-size:14px">'+r.nome+'</b></div>'+
       '<b style="font-size:15px;color:var(--r)">'+fmt(r.valor)+'</b></div></div>';
   });
+
+  // Gasto por categoria de insumo, item a item da nota fiscal (nao a categoria da nota inteira)
+  // Assim, uma NF com produto de limpeza + materia-prima misturados fica separada corretamente.
+  var porCategoria = {};
+  D.notasFiscais.filter(function(nf){
+    if(!nf.data) return false;
+    var d = new Date(nf.data+'T00:00:00');
+    return d.getMonth()+1===mes && d.getFullYear()===ano;
+  }).forEach(function(nf){
+    (nf.itens||[]).forEach(function(it){
+      var cat = getCategoriaPorNome(it.nome) || 'nao_classificado';
+      porCategoria[cat] = (porCategoria[cat]||0) + (it.qtd||0)*(it.valorUnit||0);
+    });
+  });
+  var rankCat = Object.keys(porCategoria).map(function(k){
+    return {nome: k==='nao_classificado' ? 'Não classificado' : (CAT_NOMES[k]||k), valor:porCategoria[k], semCat:k==='nao_classificado'};
+  }).sort(function(a,b){return b.valor-a.valor;});
+
+  html += '<div class="stitle">Gasto por categoria (itens da nota fiscal)</div>';
+  if(!rankCat.length) html += '<div class="empty"><div class="ico">🏷️</div><p>Nenhuma nota fiscal no período.</p></div>';
+  else {
+    rankCat.forEach(function(r){
+      html += '<div class="card" style="padding:12px 16px"><div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<b style="font-size:14px'+(r.semCat?';color:var(--r)':'')+'">'+r.nome+'</b>'+
+        '<b style="font-size:15px">'+fmt(r.valor)+'</b></div></div>';
+    });
+    if(rankCat.some(function(r){return r.semCat;})) {
+      html += '<div class="alert alert-i" style="margin-top:8px">Tem itens sem categoria definida. Vá em Insumos e classifique cada um (matéria-prima, embalagem, gás, manutenção, limpeza, outros) pra esse relatório ficar completo.</div>';
+    }
+  }
 
   document.getElementById('ranking-area').innerHTML = html;
 }

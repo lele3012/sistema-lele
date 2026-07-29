@@ -451,6 +451,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <button class="btn btn-o" id="btn-cancelar-bp" style="display:none">Cancelar edição</button>
     </div>
     <div class="stitle">Contas cadastradas</div>
+    <div id="bol-resumo" class="rg" style="margin-bottom:10px"></div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-g bol-filtro-btn" data-filtro="todos">Todos</button>
+      <button class="btn btn-sm btn-o bol-filtro-btn" data-filtro="pendente">Em aberto</button>
+      <button class="btn btn-sm btn-o bol-filtro-btn" data-filtro="pago">Pagos</button>
+    </div>
     <div id="lista-boletos"></div>
   </div>
 
@@ -919,6 +925,16 @@ document.querySelectorAll('.fin-tab-btn').forEach(function(b) {
     this.classList.remove('btn-o'); this.classList.add('btn-g');
     document.querySelectorAll('.fin-sub').forEach(function(x){ x.style.display='none'; });
     document.getElementById('fs-'+fs).style.display='';
+  });
+});
+
+var filtroBoletos = 'todos';
+document.querySelectorAll('.bol-filtro-btn').forEach(function(b) {
+  b.addEventListener('click', function() {
+    filtroBoletos = this.getAttribute('data-filtro');
+    document.querySelectorAll('.bol-filtro-btn').forEach(function(x){ x.classList.remove('btn-g'); x.classList.add('btn-o'); });
+    this.classList.remove('btn-o'); this.classList.add('btn-g');
+    renderBoletos();
   });
 });
 
@@ -2239,9 +2255,23 @@ document.getElementById('btn-cancelar-bp').addEventListener('click', function(){
 });
 function renderBoletos() {
   var el = document.getElementById('lista-boletos'); if(!el) return;
-  if(!D.boletos.length) { el.innerHTML='<div class="empty"><div class="ico">🔔</div><p>Nenhuma conta cadastrada.</p></div>'; return; }
+
+  var resumoEl = document.getElementById('bol-resumo');
+  if(resumoEl) {
+    var totAberto = D.boletos.filter(function(b){return b.status==='pendente';}).reduce(function(s,b){return s+(b.valor||0);},0);
+    var totPago = D.boletos.filter(function(b){return b.status==='pago';}).reduce(function(s,b){return s+(b.valor||0);},0);
+    resumoEl.innerHTML =
+      '<div class="rbox" style="background:var(--rl)"><label style="color:var(--r)">Em aberto</label><b style="color:var(--r)">'+fmt(totAberto)+'</b></div>'+
+      '<div class="rbox" style="background:var(--gl)"><label style="color:var(--g)">Pago</label><b style="color:var(--g)">'+fmt(totPago)+'</b></div>';
+  }
+
+  var lista = D.boletos.filter(function(b){ return filtroBoletos==='todos' || b.status===filtroBoletos; });
+  if(!lista.length) {
+    var msg = filtroBoletos==='pago' ? 'Nenhuma conta paga ainda.' : (filtroBoletos==='pendente' ? 'Nenhuma conta em aberto.' : 'Nenhuma conta cadastrada.');
+    el.innerHTML='<div class="empty"><div class="ico">🔔</div><p>'+msg+'</p></div>'; return;
+  }
   var hoje = fdataHoje();
-  el.innerHTML = D.boletos.slice().sort(function(a,b){return (a.venc||'').localeCompare(b.venc||'');}).map(function(b) {
+  el.innerHTML = lista.slice().sort(function(a,b){return (a.venc||'').localeCompare(b.venc||'');}).map(function(b) {
     var atrasado = b.status==='pendente' && b.venc < hoje;
     var badge = b.status==='pago' ? '<span class="badge badge-g">Pago</span>' : (atrasado ? '<span class="badge badge-r">Atrasado</span>' : '<span class="badge badge-y">Pendente</span>');
     return '<div class="card" style="padding:12px 16px">'+
@@ -2510,6 +2540,26 @@ function gerarRanking() {
       html += '<div class="alert alert-i" style="margin-top:8px">Tem itens sem categoria definida. Vá em Insumos e classifique cada um (matéria-prima, embalagem, gás, manutenção, limpeza, outros) pra esse relatório ficar completo.</div>';
     }
   }
+
+  // Gasto por conta/banco (boletos pagos no mes, agrupados por onde foi pago)
+  var porConta = {};
+  D.boletos.filter(function(b){
+    if(b.status!=='pago' || !b.dataPagamento) return false;
+    var d = new Date(b.dataPagamento+'T00:00:00');
+    return d.getMonth()+1===mes && d.getFullYear()===ano;
+  }).forEach(function(b){
+    var conta = b.contaPagamento || 'Não informado';
+    porConta[conta] = (porConta[conta]||0) + (b.valor||0);
+  });
+  var rankConta = Object.keys(porConta).map(function(k){return {nome:k, valor:porConta[k]};}).sort(function(a,b){return b.valor-a.valor;});
+
+  html += '<div class="stitle">Pago por conta/banco</div>';
+  if(!rankConta.length) html += '<div class="empty"><div class="ico">🏦</div><p>Nenhum pagamento no período.</p></div>';
+  else rankConta.forEach(function(r){
+    html += '<div class="card" style="padding:12px 16px"><div style="display:flex;justify-content:space-between;align-items:center">'+
+      '<b style="font-size:14px'+(r.nome==='Não informado'?';color:var(--r)':'')+'">'+r.nome+'</b>'+
+      '<b style="font-size:15px">'+fmt(r.valor)+'</b></div></div>';
+  });
 
   document.getElementById('ranking-area').innerHTML = html;
 }

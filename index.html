@@ -1657,7 +1657,10 @@ function popHistCli() {
 }
 
 function renderHist() {
+  var cliSel = document.getElementById('hist-cli');
+  var valorSelecionado = cliSel ? cliSel.value : '';
   popHistCli();
+  if(cliSel) cliSel.value = valorSelecionado;
   var cliId = parseInt(document.getElementById('hist-cli').value)||0;
   var mes = parseInt(document.getElementById('hist-mes').value)||0;
   var lista = document.getElementById('lista-hist');

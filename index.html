@@ -602,7 +602,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
             <option value="kg">kg</option><option value="g">g</option><option value="un">un</option><option value="l">litro</option><option value="ml">ml</option>
           </select>
         </div>
-        <div class="field"><label>Custo unitário atual</label><input type="number" step="0.01" class="inp" id="is-custo"></div>
+        <div class="field" id="is-custo-box"><label>Custo unitário atual</label><input type="number" step="0.01" class="inp" id="is-custo"></div>
+      </div>
+      <div class="field"><label style="display:flex;align-items:center;gap:6px;font-weight:600"><input type="checkbox" id="is-ehbase" style="width:auto"> 🧪 Isso é uma base preparada (feita a partir de outros insumos, ex: pasta de frango)</label></div>
+      <div id="is-base-section" style="display:none">
+        <div class="alert alert-i">Monte a receita dessa base com os insumos crus e informe quanto o lote rende. O custo por unidade é calculado sozinho.</div>
+        <div class="field"><label>Rendimento do lote (quantidade produzida, na unidade acima)</label><input type="number" step="0.01" class="inp" id="is-rendimento" placeholder="Ex: 5"></div>
+        <div id="is-base-itens"></div>
+        <button class="btn btn-o btn-sm" id="btn-add-item-base" type="button">+ Adicionar insumo à receita</button>
+        <div style="padding:10px 0;display:flex;justify-content:space-between;font-weight:800"><span>Custo do lote:</span><span id="is-base-custolote">R$ 0,00</span></div>
+        <div style="padding:0 0 10px;display:flex;justify-content:space-between;font-weight:800;color:var(--g)"><span>Custo por unidade:</span><span id="is-base-custounid">R$ 0,00</span></div>
       </div>
       <div class="field"><label>Categoria</label>
         <select class="inp" id="is-cat">
@@ -618,7 +627,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <button class="btn btn-g" id="btn-salvar-is">✅ Salvar insumo</button>
       <button class="btn btn-o" id="btn-cancelar-is" style="display:none">Cancelar edição</button>
     </div>
-    <div class="stitle">Insumos cadastrados</div>
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="stitle" style="margin:20px 0 8px">Insumos cadastrados</div>
+      <button class="btn btn-sm btn-o" id="btn-recalc-bases" style="height:fit-content">🔄 Recalcular custo das bases</button>
+    </div>
     <div id="lista-insumos"></div>
   </div>
 
@@ -2130,8 +2142,9 @@ function renderInsumos() {
   el.innerHTML = D.insumos.slice().sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');}).map(function(i) {
     var catTxt = i.categoria ? CAT_NOMES[i.categoria]||i.categoria : 'Não classificado';
     var catCor = i.categoria ? '#888' : 'var(--r)';
+    var baseTag = i.tipo==='base' ? ' <span class="badge badge-y">🧪 Base (rende '+(i.rendimento||0)+' '+i.unidade+')</span>' : '';
     return '<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">'+
-      '<div><b>'+i.nome+'</b><div style="font-size:12px;color:#888">'+i.unidade+' | '+fmt(i.custoUnit)+'/'+i.unidade+'</div>'+
+      '<div><b>'+i.nome+'</b>'+baseTag+'<div style="font-size:12px;color:#888">'+i.unidade+' | '+fmt(i.custoUnit)+'/'+i.unidade+'</div>'+
       '<div style="font-size:11px;color:'+catCor+';margin-top:2px">'+catTxt+'</div></div>'+
       '<div style="display:flex;gap:6px">'+
       '<button class="btn btn-sm btn-o" data-editis="'+i._key+'">Editar</button>'+
@@ -2139,39 +2152,130 @@ function renderInsumos() {
       '</div></div>';
   }).join('');
   el.querySelectorAll('[data-editis]').forEach(function(b){ b.addEventListener('click', function(){
-    var i = D.insumos.find(function(x){return x._key===this.getAttribute('data-editis');},this);
-    i = D.insumos.find(function(x){return x._key===b.getAttribute('data-editis');});
+    var i = D.insumos.find(function(x){return x._key===b.getAttribute('data-editis');});
     editInsumoKey = i._key;
     document.getElementById('is-nome').value=i.nome; document.getElementById('is-unid').value=i.unidade; document.getElementById('is-custo').value=i.custoUnit;
     document.getElementById('is-cat').value=i.categoria||'';
+    document.getElementById('is-ehbase').checked = i.tipo==='base';
+    document.getElementById('is-rendimento').value = i.rendimento||'';
+    document.getElementById('is-base-itens').innerHTML='';
+    if(i.tipo==='base' && i.receita) { i.receita.forEach(function(it){ baseAddItem(it.insumoId, it.qtd); }); }
+    document.getElementById('is-ehbase').dispatchEvent(new Event('change'));
     document.getElementById('btn-cancelar-is').style.display='';
   });});
   el.querySelectorAll('[data-delis]').forEach(function(b){ b.addEventListener('click', function(){
     if(confirm('Excluir este insumo?')) excluirRegistro('insumos', b.getAttribute('data-delis'));
   });});
 }
+
+// Mostra/esconde a secao de receita da base quando marca/desmarca a checkbox
+document.getElementById('is-ehbase').addEventListener('change', function() {
+  document.getElementById('is-base-section').style.display = this.checked ? 'block' : 'none';
+  document.getElementById('is-custo-box').style.display = this.checked ? 'none' : '';
+  if(this.checked) calcBaseCusto();
+});
+
+// Adiciona uma linha de insumo na receita da base (so lista insumos crus, nao outras bases, pra evitar aninhamento)
+function baseAddItem(insumoId, qtd) {
+  var wrap = document.getElementById('is-base-itens');
+  var row = document.createElement('div');
+  row.className = 'row2 base-item-row';
+  row.style.alignItems = 'flex-end';
+  var opts = D.insumos.filter(function(i){return i.tipo!=='base';}).map(function(i){ return '<option value="'+i.id+'"'+(String(i.id)===String(insumoId)?' selected':'')+'>'+i.nome+' ('+i.unidade+')</option>'; }).join('');
+  row.innerHTML = '<div class="field"><label>Insumo</label><select class="inp base-insumo">'+opts+'</select></div>'+
+    '<div class="field" style="max-width:110px"><label>Qtd</label><input type="number" step="0.01" class="inp base-qtd" value="'+(qtd||0)+'"></div>'+
+    '<button class="btn btn-r btn-sm" type="button" style="margin-bottom:12px" onclick="this.parentElement.remove();calcBaseCusto();">✕</button>';
+  wrap.appendChild(row);
+  row.querySelector('.base-insumo').addEventListener('change', calcBaseCusto);
+  row.querySelector('.base-qtd').addEventListener('input', calcBaseCusto);
+  calcBaseCusto();
+}
+document.getElementById('btn-add-item-base').addEventListener('click', function(){ baseAddItem(); });
+
+// Calcula custo do lote e custo por unidade da base, em tempo real
+function calcBaseCusto() {
+  var totalLote = 0;
+  document.querySelectorAll('.base-item-row').forEach(function(row) {
+    var insId = row.querySelector('.base-insumo').value;
+    var qtd = parseFloat(row.querySelector('.base-qtd').value)||0;
+    var ins = D.insumos.find(function(i){return String(i.id)===String(insId);});
+    totalLote += qtd * (ins?ins.custoUnit:0);
+  });
+  var rendimento = parseFloat(document.getElementById('is-rendimento').value)||0;
+  var custoUnid = rendimento>0 ? totalLote/rendimento : 0;
+  document.getElementById('is-base-custolote').textContent = fmt(totalLote);
+  document.getElementById('is-base-custounid').textContent = fmt(custoUnid);
+  return {totalLote:totalLote, custoUnid:custoUnid};
+}
+document.getElementById('is-rendimento').addEventListener('input', calcBaseCusto);
+
 document.getElementById('btn-salvar-is').addEventListener('click', function() {
   var nome = document.getElementById('is-nome').value.trim();
   if(!nome) { toast('Informe o nome do insumo'); return; }
-  var obj = { nome:nome, unidade:document.getElementById('is-unid').value, custoUnit: parseFloat(document.getElementById('is-custo').value)||0, categoria: document.getElementById('is-cat').value };
+  var ehBase = document.getElementById('is-ehbase').checked;
+  var obj = { nome:nome, unidade:document.getElementById('is-unid').value, categoria: document.getElementById('is-cat').value };
+  if(ehBase) {
+    var receita = [];
+    document.querySelectorAll('.base-item-row').forEach(function(row) {
+      var insId = row.querySelector('.base-insumo').value;
+      var qtd = parseFloat(row.querySelector('.base-qtd').value)||0;
+      if(insId && qtd>0) receita.push({insumoId:insId, qtd:qtd});
+    });
+    var rendimento = parseFloat(document.getElementById('is-rendimento').value)||0;
+    if(!receita.length) { toast('Adicione pelo menos um insumo na receita da base'); return; }
+    if(rendimento<=0) { toast('Informe o rendimento do lote'); return; }
+    var calc = calcBaseCusto();
+    obj.tipo = 'base'; obj.receita = receita; obj.rendimento = rendimento; obj.custoUnit = calc.custoUnid;
+  } else {
+    obj.tipo = 'simples'; obj.custoUnit = parseFloat(document.getElementById('is-custo').value)||0;
+  }
   if(!editInsumoKey) obj.id = Date.now();
   salvarRegistro('insumos', obj, editInsumoKey).then(function(){
-    toast('Insumo salvo!'); document.getElementById('is-nome').value=''; document.getElementById('is-custo').value=''; document.getElementById('is-cat').value='';
+    toast('Insumo salvo!');
+    document.getElementById('is-nome').value=''; document.getElementById('is-custo').value=''; document.getElementById('is-cat').value='';
+    document.getElementById('is-ehbase').checked=false; document.getElementById('is-ehbase').dispatchEvent(new Event('change'));
+    document.getElementById('is-rendimento').value=''; document.getElementById('is-base-itens').innerHTML='';
     editInsumoKey=null; document.getElementById('btn-cancelar-is').style.display='none';
+    recalcularBases();
   });
 });
 document.getElementById('btn-cancelar-is').addEventListener('click', function(){
   editInsumoKey=null; this.style.display='none';
   document.getElementById('is-nome').value=''; document.getElementById('is-custo').value=''; document.getElementById('is-cat').value='';
+  document.getElementById('is-ehbase').checked=false; document.getElementById('is-ehbase').dispatchEvent(new Event('change'));
+  document.getElementById('is-rendimento').value=''; document.getElementById('is-base-itens').innerHTML='';
+});
+
+// Recalcula o custo por unidade de todas as bases preparadas, usando o preco atual dos insumos crus.
+// Chamado sempre que um insumo cru muda de preco (edicao manual ou importacao de NF-e).
+function recalcularBases() {
+  var bases = D.insumos.filter(function(i){return i.tipo==='base' && i.receita && i.rendimento>0;});
+  var pendentes = bases.map(function(base) {
+    var totalLote = 0;
+    base.receita.forEach(function(it) {
+      var ins = D.insumos.find(function(i){return String(i.id)===String(it.insumoId);});
+      totalLote += (it.qtd||0) * (ins?ins.custoUnit:0);
+    });
+    var novoCusto = totalLote/base.rendimento;
+    if(Math.abs((base.custoUnit||0)-novoCusto)>0.001) {
+      return atualizarRegistro('insumos', base._key, {custoUnit: novoCusto});
+    }
+    return Promise.resolve();
+  });
+  return Promise.all(pendentes);
+}
+document.getElementById('btn-recalc-bases').addEventListener('click', function(){
+  recalcularBases().then(function(){ toast('Custos das bases atualizados!'); });
 });
 
 // Busca (ou cria) um insumo pelo nome, e atualiza o custo unitario com o valor mais recente
 function upsertInsumoPorNome(nome, unidade, valorUnit) {
   var existente = D.insumos.find(function(i){ return (i.nome||'').toLowerCase().trim()===nome.toLowerCase().trim(); });
   if(existente) {
-    return atualizarRegistro('insumos', existente._key, {custoUnit: valorUnit});
+    if(existente.tipo==='base') return Promise.resolve(); // custo de base e calculado pela receita, nao sobrescreve via NF
+    return atualizarRegistro('insumos', existente._key, {custoUnit: valorUnit}).then(function(r){ recalcularBases(); return r; });
   }
-  return salvarRegistro('insumos', {id:Date.now()+Math.random(), nome:nome, unidade:unidade||'un', custoUnit:valorUnit});
+  return salvarRegistro('insumos', {id:Date.now()+Math.random(), nome:nome, unidade:unidade||'un', tipo:'simples', custoUnit:valorUnit});
 }
 
 // --- FICHAS TECNICAS ---
@@ -2180,8 +2284,8 @@ function ftAddItem(insumoId, qtd) {
   var row = document.createElement('div');
   row.className = 'row2 ft-item-row';
   row.style.alignItems = 'flex-end';
-  var opts = D.insumos.map(function(i){ return '<option value="'+i.id+'"'+(String(i.id)===String(insumoId)?' selected':'')+'>'+i.nome+' ('+i.unidade+')</option>'; }).join('');
-  row.innerHTML = '<div class="field"><label>Insumo</label><select class="inp ft-insumo">'+opts+'</select></div>'+
+  var opts = D.insumos.map(function(i){ return '<option value="'+i.id+'"'+(String(i.id)===String(insumoId)?' selected':'')+'>'+i.nome+(i.tipo==='base'?' 🧪':'')+' ('+i.unidade+')</option>'; }).join('');
+  row.innerHTML = '<div class="field"><label>Insumo / Base</label><select class="inp ft-insumo">'+opts+'</select></div>'+
     '<div class="field" style="max-width:110px"><label>Qtd</label><input type="number" step="0.01" class="inp ft-qtd" value="'+(qtd||0)+'"></div>'+
     '<button class="btn btn-r btn-sm" type="button" style="margin-bottom:12px" onclick="this.parentElement.remove();calcFtCusto();">✕</button>';
   wrap.appendChild(row);

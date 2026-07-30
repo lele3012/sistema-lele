@@ -647,25 +647,33 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   </div>
 
   <div class="fin-sub" id="fs-ffichas" style="display:none">
-    <div class="stitle">Ficha técnica por produto</div>
+    <div class="stitle">Ficha técnica por produto e sabor</div>
     <div class="card">
-      <div class="field"><label>Produto</label>
-        <select class="inp" id="ft-produto">
-          <option value="bola">Pão Bola</option>
-          <option value="integral">Pão Integral</option>
-          <option value="las250">Lasanha 250g</option>
-          <option value="las500">Lasanha 500g</option>
-          <option value="mini">Mini Sanduíche</option>
-          <option value="suco">Suco de Laranja</option>
-          <option value="salada">Salada de Frutas</option>
-        </select>
+      <div class="row2">
+        <div class="field"><label>Produto (formato)</label>
+          <select class="inp" id="ft-produto">
+            <option value="bola">Pão Bola</option>
+            <option value="integral">Pão Integral</option>
+            <option value="las250">Lasanha 250g</option>
+            <option value="las500">Lasanha 500g</option>
+            <option value="mini">Mini Sanduíche</option>
+            <option value="suco">Suco de Laranja</option>
+            <option value="salada">Salada de Frutas</option>
+          </select>
+        </div>
+        <div class="field"><label>Sabor cadastrado</label>
+          <select class="inp" id="ft-sabor-select"><option value="">➕ Novo sabor</option></select>
+        </div>
       </div>
+      <div class="field"><label>Nome do sabor</label><input type="text" class="inp" id="ft-sabor" placeholder="Ex: Frango com Catupiry"></div>
       <div id="ft-itens"></div>
       <button class="btn btn-o btn-sm" id="btn-add-item-ft" type="button">+ Adicionar insumo</button>
       <div style="padding:10px 0;display:flex;justify-content:space-between;font-weight:800"><span>Custo de produção:</span><span id="ft-custo">R$ 0,00</span></div>
       <button class="btn btn-g" id="btn-salvar-ft">✅ Salvar ficha técnica</button>
+      <button class="btn btn-o" id="btn-excluir-ft" style="display:none;margin-top:6px">Excluir este sabor</button>
     </div>
     <div class="stitle">Margem por produto</div>
+    <div class="alert alert-i">Cada tipo de pão pode ter vários sabores com custos diferentes. O DRE e os Rankings usam a média dos sabores cadastrados de cada tipo.</div>
     <div id="lista-fichas"></div>
   </div>
 </div>
@@ -2385,49 +2393,117 @@ function calcFtCusto() {
   document.getElementById('ft-custo').textContent = fmt(total);
   return total;
 }
+function popFtSabores() {
+  var sel = document.getElementById('ft-sabor-select');
+  var valorAtual = sel.value;
+  var produto = document.getElementById('ft-produto').value;
+  var sabores = D.fichas.filter(function(f){return f.produto===produto;});
+  sel.innerHTML = '<option value="">➕ Novo sabor</option>'+sabores.map(function(f){ return '<option value="'+f._key+'">'+(f.sabor||'Sem nome')+'</option>'; }).join('');
+  sel.value = valorAtual;
+}
 document.getElementById('ft-produto').addEventListener('change', function() {
+  popFtSabores();
+  document.getElementById('ft-sabor-select').value = '';
+  document.getElementById('ft-sabor').value = '';
   document.getElementById('ft-itens').innerHTML = '';
-  var ficha = D.fichas.find(function(f){return f.produto===this.value;},this);
-  ficha = D.fichas.find(function(f){return f.produto===document.getElementById('ft-produto').value;});
-  if(ficha && ficha.itens) ficha.itens.forEach(function(it){ ftAddItem(it.insumoId, it.qtd); });
+  document.getElementById('btn-excluir-ft').style.display = 'none';
+  calcFtCusto();
+});
+document.getElementById('ft-sabor-select').addEventListener('change', function() {
+  var key = this.value;
+  document.getElementById('ft-itens').innerHTML = '';
+  if(!key) {
+    document.getElementById('ft-sabor').value = '';
+    document.getElementById('btn-excluir-ft').style.display = 'none';
+    calcFtCusto();
+    return;
+  }
+  var ficha = D.fichas.find(function(f){return f._key===key;});
+  if(!ficha) return;
+  document.getElementById('ft-sabor').value = ficha.sabor||'';
+  if(ficha.itens) ficha.itens.forEach(function(it){ ftAddItem(it.insumoId, it.qtd); });
   else calcFtCusto();
+  document.getElementById('btn-excluir-ft').style.display = '';
 });
 document.getElementById('btn-salvar-ft').addEventListener('click', function() {
   var produto = document.getElementById('ft-produto').value;
+  var sabor = document.getElementById('ft-sabor').value.trim();
+  if(!sabor) { toast('Informe o nome do sabor'); return; }
   var itens = [];
   document.querySelectorAll('.ft-item-row').forEach(function(row) {
     var insId = row.querySelector('.ft-insumo').value;
     var qtd = parseFloat(row.querySelector('.ft-qtd').value)||0;
     if(insId && qtd>0) itens.push({insumoId:insId, qtd:qtd});
   });
-  var existente = D.fichas.find(function(f){return f.produto===produto;});
-  var obj = {id: existente?existente.id:Date.now(), produto:produto, itens:itens};
-  salvarRegistro('fichas', obj, existente?existente._key:null).then(function(){ toast('Ficha técnica salva!'); });
-});
-function custoProduto(produtoKey) {
-  var ficha = D.fichas.find(function(f){return f.produto===produtoKey;});
-  if(!ficha || !ficha.itens) return 0;
-  var total = 0;
-  ficha.itens.forEach(function(it) {
-    var ins = D.insumos.find(function(i){return String(i.id)===String(it.insumoId);});
-    total += (it.qtd||0) * (ins?ins.custoUnit:0);
+  if(!itens.length) { toast('Adicione pelo menos um insumo'); return; }
+  var selKey = document.getElementById('ft-sabor-select').value;
+  var existente = selKey ? D.fichas.find(function(f){return f._key===selKey;}) : D.fichas.find(function(f){return f.produto===produto && (f.sabor||'').toLowerCase().trim()===sabor.toLowerCase();});
+  var obj = {id: existente?existente.id:Date.now(), produto:produto, sabor:sabor, itens:itens};
+  salvarRegistro('fichas', obj, existente?existente._key:null).then(function(){
+    toast('Ficha técnica salva!');
+    popFtSabores();
+    document.getElementById('ft-sabor-select').value = existente ? existente._key : '';
   });
-  return total;
+});
+document.getElementById('btn-excluir-ft').addEventListener('click', function() {
+  var key = document.getElementById('ft-sabor-select').value;
+  if(!key) return;
+  if(!confirm('Excluir este sabor?')) return;
+  excluirRegistro('fichas', key).then(function() {
+    document.getElementById('ft-sabor-select').value='';
+    document.getElementById('ft-sabor').value='';
+    document.getElementById('ft-itens').innerHTML='';
+    document.getElementById('btn-excluir-ft').style.display='none';
+    calcFtCusto();
+    popFtSabores();
+  });
+});
+// Custo medio do tipo de produto (media entre os sabores cadastrados). Usado pelo DRE e Rankings.
+function custoProduto(produtoKey) {
+  var fichasDoProduto = D.fichas.filter(function(f){return f.produto===produtoKey;});
+  if(!fichasDoProduto.length) return 0;
+  var custos = fichasDoProduto.map(function(f) {
+    var total = 0;
+    (f.itens||[]).forEach(function(it) {
+      var ins = D.insumos.find(function(i){return String(i.id)===String(it.insumoId);});
+      total += (it.qtd||0) * (ins?ins.custoUnit:0);
+    });
+    return total;
+  });
+  return custos.reduce(function(s,c){return s+c;},0) / custos.length;
 }
 function renderFichas() {
   var el = document.getElementById('lista-fichas'); if(!el) return;
+  popFtSabores();
   var chaves = ['bola','integral','las250','las500','mini','suco','salada'];
-  el.innerHTML = chaves.map(function(k) {
-    var custo = custoProduto(k);
+  var html = '';
+  chaves.forEach(function(k) {
+    var fichasDoProduto = D.fichas.filter(function(f){return f.produto===k;});
     var preco = PRECO[k]||0;
-    var margem = preco - custo;
-    var pct = preco>0 ? (margem/preco*100) : 0;
-    var cor = margem>=0 ? 'var(--g)' : 'var(--r)';
-    return '<div class="card" style="padding:12px 16px">'+
-      '<div style="display:flex;justify-content:space-between"><b>'+NOME[k]+'</b><span style="color:'+cor+';font-weight:800">'+pct.toFixed(0)+'%</span></div>'+
-      '<div style="font-size:12px;color:#888;margin-top:4px">Preço padrão: '+fmt(preco)+' | Custo: '+fmt(custo)+' | Margem: '+fmt(margem)+'</div>'+
-      '</div>';
-  }).join('');
+    html += '<div class="stitle" style="margin-top:16px">'+NOME[k]+'</div>';
+    if(!fichasDoProduto.length) {
+      html += '<div class="empty" style="padding:16px"><p style="font-size:12px;margin:0">Nenhum sabor cadastrado ainda.</p></div>';
+      return;
+    }
+    var custoMedio = custoProduto(k);
+    var margemMedia = preco - custoMedio;
+    var pctMedia = preco>0 ? (margemMedia/preco*100) : 0;
+    var corMedia = margemMedia>=0 ? 'var(--g)' : 'var(--r)';
+    html += '<div class="card" style="padding:10px 16px;background:var(--gl);margin-bottom:6px">'+
+      '<div style="display:flex;justify-content:space-between"><b style="font-size:12px">Média usada no DRE/Ranking</b><span style="color:'+corMedia+';font-weight:800">'+pctMedia.toFixed(0)+'%</span></div>'+
+      '<div style="font-size:11px;color:#888;margin-top:2px">Custo médio: '+fmt(custoMedio)+' | Preço: '+fmt(preco)+' | Margem: '+fmt(margemMedia)+'</div></div>';
+    fichasDoProduto.forEach(function(f) {
+      var custo = 0;
+      (f.itens||[]).forEach(function(it) { var ins=D.insumos.find(function(i){return String(i.id)===String(it.insumoId);}); custo += (it.qtd||0)*(ins?ins.custoUnit:0); });
+      var margem = preco - custo;
+      var pct = preco>0 ? (margem/preco*100) : 0;
+      var cor = margem>=0 ? 'var(--g)' : 'var(--r)';
+      html += '<div class="card" style="padding:12px 16px">'+
+        '<div style="display:flex;justify-content:space-between"><b>'+(f.sabor||'Sem nome')+'</b><span style="color:'+cor+';font-weight:800">'+pct.toFixed(0)+'%</span></div>'+
+        '<div style="font-size:12px;color:#888;margin-top:4px">Custo: '+fmt(custo)+' | Margem: '+fmt(margem)+'</div></div>';
+    });
+  });
+  el.innerHTML = html;
 }
 
 // --- IMPORTAR XML DA NFE ---

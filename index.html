@@ -632,6 +632,18 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <button class="btn btn-sm btn-o" id="btn-recalc-bases" style="height:fit-content">🔄 Recalcular custo das bases</button>
     </div>
     <div id="lista-insumos"></div>
+
+    <div class="stitle">🔗 Unificar insumos duplicados</div>
+    <div class="card">
+      <div class="alert alert-i">Se a mesma matéria-prima chega com nomes diferentes em notas fiscais (ex: "Frango Congelado" e "Peito de Frango Sadia"), unifique aqui. O duplicado vira um apelido do principal — futuras notas com qualquer um dos dois nomes atualizam o mesmo insumo, e as receitas/fichas que já usavam o duplicado são atualizadas automaticamente.</div>
+      <div class="field"><label>Insumo principal (o que vai ficar)</label>
+        <select class="inp" id="un-principal"></select>
+      </div>
+      <div class="field"><label>Insumo duplicado (vai virar apelido do principal e será removido)</label>
+        <select class="inp" id="un-duplicado"></select>
+      </div>
+      <button class="btn btn-g" id="btn-unificar-is">🔗 Unificar</button>
+    </div>
   </div>
 
   <div class="fin-sub" id="fs-ffichas" style="display:none">
@@ -2138,14 +2150,16 @@ function popDatalistInsumos() {
 }
 function renderInsumos() {
   var el = document.getElementById('lista-insumos'); if(!el) return;
+  popUnificarSelects();
   if(!D.insumos.length) { el.innerHTML='<div class="empty"><div class="ico">🧺</div><p>Nenhum insumo ainda.</p></div>'; return; }
   el.innerHTML = D.insumos.slice().sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');}).map(function(i) {
     var catTxt = i.categoria ? CAT_NOMES[i.categoria]||i.categoria : 'Não classificado';
     var catCor = i.categoria ? '#888' : 'var(--r)';
     var baseTag = i.tipo==='base' ? ' <span class="badge badge-y">🧪 Base (rende '+(i.rendimento||0)+' '+i.unidade+')</span>' : '';
+    var apelidosTxt = (i.apelidos&&i.apelidos.length) ? '<div style="font-size:11px;color:#888;margin-top:2px">Também reconhece: '+i.apelidos.join(', ')+'</div>' : '';
     return '<div class="card" style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px">'+
       '<div><b>'+i.nome+'</b>'+baseTag+'<div style="font-size:12px;color:#888">'+i.unidade+' | '+fmt(i.custoUnit)+'/'+i.unidade+'</div>'+
-      '<div style="font-size:11px;color:'+catCor+';margin-top:2px">'+catTxt+'</div></div>'+
+      '<div style="font-size:11px;color:'+catCor+';margin-top:2px">'+catTxt+'</div>'+apelidosTxt+'</div>'+
       '<div style="display:flex;gap:6px">'+
       '<button class="btn btn-sm btn-o" data-editis="'+i._key+'">Editar</button>'+
       '<button class="btn btn-sm btn-r" data-delis="'+i._key+'">Excluir</button>'+
@@ -2167,6 +2181,65 @@ function renderInsumos() {
     if(confirm('Excluir este insumo?')) excluirRegistro('insumos', b.getAttribute('data-delis'));
   });});
 }
+
+// Popula os selects da ferramenta de unificar insumos duplicados
+function popUnificarSelects() {
+  var pEl = document.getElementById('un-principal'), dEl = document.getElementById('un-duplicado');
+  if(!pEl || !dEl) return;
+  var pVal = pEl.value, dVal = dEl.value;
+  var opts = D.insumos.slice().sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');}).map(function(i){
+    return '<option value="'+i._key+'">'+i.nome+' ('+fmt(i.custoUnit)+'/'+i.unidade+')</option>';
+  }).join('');
+  pEl.innerHTML = '<option value="">Selecione...</option>'+opts;
+  dEl.innerHTML = '<option value="">Selecione...</option>'+opts;
+  if(pVal) pEl.value = pVal;
+  if(dVal) dEl.value = dVal;
+}
+
+document.getElementById('btn-unificar-is').addEventListener('click', function() {
+  var pKey = document.getElementById('un-principal').value;
+  var dKey = document.getElementById('un-duplicado').value;
+  if(!pKey || !dKey) { toast('Selecione o insumo principal e o duplicado'); return; }
+  if(pKey===dKey) { toast('Selecione dois insumos diferentes'); return; }
+  var principal = D.insumos.find(function(i){return i._key===pKey;});
+  var duplicado = D.insumos.find(function(i){return i._key===dKey;});
+  if(!principal || !duplicado) return;
+  if(!confirm('Unificar "'+duplicado.nome+'" dentro de "'+principal.nome+'"? Essa ação não pode ser desfeita.')) return;
+
+  // Reatribui referencias do duplicado para o principal em todas as fichas tecnicas
+  var promessas = [];
+  D.fichas.forEach(function(f) {
+    if(!f.itens) return;
+    var mudou = false;
+    var novosItens = f.itens.map(function(it) {
+      if(String(it.insumoId)===String(duplicado.id)) { mudou=true; return Object.assign({}, it, {insumoId: String(principal.id)}); }
+      return it;
+    });
+    if(mudou) promessas.push(atualizarRegistro('fichas', f._key, {itens: novosItens}));
+  });
+  // Reatribui referencias do duplicado dentro de receitas de outras bases
+  D.insumos.forEach(function(i) {
+    if(i.tipo!=='base' || !i.receita || i._key===dKey) return;
+    var mudou = false;
+    var novaReceita = i.receita.map(function(it) {
+      if(String(it.insumoId)===String(duplicado.id)) { mudou=true; return Object.assign({}, it, {insumoId: String(principal.id)}); }
+      return it;
+    });
+    if(mudou) promessas.push(atualizarRegistro('insumos', i._key, {receita: novaReceita}));
+  });
+
+  var novosApelidos = (principal.apelidos||[]).slice();
+  if(novosApelidos.indexOf(duplicado.nome)===-1) novosApelidos.push(duplicado.nome);
+  (duplicado.apelidos||[]).forEach(function(a){ if(novosApelidos.indexOf(a)===-1) novosApelidos.push(a); });
+  promessas.push(atualizarRegistro('insumos', principal._key, {apelidos: novosApelidos}));
+
+  Promise.all(promessas).then(function() {
+    return excluirRegistro('insumos', duplicado._key);
+  }).then(function() {
+    recalcularBases();
+    toast('Insumos unificados! "'+duplicado.nome+'" agora é reconhecido como "'+principal.nome+'".');
+  });
+});
 
 // Mostra/esconde a secao de receita da base quando marca/desmarca a checkbox
 document.getElementById('is-ehbase').addEventListener('change', function() {
@@ -2270,7 +2343,14 @@ document.getElementById('btn-recalc-bases').addEventListener('click', function()
 
 // Busca (ou cria) um insumo pelo nome, e atualiza o custo unitario com o valor mais recente
 function upsertInsumoPorNome(nome, unidade, valorUnit) {
-  var existente = D.insumos.find(function(i){ return (i.nome||'').toLowerCase().trim()===nome.toLowerCase().trim(); });
+  var nomeNorm = nome.toLowerCase().trim();
+  var existente = D.insumos.find(function(i){ return (i.nome||'').toLowerCase().trim()===nomeNorm; });
+  if(!existente) {
+    // Tenta achar por apelido (nomes que ja foram unificados manualmente a este insumo)
+    existente = D.insumos.find(function(i){
+      return (i.apelidos||[]).some(function(a){ return (a||'').toLowerCase().trim()===nomeNorm; });
+    });
+  }
   if(existente) {
     if(existente.tipo==='base') return Promise.resolve(); // custo de base e calculado pela receita, nao sobrescreve via NF
     return atualizarRegistro('insumos', existente._key, {custoUnit: valorUnit}).then(function(r){ recalcularBases(); return r; });

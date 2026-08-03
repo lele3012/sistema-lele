@@ -371,16 +371,28 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <select class="inp" id="rel-cli" style="display:none"><option value="">Selecione...</option></select>
       <div id="rel-cli-drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:8px;max-height:220px;overflow-y:auto;z-index:20;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
     </div>
-    <div class="row2">
-      <div class="field"><label>Mes</label>
-        <select class="inp" id="rel-mes">
-          <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
-          <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
-          <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
-          <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
-        </select>
+    <div style="display:flex;gap:6px;margin-bottom:10px">
+      <button type="button" class="btn btn-sm btn-g rel-filtro-btn" data-modo="mes">Mês</button>
+      <button type="button" class="btn btn-sm btn-o rel-filtro-btn" data-modo="periodo">Período personalizado</button>
+    </div>
+    <div id="rel-modo-mes">
+      <div class="row2">
+        <div class="field"><label>Mes</label>
+          <select class="inp" id="rel-mes">
+            <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
+            <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+            <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+            <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+          </select>
+        </div>
+        <div class="field"><label>Ano</label><input type="number" class="inp" id="rel-ano" value="2026"></div>
       </div>
-      <div class="field"><label>Ano</label><input type="number" class="inp" id="rel-ano" value="2026"></div>
+    </div>
+    <div id="rel-modo-periodo" style="display:none">
+      <div class="row2">
+        <div class="field"><label>De</label><input type="date" class="inp" id="rel-data-ini"></div>
+        <div class="field"><label>Até</label><input type="date" class="inp" id="rel-data-fim"></div>
+      </div>
     </div>
     <button class="btn btn-g" id="btn-gerar-rel">Gerar relatorio</button>
   </div>
@@ -1628,21 +1640,45 @@ function limparProd() {
 }
 
 // ===== RELATORIO =====
+var relFiltroModo = 'mes';
+document.querySelectorAll('.rel-filtro-btn').forEach(function(b) {
+  b.addEventListener('click', function() {
+    relFiltroModo = this.getAttribute('data-modo');
+    document.querySelectorAll('.rel-filtro-btn').forEach(function(x){ x.classList.remove('btn-g'); x.classList.add('btn-o'); });
+    this.classList.remove('btn-o'); this.classList.add('btn-g');
+    document.getElementById('rel-modo-mes').style.display = relFiltroModo==='mes' ? '' : 'none';
+    document.getElementById('rel-modo-periodo').style.display = relFiltroModo==='periodo' ? '' : 'none';
+  });
+});
 document.getElementById('btn-gerar-rel').addEventListener('click', function() {
   var cliId=parseInt(document.getElementById('rel-cli').value);
-  var mes=parseInt(document.getElementById('rel-mes').value);
-  var ano=parseInt(document.getElementById('rel-ano').value);
   var area=document.getElementById('area-relatorio');
   if(!cliId){area.innerHTML='<div class="alert alert-r">Selecione o cliente.</div>';return;}
   var cli=D.clientes.find(function(c){return c.id===cliId;});
   if(!cli) { area.innerHTML='<div class="alert alert-r">Cliente não encontrado (pode ter sido excluído). Atualize a página e tente novamente.</div>'; return; }
-  var ents=D.entregas.filter(function(e){
-    var d=new Date(e.data+'T00:00:00');
-    return e.clienteId===cliId&&d.getMonth()+1===mes&&d.getFullYear()===ano;
-  }).sort(function(a,b){return a.data.localeCompare(b.data);});
+
+  var ents, periodoLabel, periodoArq, mes, ano;
+  if(relFiltroModo==='periodo') {
+    var dIni = document.getElementById('rel-data-ini').value;
+    var dFim = document.getElementById('rel-data-fim').value;
+    if(!dIni || !dFim) { area.innerHTML='<div class="alert alert-r">Informe a data inicial e final.</div>'; return; }
+    if(dIni>dFim) { area.innerHTML='<div class="alert alert-r">A data inicial não pode ser depois da data final.</div>'; return; }
+    ents = D.entregas.filter(function(e){ return e.clienteId===cliId && e.data>=dIni && e.data<=dFim; }).sort(function(a,b){return a.data.localeCompare(b.data);});
+    periodoLabel = fdata(dIni)+' a '+fdata(dFim);
+    periodoArq = dIni.replace(/-/g,'')+'_'+dFim.replace(/-/g,'');
+  } else {
+    mes=parseInt(document.getElementById('rel-mes').value);
+    ano=parseInt(document.getElementById('rel-ano').value);
+    ents = D.entregas.filter(function(e){
+      var d=new Date(e.data+'T00:00:00');
+      return e.clienteId===cliId&&d.getMonth()+1===mes&&d.getFullYear()===ano;
+    }).sort(function(a,b){return a.data.localeCompare(b.data);});
+    periodoLabel = MESES[mes]+'/'+ano;
+    periodoArq = String(mes).padStart(2,'0')+'_'+ano;
+  }
   if(!ents.length){area.innerHTML='<div class="alert alert-y">Nenhuma entrega neste periodo.</div>';return;}
   var total=0,trocaTotal=0;
-  var html='<div class="stitle">'+MESES[mes]+' '+ano+' — '+(cli.fantasia||cli.nome)+'</div>';
+  var html='<div class="stitle">'+periodoLabel+' — '+(cli.fantasia||cli.nome)+'</div>';
   html+=ents.map(function(e){
     total+=e.valorTotal;trocaTotal+=e.valorTroca||0;
     var prods=Object.keys(e.produtos||{}).map(function(k){return NOME[k]+': '+e.produtos[k]+'un';}).join(', ');
@@ -1652,7 +1688,7 @@ document.getElementById('btn-gerar-rel').addEventListener('click', function() {
   html+='<div class="rg"><div class="rbox"><label>Entregas</label><b>'+ents.length+'</b></div><div class="rbox hl"><label>Total a pagar</label><b>'+fmt(total)+'</b></div></div>';
   area.innerHTML=html;
   document.getElementById('btn-pdf-area').style.display='block';
-  window._relData={cli:cli,ents:ents,mes:mes,ano:ano,total:total,trocaTotal:trocaTotal};
+  window._relData={cli:cli,ents:ents,periodoLabel:periodoLabel,periodoArq:periodoArq,total:total,trocaTotal:trocaTotal};
 });
 
 // ===== DASHBOARD =====
@@ -1761,7 +1797,7 @@ document.getElementById('btn-pdf-rel').addEventListener('click', function() {
   doc.setTextColor(255,255,255); doc.setFontSize(18); doc.setFont('helvetica','bold');
   doc.text('LELE DA KUKA', m, 13);
   doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(200,240,210);
-  doc.text('Relatorio de Pedidos — '+MESES[d.mes]+'/'+d.ano, m, 20);
+  doc.text('Relatorio de Pedidos — '+d.periodoLabel, m, 20);
   doc.text('CNPJ: 10.597.121/0001-16  |  (82) 99673-5051', m, 26);
   var agora = new Date();
   doc.text('Gerado: '+agora.toLocaleDateString('pt-BR'), pw-m, 26, {align:'right'});
@@ -1854,7 +1890,7 @@ document.getElementById('btn-pdf-rel').addEventListener('click', function() {
   doc.text('(82) 99673-5051', pw-m, 287, {align:'right'});
 
   var nomeArq = (d.cli.fantasia||d.cli.nome).replace(/[^a-zA-Z0-9]/g,'_');
-  doc.save('Lele_'+nomeArq+'_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.pdf');
+  doc.save('Lele_'+nomeArq+'_'+d.periodoArq+'.pdf');
   toast('PDF gerado!');
 });
 

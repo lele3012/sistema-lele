@@ -752,6 +752,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     </div>
     <button class="btn btn-g" id="btn-salvar-cli">Salvar cliente</button>
     <button class="btn btn-o" id="btn-cancelar-cli" style="margin-top:6px">Cancelar</button>
+    <button class="btn btn-r" id="btn-excluir-cli" style="display:none;margin-top:6px">🗑 Excluir cliente</button>
   </div>
 </div>
 
@@ -1122,6 +1123,7 @@ function abrirModal(idx) {
       });
     }
   }
+  document.getElementById('btn-excluir-cli').style.display = editIdx!==null ? '' : 'none';
   document.getElementById('modal-cli').classList.add('on');
 }
 
@@ -1130,6 +1132,18 @@ function fecharModal() { document.getElementById('modal-cli').classList.remove('
 document.getElementById('btn-novo').addEventListener('click', function() { abrirModal(); });
 document.getElementById('btn-mclose').addEventListener('click', fecharModal);
 document.getElementById('btn-cancelar-cli').addEventListener('click', fecharModal);
+document.getElementById('btn-excluir-cli').addEventListener('click', function() {
+  if(editIdx===null) return;
+  var c = D.clientes[editIdx];
+  if(!c) return;
+  var qtdEntregas = D.entregas.filter(function(e){return e.clienteId===c.id;}).length;
+  var aviso = qtdEntregas>0 ? '\n\nAtenção: esse cliente tem '+qtdEntregas+' entrega(s) registrada(s) no histórico. Elas NÃO serão apagadas, mas passarão a mostrar "Cliente não encontrado" nos relatórios.' : '';
+  if(!confirm('Excluir o cliente "'+(c.fantasia||c.nome)+'"?'+aviso)) return;
+  excluirRegistro('clientes', c._key).then(function(){
+    fecharModal();
+    toast('Cliente excluído.');
+  });
+});
 
 document.getElementById('btn-salvar-cli').addEventListener('click', function() {
   var nome = document.getElementById('c-nome').value.trim();
@@ -3241,4 +3255,4 @@ carregar();
 </script>
 </body>
 </html>
- 
+  

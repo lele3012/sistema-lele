@@ -434,6 +434,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="ffluxo">Fluxo de Caixa</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fdre">DRE Mensal</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="franking">Rankings</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="frelat">Relatórios</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fboletos">Boletos a Pagar</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="ffornecedores">Fornecedores</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="frecor">Recorrentes</button>
@@ -485,6 +486,67 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     </div>
     <div id="ranking-area"></div>
     <div id="btn-xls-rank-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-rank">📊 Exportar Excel</button></div>
+  </div>
+
+  <div class="fin-sub" id="fs-frelat" style="display:none">
+    <div class="card" style="display:flex;gap:6px;flex-wrap:wrap;padding:10px">
+      <button class="btn btn-sm btn-g relat-sub-btn" data-rs="rtrocas">🔄 Trocas por cliente</button>
+      <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rinad">💰 Inadimplência</button>
+      <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rinativos">⚠️ Clientes inativos</button>
+      <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rticket">📊 Ticket médio</button>
+    </div>
+
+    <div class="relat-sub" id="rs-rtrocas">
+      <div class="card">
+        <div class="row2">
+          <div class="field"><label>Mes</label>
+            <select class="inp" id="rt-mes">
+              <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
+              <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+              <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+              <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+          </div>
+          <div class="field"><label>Ano</label><input type="number" class="inp" id="rt-ano" value="2026"></div>
+        </div>
+        <button class="btn btn-g" id="btn-gerar-trocas">Gerar relatório</button>
+      </div>
+      <div id="trocas-area"></div>
+      <div id="btn-xls-trocas-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-trocas">📊 Exportar Excel</button></div>
+    </div>
+
+    <div class="relat-sub" id="rs-rinad" style="display:none">
+      <div id="inad-area"></div>
+      <div id="btn-xls-inad-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-inad">📊 Exportar Excel</button></div>
+    </div>
+
+    <div class="relat-sub" id="rs-rinativos" style="display:none">
+      <div class="card">
+        <div class="field"><label>Considerar inativo sem comprar há mais de (dias)</label><input type="number" class="inp" id="ri-dias" value="15"></div>
+        <button class="btn btn-g" id="btn-gerar-inativos">Gerar relatório</button>
+      </div>
+      <div id="inativos-area"></div>
+      <div id="btn-xls-inativos-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-inativos">📊 Exportar Excel</button></div>
+    </div>
+
+    <div class="relat-sub" id="rs-rticket" style="display:none">
+      <div class="card">
+        <div class="row2">
+          <div class="field"><label>Mes</label>
+            <select class="inp" id="tk-mes">
+              <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
+              <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+              <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+              <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+          </div>
+          <div class="field"><label>Ano</label><input type="number" class="inp" id="tk-ano" value="2026"></div>
+        </div>
+        <button class="btn btn-g" id="btn-gerar-ticket">Gerar relatório</button>
+      </div>
+      <div id="ticket-area"></div>
+      <div id="btn-xls-ticket-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-ticket">📊 Exportar Excel</button></div>
+    </div>
   </div>
 
   <div class="fin-sub" id="fs-fboletos" style="display:none">
@@ -919,6 +981,10 @@ function carregar() {
   if(document.getElementById('dre-ano')) document.getElementById('dre-ano').value = anoAtual;
   if(document.getElementById('rk-mes')) document.getElementById('rk-mes').value = mesAtual;
   if(document.getElementById('rk-ano')) document.getElementById('rk-ano').value = anoAtual;
+  if(document.getElementById('rt-mes')) document.getElementById('rt-mes').value = mesAtual;
+  if(document.getElementById('rt-ano')) document.getElementById('rt-ano').value = anoAtual;
+  if(document.getElementById('tk-mes')) document.getElementById('tk-mes').value = mesAtual;
+  if(document.getElementById('tk-ano')) document.getElementById('tk-ano').value = anoAtual;
 
   // Se depois de 12s ainda estiver carregando, mostra erro em vez de travar para sempre
   var travouTimeout = setTimeout(function() {
@@ -1050,6 +1116,19 @@ document.querySelectorAll('.fin-tab-btn').forEach(function(b) {
     this.classList.remove('btn-o'); this.classList.add('btn-g');
     document.querySelectorAll('.fin-sub').forEach(function(x){ x.style.display='none'; });
     document.getElementById('fs-'+fs).style.display='';
+    if(fs==='frelat') { gerarTrocas(); gerarInad(); }
+  });
+});
+
+document.querySelectorAll('.relat-sub-btn').forEach(function(b) {
+  b.addEventListener('click', function() {
+    var rs = this.getAttribute('data-rs');
+    document.querySelectorAll('.relat-sub-btn').forEach(function(x){ x.classList.remove('btn-g'); x.classList.add('btn-o'); });
+    this.classList.remove('btn-o'); this.classList.add('btn-g');
+    document.querySelectorAll('.relat-sub').forEach(function(x){ x.style.display='none'; });
+    document.getElementById('rs-'+rs).style.display='';
+    if(rs==='rinativos') gerarInativos();
+    if(rs==='rticket') gerarTicket();
   });
 });
 
@@ -3190,6 +3269,251 @@ document.getElementById('btn-xls-rank').addEventListener('click', function() {
   XLSX.utils.book_append_sheet(wb, wsConta, 'Conta-Banco');
 
   XLSX.writeFile(wb, 'Lele_Rankings_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.xlsx');
+  toast('Excel gerado!');
+});
+
+// ===== RELATORIOS: TROCAS POR CLIENTE =====
+function gerarTrocas() {
+  var mesEl = document.getElementById('rt-mes'), anoEl = document.getElementById('rt-ano');
+  if(!mesEl || !anoEl) return;
+  var mes = parseInt(mesEl.value), ano = parseInt(anoEl.value);
+
+  var ents = D.entregas.filter(function(e){ var d=new Date(e.data+'T00:00:00'); return d.getMonth()+1===mes && d.getFullYear()===ano; });
+  var porCliente = {};
+  ents.forEach(function(e){
+    var id = e.clienteId;
+    if(!porCliente[id]) porCliente[id] = {qtdComprada:0, qtdTrocada:0, valorTroca:0, entregasComTroca:0, porProduto:{}};
+    var p = porCliente[id];
+    Object.keys(e.produtos||{}).forEach(function(k){ p.qtdComprada += e.produtos[k]||0; });
+    var trocaNessaEntrega = 0;
+    Object.keys(e.trocas||{}).forEach(function(k){
+      var q = e.trocas[k]||0;
+      if(q>0) {
+        p.qtdTrocada += q;
+        trocaNessaEntrega += q;
+        p.porProduto[k] = (p.porProduto[k]||0) + q;
+      }
+    });
+    if(trocaNessaEntrega>0) p.entregasComTroca++;
+    p.valorTroca += (e.valorTroca||0);
+  });
+
+  var lista = Object.keys(porCliente).map(function(id){
+    var c = D.clientes.find(function(x){return x.id==id;});
+    var p = porCliente[id];
+    var pct = p.qtdComprada>0 ? (p.qtdTrocada/p.qtdComprada*100) : 0;
+    var prodTop = Object.keys(p.porProduto).sort(function(a,b){return p.porProduto[b]-p.porProduto[a];})
+      .map(function(k){return (NOME[k]||k)+': '+p.porProduto[k];}).join(', ');
+    return {nome: c?(c.fantasia||c.nome):'Cliente', qtdComprada:p.qtdComprada, qtdTrocada:p.qtdTrocada, valorTroca:p.valorTroca, entregasComTroca:p.entregasComTroca, pct:pct, prodTop:prodTop};
+  }).filter(function(r){ return r.qtdTrocada>0; }).sort(function(a,b){return b.pct-a.pct;});
+
+  var html = '<div class="stitle" style="margin-top:0">Trocas por cliente</div>';
+  if(!lista.length) html += '<div class="empty"><div class="ico">🔄</div><p>Nenhuma troca registrada no período.</p></div>';
+  else lista.forEach(function(r){
+    var acimaLimite = r.pct > 20;
+    html += '<div class="card" style="padding:12px 16px'+(acimaLimite?';border:1px solid var(--r);background:var(--rl)':'')+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+      '<b style="font-size:14px">'+r.nome+'</b>'+
+      '<span class="badge '+(acimaLimite?'badge-r':'badge-g')+'">'+r.pct.toFixed(1)+'% trocado</span>'+
+      '</div>'+
+      '<div style="font-size:11px;color:#888;margin-top:6px">Comprou '+r.qtdComprada+' un | Trocou '+r.qtdTrocada+' un em '+r.entregasComTroca+' entrega(s) | Valor de troca: '+fmt(r.valorTroca)+'</div>'+
+      (r.prodTop ? '<div style="font-size:11px;color:#888;margin-top:2px">Produtos: '+r.prodTop+'</div>' : '') +
+      (acimaLimite ? '<div style="font-size:11px;color:var(--r);font-weight:700;margin-top:4px">⚠️ Acima do limite de 20% da política de troca</div>' : '') +
+      '</div>';
+  });
+
+  document.getElementById('trocas-area').innerHTML = html;
+  window._trocasData = {mes:mes, ano:ano, lista:lista};
+  document.getElementById('btn-xls-trocas-area').style.display = lista.length ? 'block' : 'none';
+}
+document.getElementById('btn-gerar-trocas').addEventListener('click', gerarTrocas);
+document.getElementById('btn-xls-trocas').addEventListener('click', function() {
+  if(!window._trocasData || !window._trocasData.lista.length) return;
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var d = window._trocasData;
+  var rows = [['Cliente','Un. compradas','Un. trocadas','% trocado','Valor troca (R$)','Entregas com troca','Produtos mais trocados']];
+  d.lista.forEach(function(r){ rows.push([r.nome, r.qtdComprada, r.qtdTrocada, r.pct.toFixed(1), r.valorTroca, r.entregasComTroca, r.prodTop]); });
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:26},{wch:14},{wch:14},{wch:10},{wch:16},{wch:16},{wch:40}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Trocas');
+  XLSX.writeFile(wb, 'Lele_Trocas_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.xlsx');
+  toast('Excel gerado!');
+});
+
+// ===== RELATORIOS: INADIMPLENCIA POR CLIENTE =====
+function gerarInad() {
+  var el = document.getElementById('inad-area');
+  if(!el) return;
+  var hoje = new Date(); hoje.setHours(0,0,0,0);
+  var porCliente = {};
+  D.entregas.forEach(function(e) {
+    if(e.pago) return;
+    if(e.pagamento!=='prazo' && e.pagamento!=='boleto7') return;
+    var de = new Date(e.data+'T00:00:00');
+    var venc;
+    if(e.pagamento==='boleto7') { venc=new Date(de); venc.setDate(venc.getDate()+7); }
+    else { venc=new Date(de.getFullYear(),de.getMonth()+1,5); }
+    if(venc>=hoje) return; // so entra quem esta vencido
+    var id = e.clienteId;
+    if(!porCliente[id]) porCliente[id] = {valor:0, itens:0, vencMaisAntigo:venc};
+    porCliente[id].valor += (e.valorTotal||0);
+    porCliente[id].itens++;
+    if(venc < porCliente[id].vencMaisAntigo) porCliente[id].vencMaisAntigo = venc;
+  });
+
+  var lista = Object.keys(porCliente).map(function(id){
+    var c = D.clientes.find(function(x){return x.id==id;});
+    var p = porCliente[id];
+    var dias = Math.floor((hoje - p.vencMaisAntigo)/86400000);
+    var faixa = dias<=7 ? 'Até 7 dias' : dias<=30 ? '8-30 dias' : 'Mais de 30 dias';
+    return {nome: c?(c.fantasia||c.nome):'Cliente', valor:p.valor, itens:p.itens, dias:dias, faixa:faixa};
+  }).sort(function(a,b){return b.dias-a.dias;});
+
+  var totalVenc = lista.reduce(function(s,r){return s+r.valor;},0);
+  var html = '<div class="stitle" style="margin-top:0">Inadimplência por cliente</div>';
+  if(!lista.length) { html += '<div class="empty"><div class="ico">✅</div><p>Nenhum cliente com boleto vencido.</p></div>'; }
+  else {
+    html += '<div class="card hl" style="padding:12px 16px;margin-bottom:10px"><label>Total vencido</label><b style="font-size:18px;color:var(--r)">'+fmt(totalVenc)+'</b></div>';
+    lista.forEach(function(r){
+      var cor = r.dias>30 ? 'var(--r)' : r.dias>7 ? '#856404' : 'var(--y, #856404)';
+      html += '<div class="card" style="padding:12px 16px">'+
+        '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<b style="font-size:14px">'+r.nome+'</b>'+
+        '<b style="font-size:15px;color:var(--r)">'+fmt(r.valor)+'</b>'+
+        '</div>'+
+        '<div style="font-size:11px;color:#888;margin-top:6px">'+r.itens+' entrega(s) em aberto | '+r.faixa+' de atraso</div>'+
+        '<div style="margin-top:4px"><span class="badge badge-r">'+r.dias+' dia(s) em atraso</span></div>'+
+        '</div>';
+    });
+  }
+  el.innerHTML = html;
+  window._inadData = {lista:lista};
+  document.getElementById('btn-xls-inad-area').style.display = lista.length ? 'block' : 'none';
+}
+document.getElementById('btn-xls-inad').addEventListener('click', function() {
+  if(!window._inadData || !window._inadData.lista.length) return;
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var rows = [['Cliente','Valor vencido (R$)','Entregas em aberto','Dias em atraso (mais antigo)','Faixa']];
+  window._inadData.lista.forEach(function(r){ rows.push([r.nome, r.valor, r.itens, r.dias, r.faixa]); });
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:26},{wch:18},{wch:18},{wch:20},{wch:16}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Inadimplencia');
+  XLSX.writeFile(wb, 'Lele_Inadimplencia_'+new Date().toISOString().split('T')[0]+'.xlsx');
+  toast('Excel gerado!');
+});
+
+// ===== RELATORIOS: CLIENTES INATIVOS / EM QUEDA =====
+function gerarInativos() {
+  var el = document.getElementById('inativos-area');
+  if(!el) return;
+  var diasLimite = parseInt(document.getElementById('ri-dias').value) || 15;
+  var hoje = new Date(); hoje.setHours(0,0,0,0);
+
+  var porCliente = {};
+  D.entregas.forEach(function(e) {
+    var id = e.clienteId;
+    if(!porCliente[id]) porCliente[id] = {ultimaData:null, valores:[], entregas:0};
+    var d = new Date(e.data+'T00:00:00');
+    if(!porCliente[id].ultimaData || d > porCliente[id].ultimaData) porCliente[id].ultimaData = d;
+    porCliente[id].valores.push(e.valorTotal||0);
+    porCliente[id].entregas++;
+  });
+
+  var tresM = new Date(hoje); tresM.setMonth(tresM.getMonth()-3);
+
+  var lista = D.clientes.map(function(c){
+    var p = porCliente[c.id];
+    if(!p || !p.ultimaData) return null; // cliente sem nenhuma entrega ainda, nao entra nesse relatorio
+    var diasSemComprar = Math.floor((hoje - p.ultimaData)/86400000);
+    if(diasSemComprar < diasLimite) return null;
+    var ticketMedio = p.valores.reduce(function(s,v){return s+v;},0) / p.valores.length;
+    return {nome: c.fantasia||c.nome, ultimaData: p.ultimaData, diasSemComprar: diasSemComprar, ticketMedio: ticketMedio, totalEntregasHistorico: p.entregas};
+  }).filter(Boolean).sort(function(a,b){return b.diasSemComprar-a.diasSemComprar;});
+
+  var html = '<div class="stitle" style="margin-top:0">Clientes inativos / sem comprar há '+diasLimite+'+ dias</div>';
+  if(!lista.length) { html += '<div class="empty"><div class="ico">✅</div><p>Nenhum cliente parado — todos compraram nos últimos '+diasLimite+' dias.</p></div>'; }
+  else lista.forEach(function(r){
+    html += '<div class="card" style="padding:12px 16px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+      '<b style="font-size:14px">'+r.nome+'</b>'+
+      '<span class="badge badge-r">'+r.diasSemComprar+' dias parado</span>'+
+      '</div>'+
+      '<div style="font-size:11px;color:#888;margin-top:6px">Última compra: '+fdataObj(r.ultimaData)+' | Ticket médio histórico: '+fmt(r.ticketMedio)+' | '+r.totalEntregasHistorico+' entrega(s) no total</div>'+
+      '</div>';
+  });
+  el.innerHTML = html;
+  window._inativosData = {lista:lista, diasLimite:diasLimite};
+  document.getElementById('btn-xls-inativos-area').style.display = lista.length ? 'block' : 'none';
+}
+document.getElementById('btn-gerar-inativos').addEventListener('click', gerarInativos);
+document.getElementById('btn-xls-inativos').addEventListener('click', function() {
+  if(!window._inativosData || !window._inativosData.lista.length) return;
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var rows = [['Cliente','Dias sem comprar','Última compra','Ticket médio histórico (R$)','Total de entregas (histórico)']];
+  window._inativosData.lista.forEach(function(r){ rows.push([r.nome, r.diasSemComprar, fdataObj(r.ultimaData), r.ticketMedio, r.totalEntregasHistorico]); });
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:26},{wch:16},{wch:14},{wch:22},{wch:22}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Inativos');
+  XLSX.writeFile(wb, 'Lele_Clientes_Inativos_'+new Date().toISOString().split('T')[0]+'.xlsx');
+  toast('Excel gerado!');
+});
+
+// ===== RELATORIOS: TICKET MEDIO E FREQUENCIA POR CLIENTE =====
+function gerarTicket() {
+  var mesEl = document.getElementById('tk-mes'), anoEl = document.getElementById('tk-ano');
+  if(!mesEl || !anoEl) return;
+  var mes = parseInt(mesEl.value), ano = parseInt(anoEl.value);
+
+  var ents = D.entregas.filter(function(e){ var d=new Date(e.data+'T00:00:00'); return d.getMonth()+1===mes && d.getFullYear()===ano; });
+  var porCliente = {};
+  ents.forEach(function(e){
+    var id = e.clienteId;
+    if(!porCliente[id]) porCliente[id] = {valores:[], datas:[]};
+    porCliente[id].valores.push(e.valorTotal||0);
+    porCliente[id].datas.push(new Date(e.data+'T00:00:00'));
+  });
+
+  var lista = Object.keys(porCliente).map(function(id){
+    var c = D.clientes.find(function(x){return x.id==id;});
+    var p = porCliente[id];
+    var ticketMedio = p.valores.reduce(function(s,v){return s+v;},0) / p.valores.length;
+    var datasOrdenadas = p.datas.slice().sort(function(a,b){return a-b;});
+    var intervalos = [];
+    for(var i=1;i<datasOrdenadas.length;i++) intervalos.push((datasOrdenadas[i]-datasOrdenadas[i-1])/86400000);
+    var intervaloMedio = intervalos.length ? (intervalos.reduce(function(s,v){return s+v;},0)/intervalos.length) : null;
+    return {nome: c?(c.fantasia||c.nome):'Cliente', ticketMedio:ticketMedio, entregas:p.valores.length, intervaloMedio:intervaloMedio};
+  }).sort(function(a,b){return b.ticketMedio-a.ticketMedio;});
+
+  var html = '<div class="stitle" style="margin-top:0">Ticket médio e frequência por cliente</div>';
+  if(!lista.length) html += '<div class="empty"><div class="ico">📊</div><p>Nenhuma venda no período.</p></div>';
+  else lista.forEach(function(r){
+    html += '<div class="card" style="padding:12px 16px"><div style="display:flex;justify-content:space-between;align-items:center">'+
+      '<b style="font-size:14px">'+r.nome+'</b>'+
+      '<b style="font-size:15px;color:var(--g)">'+fmt(r.ticketMedio)+'</b></div>'+
+      '<div style="font-size:11px;color:#888;margin-top:4px">'+r.entregas+' entrega(s) no período'+
+      (r.intervaloMedio!==null ? ' | Intervalo médio entre compras: '+r.intervaloMedio.toFixed(0)+' dia(s)' : ' | dados insuficientes para intervalo médio')+
+      '</div></div>';
+  });
+
+  document.getElementById('ticket-area').innerHTML = html;
+  window._ticketData = {mes:mes, ano:ano, lista:lista};
+  document.getElementById('btn-xls-ticket-area').style.display = lista.length ? 'block' : 'none';
+}
+document.getElementById('btn-gerar-ticket').addEventListener('click', gerarTicket);
+document.getElementById('btn-xls-ticket').addEventListener('click', function() {
+  if(!window._ticketData || !window._ticketData.lista.length) return;
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var d = window._ticketData;
+  var rows = [['Cliente','Ticket médio (R$)','Entregas no período','Intervalo médio entre compras (dias)']];
+  d.lista.forEach(function(r){ rows.push([r.nome, r.ticketMedio, r.entregas, r.intervaloMedio!==null ? r.intervaloMedio.toFixed(0) : 'dados insuficientes']); });
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:26},{wch:16},{wch:16},{wch:26}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Ticket Medio');
+  XLSX.writeFile(wb, 'Lele_Ticket_Medio_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.xlsx');
   toast('Excel gerado!');
 });
 

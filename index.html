@@ -708,6 +708,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <div class="div"></div>
     <div class="field"><label>Nome / Razao social</label><input type="text" class="inp" id="c-nome" placeholder="Nome do cliente"></div>
     <div class="field"><label>Nome fantasia</label><input type="text" class="inp" id="c-fantasia" placeholder="Opcional"></div>
+    <div id="cli-dup-msg"></div>
     <div class="row2">
       <div class="field"><label>Telefone</label><input type="text" class="inp" id="c-tel"></div>
       <div class="field"><label>Pagamento</label>
@@ -1107,6 +1108,7 @@ function abrirModal(idx) {
   document.getElementById('c-pgto').value = 'prazo';
   document.getElementById('c-seg').value = '';
   document.getElementById('cnpj-msg').innerHTML = '';
+  document.getElementById('cli-dup-msg').innerHTML = '';
   if(editIdx !== null) {
     var c = D.clientes[editIdx];
     document.getElementById('c-cnpj').value = c.cnpj||'';
@@ -1145,9 +1147,42 @@ document.getElementById('btn-excluir-cli').addEventListener('click', function() 
   });
 });
 
+// Verifica se CNPJ, nome ou fantasia ja existem em outro cliente cadastrado
+function checarDuplicidadeCliente() {
+  var msgEl = document.getElementById('cli-dup-msg');
+  var cnpj = document.getElementById('c-cnpj').value.replace(/\D/g,'');
+  var nome = document.getElementById('c-nome').value.trim().toLowerCase();
+  var fantasia = document.getElementById('c-fantasia').value.trim().toLowerCase();
+  var duplicados = D.clientes.filter(function(c, i) {
+    if(editIdx!==null && i===editIdx) return false;
+    var cCnpj = (c.cnpj||'').replace(/\D/g,'');
+    var cNome = (c.nome||'').trim().toLowerCase();
+    var cFantasia = (c.fantasia||'').trim().toLowerCase();
+    var bateCnpj = cnpj.length>=11 && cCnpj && cnpj===cCnpj;
+    var bateNome = nome && cNome && nome===cNome;
+    var bateFantasia = fantasia && cFantasia && fantasia===cFantasia;
+    return bateCnpj || bateNome || bateFantasia;
+  });
+  if(duplicados.length) {
+    var nomes = duplicados.map(function(c){return c.fantasia||c.nome;}).join(', ');
+    msgEl.innerHTML = '<div class="alert alert-r">⚠️ Já existe cliente cadastrado com CNPJ ou nome parecido: <b>'+nomes+'</b>. Confira antes de salvar pra não duplicar.</div>';
+  } else {
+    msgEl.innerHTML = '';
+  }
+  return duplicados;
+}
+['c-cnpj','c-nome','c-fantasia'].forEach(function(id) {
+  document.getElementById(id).addEventListener('input', checarDuplicidadeCliente);
+});
+
 document.getElementById('btn-salvar-cli').addEventListener('click', function() {
   var nome = document.getElementById('c-nome').value.trim();
   if(!nome) { toast('Preencha o nome do cliente'); return; }
+  var duplicados = checarDuplicidadeCliente();
+  if(duplicados.length) {
+    var nomesDup = duplicados.map(function(c){return c.fantasia||c.nome;}).join(', ');
+    if(!confirm('Já existe cadastro parecido: '+nomesDup+'.\n\nSalvar mesmo assim?')) return;
+  }
   var precos = {};
   ['bola','integral','las250','las500','mini','suco','salada'].forEach(function(k) {
     var v = parseFloat(document.getElementById('c-p-'+k).value);

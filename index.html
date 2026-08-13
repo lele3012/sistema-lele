@@ -668,6 +668,19 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <button class="btn btn-g" id="btn-salvar-nf">✅ Salvar nota fiscal</button>
     </div>
     <div class="stitle">Notas cadastradas</div>
+    <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:12px">
+      <div class="field" style="flex:1;min-width:120px;margin-bottom:0"><label>Mês</label>
+        <select class="inp" id="nf-filtro-mes">
+          <option value="0">Todos</option>
+          <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
+          <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+          <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+          <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1;min-width:100px;margin-bottom:0"><label>Ano</label><input type="number" class="inp" id="nf-filtro-ano" value="2026"></div>
+      <button class="btn btn-o btn-sm" id="btn-xls-notas" style="margin-top:0;height:44px">📊 Exportar Excel</button>
+    </div>
     <div id="lista-notas"></div>
   </div>
 
@@ -985,6 +998,7 @@ function carregar() {
   if(document.getElementById('rt-ano')) document.getElementById('rt-ano').value = anoAtual;
   if(document.getElementById('tk-mes')) document.getElementById('tk-mes').value = mesAtual;
   if(document.getElementById('tk-ano')) document.getElementById('tk-ano').value = anoAtual;
+  if(document.getElementById('nf-filtro-ano')) document.getElementById('nf-filtro-ano').value = anoAtual;
 
   // Se depois de 12s ainda estiver carregando, mostra erro em vez de travar para sempre
   var travouTimeout = setTimeout(function() {
@@ -2842,10 +2856,23 @@ document.getElementById('btn-salvar-nf').addEventListener('click', function() {
     document.getElementById('nf-parc-qtd').value='1'; document.getElementById('nf-parc-intervalo').value='30'; document.getElementById('nf-parc-primeira').value='';
   });
 });
+function notasFiltradas() {
+  var mes = parseInt(document.getElementById('nf-filtro-mes').value)||0;
+  var ano = parseInt(document.getElementById('nf-filtro-ano').value)||0;
+  return D.notasFiscais.filter(function(n){
+    if(!mes && !ano) return true;
+    if(!n.data) return false;
+    var d = new Date(n.data+'T00:00:00');
+    if(mes && (d.getMonth()+1)!==mes) return false;
+    if(ano && d.getFullYear()!==ano) return false;
+    return true;
+  }).slice().sort(function(a,b){return (b.data||'').localeCompare(a.data||'');});
+}
 function renderNotas() {
   var el = document.getElementById('lista-notas'); if(!el) return;
-  if(!D.notasFiscais.length) { el.innerHTML='<div class="empty"><div class="ico">🧾</div><p>Nenhuma nota lançada.</p></div>'; return; }
-  el.innerHTML = D.notasFiscais.slice().sort(function(a,b){return (b.data||'').localeCompare(a.data||'');}).map(function(n) {
+  var lista = notasFiltradas();
+  if(!lista.length) { el.innerHTML='<div class="empty"><div class="ico">🧾</div><p>Nenhuma nota encontrada para o filtro selecionado.</p></div>'; return; }
+  el.innerHTML = lista.map(function(n) {
     return '<div class="card" style="padding:12px 16px">'+
       '<div style="display:flex;justify-content:space-between"><b>'+n.fornecedor+'</b><span style="font-weight:800">'+fmt(n.total)+'</span></div>'+
       '<div style="font-size:12px;color:#888;margin-top:4px">'+(n.data?fdata(n.data):'')+' | Nota #'+(n.numero||'-')+' | '+(n.itens?n.itens.length:0)+' item(ns)</div>'+
@@ -2856,6 +2883,36 @@ function renderNotas() {
     if(confirm('Excluir esta nota fiscal?')) excluirRegistro('notasFiscais', b.getAttribute('data-delnf'));
   });});
 }
+document.getElementById('nf-filtro-mes').addEventListener('change', renderNotas);
+document.getElementById('nf-filtro-ano').addEventListener('input', renderNotas);
+document.getElementById('btn-xls-notas').addEventListener('click', function() {
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var lista = notasFiltradas();
+  if(!lista.length) { toast('Nenhuma nota para exportar nesse filtro.'); return; }
+  var linhas = [['Fornecedor','Número','Data','Categoria','Item','Qtd','Vlr Unit. (R$)','Vlr Total Item (R$)','Total da Nota (R$)']];
+  lista.forEach(function(n){
+    var itens = (n.itens && n.itens.length) ? n.itens : [{nome:'',qtd:'',valorUnit:''}];
+    itens.forEach(function(it, idx){
+      linhas.push([
+        idx===0 ? (n.fornecedor||'') : '',
+        idx===0 ? (n.numero||'') : '',
+        idx===0 ? (n.data?fdata(n.data):'') : '',
+        idx===0 ? (CAT_NOMES[n.categoria]||n.categoria||'') : '',
+        it.nome||'', it.qtd||0, it.valorUnit||0, (it.qtd||0)*(it.valorUnit||0),
+        idx===0 ? (n.total||0) : ''
+      ]);
+    });
+  });
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(linhas);
+  ws['!cols'] = [{wch:22},{wch:12},{wch:12},{wch:16},{wch:24},{wch:8},{wch:14},{wch:16},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Notas Fiscais');
+  var mes = parseInt(document.getElementById('nf-filtro-mes').value)||0;
+  var ano = parseInt(document.getElementById('nf-filtro-ano').value)||0;
+  var sufixo = (mes?MESES[mes]:'Todos') + (ano?('_'+ano):'');
+  XLSX.writeFile(wb, 'Lele_NotasFiscais_'+sufixo+'.xlsx');
+  toast('Excel gerado!');
+});
 
 // --- BOLETOS A PAGAR ---
 document.getElementById('btn-salvar-bp').addEventListener('click', function() {

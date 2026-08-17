@@ -492,13 +492,93 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 
   <div class="fin-sub" id="fs-frelat" style="display:none">
     <div class="card" style="display:flex;gap:6px;flex-wrap:wrap;padding:10px">
-      <button class="btn btn-sm btn-g relat-sub-btn" data-rs="rtrocas">🔄 Trocas por cliente</button>
+      <button class="btn btn-sm btn-g relat-sub-btn" data-rs="rprod">🏭 Mais produzido</button>
+      <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rvendido">🛒 Mais vendido</button>
+      <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rprodvendido">⚖️ Produzido x Vendido</button>
+      <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rabc">📈 Curva ABC</button>
+      <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rtrocas">🔄 Trocas por cliente</button>
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rinad">💰 Inadimplência</button>
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rinativos">⚠️ Clientes inativos</button>
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rticket">📊 Ticket médio</button>
     </div>
 
-    <div class="relat-sub" id="rs-rtrocas">
+    <div class="relat-sub" id="rs-rprod">
+      <div class="card">
+        <div class="row2">
+          <div class="field"><label>Mes</label>
+            <select class="inp" id="mp-mes">
+              <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
+              <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+              <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+              <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+          </div>
+          <div class="field"><label>Ano</label><input type="number" class="inp" id="mp-ano" value="2026"></div>
+        </div>
+        <button class="btn btn-g" id="btn-gerar-mp">Gerar relatório</button>
+      </div>
+      <div id="mp-area"></div>
+      <div id="btn-xls-mp-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-mp">📊 Exportar Excel</button></div>
+    </div>
+
+    <div class="relat-sub" id="rs-rvendido" style="display:none">
+      <div class="card">
+        <div class="row2">
+          <div class="field"><label>Mes</label>
+            <select class="inp" id="mv-mes">
+              <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
+              <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+              <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+              <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+          </div>
+          <div class="field"><label>Ano</label><input type="number" class="inp" id="mv-ano" value="2026"></div>
+        </div>
+        <button class="btn btn-g" id="btn-gerar-mv">Gerar relatório</button>
+      </div>
+      <div id="mv-area"></div>
+      <div id="btn-xls-mv-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-mv">📊 Exportar Excel</button></div>
+    </div>
+
+    <div class="relat-sub" id="rs-rprodvendido" style="display:none">
+      <div class="card">
+        <div class="row2">
+          <div class="field"><label>Mes</label>
+            <select class="inp" id="pv-mes">
+              <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
+              <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+              <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+              <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+          </div>
+          <div class="field"><label>Ano</label><input type="number" class="inp" id="pv-ano" value="2026"></div>
+        </div>
+        <button class="btn btn-g" id="btn-gerar-pv">Gerar relatório</button>
+      </div>
+      <div id="pv-area"></div>
+      <div id="btn-xls-pv-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-pv">📊 Exportar Excel</button></div>
+    </div>
+
+    <div class="relat-sub" id="rs-rabc" style="display:none">
+      <div class="card">
+        <div class="row2">
+          <div class="field"><label>Mes</label>
+            <select class="inp" id="abc-mes">
+              <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
+              <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+              <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+              <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+            </select>
+          </div>
+          <div class="field"><label>Ano</label><input type="number" class="inp" id="abc-ano" value="2026"></div>
+        </div>
+        <button class="btn btn-g" id="btn-gerar-abc">Gerar relatório</button>
+      </div>
+      <div id="abc-area"></div>
+      <div id="btn-xls-abc-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-abc">📊 Exportar Excel</button></div>
+    </div>
+
+    <div class="relat-sub" id="rs-rtrocas" style="display:none">
       <div class="card">
         <div class="row2">
           <div class="field"><label>Mes</label>
@@ -1033,6 +1113,10 @@ function carregar() {
   if(document.getElementById('tk-ano')) document.getElementById('tk-ano').value = anoAtual;
   if(document.getElementById('nf-filtro-ano')) document.getElementById('nf-filtro-ano').value = anoAtual;
   if(document.getElementById('dg-filtro-ano')) document.getElementById('dg-filtro-ano').value = anoAtual;
+  if(document.getElementById('mp-ano')) document.getElementById('mp-ano').value = anoAtual;
+  if(document.getElementById('mv-ano')) document.getElementById('mv-ano').value = anoAtual;
+  if(document.getElementById('pv-ano')) document.getElementById('pv-ano').value = anoAtual;
+  if(document.getElementById('abc-ano')) document.getElementById('abc-ano').value = anoAtual;
 
   // Se depois de 12s ainda estiver carregando, mostra erro em vez de travar para sempre
   var travouTimeout = setTimeout(function() {
@@ -1170,7 +1254,7 @@ document.querySelectorAll('.fin-tab-btn').forEach(function(b) {
     this.classList.remove('btn-o'); this.classList.add('btn-g');
     document.querySelectorAll('.fin-sub').forEach(function(x){ x.style.display='none'; });
     document.getElementById('fs-'+fs).style.display='';
-    if(fs==='frelat') { gerarTrocas(); gerarInad(); }
+    if(fs==='frelat') { gerarMaisProduzido(); gerarTrocas(); gerarInad(); }
   });
 });
 
@@ -1181,6 +1265,10 @@ document.querySelectorAll('.relat-sub-btn').forEach(function(b) {
     this.classList.remove('btn-o'); this.classList.add('btn-g');
     document.querySelectorAll('.relat-sub').forEach(function(x){ x.style.display='none'; });
     document.getElementById('rs-'+rs).style.display='';
+    if(rs==='rprod') gerarMaisProduzido();
+    if(rs==='rvendido') gerarMaisVendido();
+    if(rs==='rprodvendido') gerarProdVendido();
+    if(rs==='rabc') gerarCurvaABC();
     if(rs==='rinativos') gerarInativos();
     if(rs==='rticket') gerarTicket();
   });
@@ -3519,6 +3607,218 @@ document.getElementById('btn-xls-rank').addEventListener('click', function() {
   XLSX.utils.book_append_sheet(wb, wsConta, 'Conta-Banco');
 
   XLSX.writeFile(wb, 'Lele_Rankings_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.xlsx');
+  toast('Excel gerado!');
+});
+
+// ===== RELATORIOS: MAIS PRODUZIDO / MAIS VENDIDO / PRODUZIDO x VENDIDO / CURVA ABC =====
+var NOME_PROD = {
+  bola_frangomilho:'Bola - Frango com milho', bola_frangoperu:'Bola - Frango com peru', bola_frangopalha:'Bola - Frango com palha',
+  bola_frangoazeitona:'Bola - Frango com azeitona', bola_peru:'Bola - Peito de Peru', bola_salpicao:'Bola - Salpicão',
+  int_atum:'Integral - Atum', int_frangomilho:'Integral - Frango com milho', int_frangoperu:'Integral - Frango com peru',
+  int_frangopassas:'Integral - Frango com passas', int_frangoazeitona:'Integral - Frango com azeitona', int_peru:'Integral - Peito de Peru',
+  int_frangoricota:'Integral - Frango com ricota', int_salpicao:'Integral - Salpicão',
+  las250_carne:'Lasanha 250g - Carne', las250_frango:'Lasanha 250g - Frango',
+  las500_carne:'Lasanha 500g - Carne', las500_frango:'Lasanha 500g - Frango',
+  mini_prod:'Mini Sanduíche'
+};
+function catDoProdKey(k) {
+  if(k.indexOf('bola_')===0) return 'bola';
+  if(k.indexOf('int_')===0) return 'integral';
+  if(k.indexOf('las250_')===0) return 'las250';
+  if(k.indexOf('las500_')===0) return 'las500';
+  if(k==='mini_prod') return 'mini';
+  return null;
+}
+
+function gerarMaisProduzido() {
+  var mesEl = document.getElementById('mp-mes'), anoEl = document.getElementById('mp-ano');
+  if(!mesEl || !anoEl) return;
+  var mes = parseInt(mesEl.value), ano = parseInt(anoEl.value);
+  var lote = D.producao.filter(function(p){ var d=new Date(p.data+'T00:00:00'); return d.getMonth()+1===mes && d.getFullYear()===ano; });
+
+  var tots = {};
+  lote.forEach(function(p){ Object.keys(p.produtos||{}).forEach(function(k){ tots[k]=(tots[k]||0)+p.produtos[k]; }); });
+  var lista = Object.keys(tots).map(function(k){ return {key:k, nome:NOME_PROD[k]||k, qtd:tots[k]}; }).sort(function(a,b){return b.qtd-a.qtd;});
+  var totalGeral = lista.reduce(function(s,r){return s+r.qtd;},0);
+
+  var html = '<div class="stitle" style="margin-top:0">Produtos mais produzidos — '+MESES[mes]+'/'+ano+'</div>';
+  if(!lista.length) { html += '<div class="empty"><div class="ico">🏭</div><p>Nenhuma produção lançada no período.</p></div>'; }
+  else {
+    html += '<div class="rg"><div class="rbox hl"><label>Total produzido</label><b>'+totalGeral+' un</b></div><div class="rbox"><label>Itens diferentes</label><b>'+lista.length+'</b></div></div>';
+    var medals=['🥇','🥈','🥉'];
+    html += '<div class="card">';
+    lista.forEach(function(r,i){
+      var pct = totalGeral ? (r.qtd/totalGeral*100) : 0;
+      html += '<div class="pline" style="align-items:center"><span class="pname">'+(medals[i]||(i+1)+'º')+' '+r.nome+'</span><span style="font-weight:800;color:var(--g)">'+r.qtd+' un <span style="font-weight:400;color:#999;font-size:11px">('+pct.toFixed(0)+'%)</span></span></div>';
+    });
+    html += '</div>';
+  }
+  document.getElementById('mp-area').innerHTML = html;
+  window._mpData = {mes:mes, ano:ano, lista:lista, totalGeral:totalGeral};
+  document.getElementById('btn-xls-mp-area').style.display = lista.length ? 'block' : 'none';
+}
+document.getElementById('btn-gerar-mp').addEventListener('click', gerarMaisProduzido);
+document.getElementById('btn-xls-mp').addEventListener('click', function() {
+  if(!window._mpData || !window._mpData.lista.length) return;
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var d = window._mpData;
+  var rows = [['Ranking','Produto','Unidades produzidas','% do total']];
+  d.lista.forEach(function(r,i){ rows.push([i+1, r.nome, r.qtd, d.totalGeral ? (r.qtd/d.totalGeral*100).toFixed(1)+'%' : '0%']); });
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:10},{wch:32},{wch:20},{wch:12}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Mais Produzido');
+  XLSX.writeFile(wb, 'Lele_Mais_Produzido_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.xlsx');
+  toast('Excel gerado!');
+});
+
+function gerarMaisVendido() {
+  var mesEl = document.getElementById('mv-mes'), anoEl = document.getElementById('mv-ano');
+  if(!mesEl || !anoEl) return;
+  var mes = parseInt(mesEl.value), ano = parseInt(anoEl.value);
+  var ents = D.entregas.filter(function(e){ var d=new Date(e.data+'T00:00:00'); return d.getMonth()+1===mes && d.getFullYear()===ano; });
+
+  var tots = {};
+  ents.forEach(function(e){ Object.keys(e.produtos||{}).forEach(function(k){ tots[k]=(tots[k]||0)+e.produtos[k]; }); });
+  var lista = Object.keys(tots).map(function(k){ return {key:k, nome:NOME[k]||k, qtd:tots[k]}; }).sort(function(a,b){return b.qtd-a.qtd;});
+  var totalGeral = lista.reduce(function(s,r){return s+r.qtd;},0);
+
+  var html = '<div class="stitle" style="margin-top:0">Produtos mais vendidos — '+MESES[mes]+'/'+ano+'</div>';
+  if(!lista.length) { html += '<div class="empty"><div class="ico">🛒</div><p>Nenhuma venda no período.</p></div>'; }
+  else {
+    html += '<div class="rg"><div class="rbox hl"><label>Total vendido</label><b>'+totalGeral+' un</b></div><div class="rbox"><label>Itens diferentes</label><b>'+lista.length+'</b></div></div>';
+    var medals=['🥇','🥈','🥉'];
+    html += '<div class="card">';
+    lista.forEach(function(r,i){
+      var pct = totalGeral ? (r.qtd/totalGeral*100) : 0;
+      html += '<div class="pline" style="align-items:center"><span class="pname">'+(medals[i]||(i+1)+'º')+' '+r.nome+'</span><span style="font-weight:800;color:var(--g)">'+r.qtd+' un <span style="font-weight:400;color:#999;font-size:11px">('+pct.toFixed(0)+'%)</span></span></div>';
+    });
+    html += '</div>';
+  }
+  document.getElementById('mv-area').innerHTML = html;
+  window._mvData = {mes:mes, ano:ano, lista:lista, totalGeral:totalGeral};
+  document.getElementById('btn-xls-mv-area').style.display = lista.length ? 'block' : 'none';
+}
+document.getElementById('btn-gerar-mv').addEventListener('click', gerarMaisVendido);
+document.getElementById('btn-xls-mv').addEventListener('click', function() {
+  if(!window._mvData || !window._mvData.lista.length) return;
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var d = window._mvData;
+  var rows = [['Ranking','Produto','Unidades vendidas','% do total']];
+  d.lista.forEach(function(r,i){ rows.push([i+1, r.nome, r.qtd, d.totalGeral ? (r.qtd/d.totalGeral*100).toFixed(1)+'%' : '0%']); });
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:10},{wch:26},{wch:20},{wch:12}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Mais Vendido');
+  XLSX.writeFile(wb, 'Lele_Mais_Vendido_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.xlsx');
+  toast('Excel gerado!');
+});
+
+function gerarProdVendido() {
+  var mesEl = document.getElementById('pv-mes'), anoEl = document.getElementById('pv-ano');
+  if(!mesEl || !anoEl) return;
+  var mes = parseInt(mesEl.value), ano = parseInt(anoEl.value);
+
+  var lote = D.producao.filter(function(p){ var d=new Date(p.data+'T00:00:00'); return d.getMonth()+1===mes && d.getFullYear()===ano; });
+  var ents = D.entregas.filter(function(e){ var d=new Date(e.data+'T00:00:00'); return d.getMonth()+1===mes && d.getFullYear()===ano; });
+
+  var CATS = ['bola','integral','las250','las500','mini'];
+  var produzido = {bola:0,integral:0,las250:0,las500:0,mini:0};
+  lote.forEach(function(p){ Object.keys(p.produtos||{}).forEach(function(k){ var c=catDoProdKey(k); if(c) produzido[c]+=p.produtos[k]; }); });
+  var vendido = {bola:0,integral:0,las250:0,las500:0,mini:0};
+  ents.forEach(function(e){ Object.keys(e.produtos||{}).forEach(function(k){ if(vendido[k]!==undefined) vendido[k]+=e.produtos[k]; }); });
+
+  var lista = CATS.map(function(c){ return {cat:c, nome:NOME[c], produzido:produzido[c], vendido:vendido[c], diff:produzido[c]-vendido[c]}; })
+    .filter(function(r){ return r.produzido>0 || r.vendido>0; })
+    .sort(function(a,b){ return b.produzido-a.produzido; });
+
+  var html = '<div class="stitle" style="margin-top:0">Produzido x Vendido — '+MESES[mes]+'/'+ano+'</div>';
+  if(!lista.length) { html += '<div class="empty"><div class="ico">⚖️</div><p>Sem dados de produção ou venda no período.</p></div>'; }
+  else {
+    html += '<div class="alert alert-i" style="margin-top:0">Diferença positiva = sobrou produção (possível perda). Diferença negativa = vendeu mais do que produziu no período (possível ruptura ou uso de estoque de dias anteriores).</div>';
+    html += '<div class="card">';
+    lista.forEach(function(r){
+      var corDiff = r.diff>0 ? 'var(--y,#856404)' : (r.diff<0 ? 'var(--r)' : 'var(--g)');
+      var diffLabel = r.diff>0 ? '+'+r.diff+' un (sobra)' : (r.diff<0 ? r.diff+' un (falta)' : '0 (bateu certinho)');
+      html += '<div style="padding:10px 0;border-bottom:1px solid #f0f0f0"><div style="display:flex;justify-content:space-between;font-weight:700">'+r.nome+'</div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:12px;color:#888;margin-top:4px"><span>Produzido: <b style="color:#333">'+r.produzido+' un</b></span><span>Vendido: <b style="color:#333">'+r.vendido+' un</b></span></div>'+
+        '<div style="margin-top:4px;font-size:12px;font-weight:700;color:'+corDiff+'">'+diffLabel+'</div></div>';
+    });
+    html += '</div>';
+  }
+  document.getElementById('pv-area').innerHTML = html;
+  window._pvData = {mes:mes, ano:ano, lista:lista};
+  document.getElementById('btn-xls-pv-area').style.display = lista.length ? 'block' : 'none';
+}
+document.getElementById('btn-gerar-pv').addEventListener('click', gerarProdVendido);
+document.getElementById('btn-xls-pv').addEventListener('click', function() {
+  if(!window._pvData || !window._pvData.lista.length) return;
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var d = window._pvData;
+  var rows = [['Produto','Produzido (un)','Vendido (un)','Diferença (un)']];
+  d.lista.forEach(function(r){ rows.push([r.nome, r.produzido, r.vendido, r.diff]); });
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:20},{wch:16},{wch:16},{wch:16}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Produzido x Vendido');
+  XLSX.writeFile(wb, 'Lele_Produzido_x_Vendido_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.xlsx');
+  toast('Excel gerado!');
+});
+
+function gerarCurvaABC() {
+  var mesEl = document.getElementById('abc-mes'), anoEl = document.getElementById('abc-ano');
+  if(!mesEl || !anoEl) return;
+  var mes = parseInt(mesEl.value), ano = parseInt(anoEl.value);
+  var ents = D.entregas.filter(function(e){ var d=new Date(e.data+'T00:00:00'); return d.getMonth()+1===mes && d.getFullYear()===ano; });
+
+  var fat = {};
+  ents.forEach(function(e){
+    Object.keys(e.produtos||{}).forEach(function(k){
+      var preco = (e.precosUsados && e.precosUsados[k]) || getPreco(e.clienteId, k);
+      fat[k] = (fat[k]||0) + e.produtos[k]*preco;
+    });
+  });
+  var lista = Object.keys(fat).filter(function(k){return fat[k]>0;}).map(function(k){ return {key:k, nome:NOME[k]||k, valor:fat[k]}; }).sort(function(a,b){return b.valor-a.valor;});
+  var totalGeral = lista.reduce(function(s,r){return s+r.valor;},0);
+  var acumulado = 0;
+  lista.forEach(function(r){
+    r.pct = totalGeral ? (r.valor/totalGeral*100) : 0;
+    acumulado += r.pct;
+    r.pctAcum = acumulado;
+    r.classe = acumulado<=80 ? 'A' : (acumulado<=95 ? 'B' : 'C');
+  });
+
+  var html = '<div class="stitle" style="margin-top:0">Curva ABC de produtos — '+MESES[mes]+'/'+ano+'</div>';
+  if(!lista.length) { html += '<div class="empty"><div class="ico">📈</div><p>Nenhuma venda no período.</p></div>'; }
+  else {
+    html += '<div class="alert alert-i" style="margin-top:0">Classe A = produtos que juntos somam até 80% do faturamento (foco de produção/marketing). Classe B = até 95%. Classe C = os 5% finais.</div>';
+    html += '<div class="rg"><div class="rbox hl"><label>Faturamento do período</label><b>'+fmt(totalGeral)+'</b></div></div>';
+    html += '<div class="card">';
+    var badgeCls = {A:'badge-g', B:'badge-y', C:'badge-r'};
+    lista.forEach(function(r){
+      html += '<div style="padding:10px 0;border-bottom:1px solid #f0f0f0"><div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<span style="font-weight:700">'+r.nome+' <span class="badge '+badgeCls[r.classe]+'" style="margin-left:6px">'+r.classe+'</span></span>'+
+        '<span style="font-weight:800;color:var(--g)">'+fmt(r.valor)+'</span></div>'+
+        '<div style="font-size:11px;color:#888;margin-top:2px">'+r.pct.toFixed(1)+'% do faturamento | Acumulado: '+r.pctAcum.toFixed(1)+'%</div></div>';
+    });
+    html += '</div>';
+  }
+  document.getElementById('abc-area').innerHTML = html;
+  window._abcData = {mes:mes, ano:ano, lista:lista, totalGeral:totalGeral};
+  document.getElementById('btn-xls-abc-area').style.display = lista.length ? 'block' : 'none';
+}
+document.getElementById('btn-gerar-abc').addEventListener('click', gerarCurvaABC);
+document.getElementById('btn-xls-abc').addEventListener('click', function() {
+  if(!window._abcData || !window._abcData.lista.length) return;
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var d = window._abcData;
+  var rows = [['Produto','Faturamento (R$)','% do total','% acumulado','Classe']];
+  d.lista.forEach(function(r){ rows.push([r.nome, r.valor, r.pct.toFixed(1)+'%', r.pctAcum.toFixed(1)+'%', r.classe]); });
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:20},{wch:16},{wch:12},{wch:14},{wch:8}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Curva ABC');
+  XLSX.writeFile(wb, 'Lele_Curva_ABC_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.xlsx');
   toast('Excel gerado!');
 });
 

@@ -330,6 +330,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   <div id="lista-prod"><div class="empty"><div class="ico">🏭</div><p>Nenhum lancamento ainda.</p></div></div>
   <button class="btn btn-g" id="btn-salvar-prod">✅ Salvar producao do dia</button>
   <button class="btn btn-o" id="btn-limpar-prod" style="margin-top:6px">Limpar</button>
+  <button class="btn btn-o" id="btn-cancelar-prod" style="margin-top:6px;display:none">Cancelar edição</button>
 </div>
 
 
@@ -1796,14 +1797,50 @@ function calcTotsProd() {
   document.getElementById('tot-las').textContent=tl+' un';
 }
 
+var editProducaoKey = null;
+
 function renderProd() {
   var el=document.getElementById('lista-prod');
   if(!D.producao.length){el.innerHTML='<div class="empty"><div class="ico">🏭</div><p>Nenhum lancamento.</p></div>';return;}
   el.innerHTML=D.producao.slice().sort(function(a,b){return b.data.localeCompare(a.data);}).map(function(p){
     var tot=Object.values(p.produtos).reduce(function(s,v){return s+v;},0);
     var det=Object.keys(p.produtos).map(function(k){return k+': '+p.produtos[k];}).join(', ');
-    return '<div class="hitem"><div class="hhead"><span class="hdata">'+fdata(p.data)+'</span><span class="hval">'+tot+' un</span></div><div class="hprod">'+det+'</div></div>';
+    return '<div class="hitem"><div class="hhead"><span class="hdata">'+fdata(p.data)+'</span><span class="hval">'+tot+' un</span></div><div class="hprod">'+det+'</div>'+
+      '<div style="display:flex;gap:6px;margin-top:8px">'+
+      '<button class="btn btn-sm btn-o" data-editprod="'+p._key+'">✏️ Editar</button>'+
+      '<button class="btn btn-sm btn-r" data-delprod="'+p._key+'">🗑️ Excluir</button>'+
+      '</div></div>';
   }).join('');
+  el.querySelectorAll('[data-editprod]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var key = btn.getAttribute('data-editprod');
+      var p = D.producao.find(function(x){return x._key===key;});
+      if(!p) return;
+      editProducaoKey = key;
+      document.getElementById('prod-data').value = p.data;
+      SBOLA.concat(SINT).concat(SLAS).concat(['mini_prod']).forEach(function(k){
+        document.getElementById('p-'+k).value = (p.produtos && p.produtos[k]) || 0;
+      });
+      calcTotsProd();
+      document.getElementById('btn-cancelar-prod').style.display='';
+      document.getElementById('prod-data').scrollIntoView({behavior:'smooth', block:'center'});
+      toast('Editando produção de '+fdata(p.data)+' — ajuste os campos e salve');
+    });
+  });
+  el.querySelectorAll('[data-delprod]').forEach(function(btn){
+    btn.addEventListener('click', function(){
+      var key = btn.getAttribute('data-delprod');
+      if(!confirm('Excluir a produção lançada nesse dia? Essa ação não pode ser desfeita.')) return;
+      excluirRegistro('producao', key);
+      if(editProducaoKey===key){
+        editProducaoKey=null;
+        limparProd();
+        document.getElementById('prod-data').value='';
+        document.getElementById('btn-cancelar-prod').style.display='none';
+      }
+      toast('Produção excluída');
+    });
+  });
 }
 
 document.getElementById('btn-salvar-prod').addEventListener('click', function() {
@@ -1815,6 +1852,18 @@ document.getElementById('btn-salvar-prod').addEventListener('click', function() 
     if(q>0){prods[k]=q;tot+=q;}
   });
   if(!tot){toast('Adicione pelo menos um produto');return;}
+
+  if(editProducaoKey) {
+    var idxE = D.producao.findIndex(function(p){return p._key===editProducaoKey;});
+    var prodE = {id:(idxE>=0 && D.producao[idxE].id) || Date.now(), data:data, produtos:prods};
+    if(idxE>=0) D.producao[idxE]=Object.assign({_key:editProducaoKey},prodE);
+    salvarRegistro('producao',prodE,editProducaoKey);
+    editProducaoKey=null;
+    document.getElementById('btn-cancelar-prod').style.display='none';
+    renderProd();limparProd();toast('Produção atualizada!');
+    return;
+  }
+
   var idx=D.producao.findIndex(function(p){return p.data===data;});
   var prod={id:Date.now(),data:data,produtos:prods};
   if(idx>=0){
@@ -1834,6 +1883,12 @@ function limparProd() {
   SBOLA.concat(SINT).concat(SLAS).concat(['mini_prod']).forEach(function(k){document.getElementById('p-'+k).value=0;});
   calcTotsProd();
 }
+document.getElementById('btn-cancelar-prod').addEventListener('click', function(){
+  editProducaoKey = null;
+  limparProd();
+  document.getElementById('prod-data').value='';
+  this.style.display='none';
+});
 
 // ===== RELATORIO =====
 var relFiltroModo = 'mes';

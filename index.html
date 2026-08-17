@@ -438,6 +438,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fboletos">Boletos a Pagar</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="ffornecedores">Fornecedores</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="frecor">Recorrentes</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fdespesas">Despesas</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fnotas">Notas Fiscais</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="finsumos">Insumos</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="ffichas">Fichas Técnicas</button>
@@ -618,6 +619,37 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     </div>
     <div class="stitle">Contas recorrentes cadastradas</div>
     <div id="lista-recorrentes"></div>
+  </div>
+
+  <div class="fin-sub" id="fs-fdespesas" style="display:none">
+    <div class="stitle" style="margin-top:0">Nova despesa</div>
+    <div class="card">
+      <div class="row2">
+        <div class="field"><label>Data</label><input type="date" class="inp" id="dg-data"></div>
+        <div class="field"><label>Valor</label><input type="number" step="0.01" class="inp" id="dg-valor"></div>
+      </div>
+      <div class="field"><label>Descrição</label><input type="text" class="inp" id="dg-desc" placeholder="Ex: Combustivel, Manutencao da moto..."></div>
+      <div class="field"><label>Responsável / Entregador</label><input type="text" class="inp" id="dg-resp" placeholder="Ex: Joao"></div>
+      <button class="btn btn-g" id="btn-salvar-dg">✅ Salvar despesa</button>
+      <button class="btn btn-o" id="btn-cancelar-dg" style="display:none">Cancelar edição</button>
+    </div>
+    <div class="stitle">Despesas lançadas</div>
+    <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:12px">
+      <div class="field" style="flex:1;min-width:120px;margin-bottom:0"><label>Mês</label>
+        <select class="inp" id="dg-filtro-mes">
+          <option value="0">Todos</option>
+          <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
+          <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+          <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+          <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1;min-width:100px;margin-bottom:0"><label>Ano</label><input type="number" class="inp" id="dg-filtro-ano" value="2026"></div>
+      <div class="field" style="flex:1;min-width:120px;margin-bottom:0"><label>Responsável</label><input type="text" class="inp" id="dg-filtro-resp" placeholder="Todos"></div>
+      <button class="btn btn-o btn-sm" id="btn-xls-despesas" style="margin-top:0;height:44px">📊 Exportar Excel</button>
+    </div>
+    <div id="dg-resumo" class="rg" style="margin-bottom:10px"></div>
+    <div id="lista-despesasgerais"></div>
   </div>
 
   <div class="fin-sub" id="fs-fnotas" style="display:none">
@@ -901,14 +933,14 @@ var db = firebase.database();
 // (clientes/entregas/caixas/producao) e cada salvamento grava so o registro
 // que mudou -- isso evita que dois usuarios ao mesmo tempo apaguem a
 // alteracao um do outro (o que acontecia quando tudo era salvo junto em 'dados').
-var D = {clientes:[], entregas:[], caixas:[], producao:[], insumos:[], fichas:[], notasFiscais:[], boletos:[], recorrentes:[], fornecedores:[]};
+var D = {clientes:[], entregas:[], caixas:[], producao:[], insumos:[], fichas:[], notasFiscais:[], boletos:[], recorrentes:[], fornecedores:[], despesasGerais:[]};
 var editIdx = null;
 var editEntregaKey = null;
 var baixaEntregaId = null;
 var cobSelecionados = new Set();
 var pagBolKey = null;
 var lancarRecKey = null;
-var editBoletoKey = null, editRecorrenteKey = null, editInsumoKey = null, editFornecedorKey = null;
+var editBoletoKey = null, editRecorrenteKey = null, editInsumoKey = null, editFornecedorKey = null, editDespesaGeralKey = null;
 
 var PRECO = {bola:8.50, integral:8.50, las250:11.00, las500:14.50, mini:2.30, suco:0, salada:0};
 var NOME = {bola:'Pao Bola', integral:'Pao Integral', las250:'Lasanha 250g', las500:'Lasanha 500g', mini:'Mini Sanduiche', suco:'Suco de Laranja', salada:'Salada de Frutas'};
@@ -999,6 +1031,7 @@ function carregar() {
   if(document.getElementById('tk-mes')) document.getElementById('tk-mes').value = mesAtual;
   if(document.getElementById('tk-ano')) document.getElementById('tk-ano').value = anoAtual;
   if(document.getElementById('nf-filtro-ano')) document.getElementById('nf-filtro-ano').value = anoAtual;
+  if(document.getElementById('dg-filtro-ano')) document.getElementById('dg-filtro-ano').value = anoAtual;
 
   // Se depois de 12s ainda estiver carregando, mostra erro em vez de travar para sempre
   var travouTimeout = setTimeout(function() {
@@ -1007,7 +1040,7 @@ function carregar() {
   }, 12000);
 
   migrarSeNecessario(function() {
-    var pendentes = 10;
+    var pendentes = 11;
     function pronto() { pendentes--; if(pendentes<=0) { clearTimeout(travouTimeout); var el=document.getElementById('loading'); if(el) el.remove(); } }
     function erroLeitura(caminho) {
       return function(err) {
@@ -1054,6 +1087,12 @@ function carregar() {
       if(t && t.getAttribute('data-tab')==='financeiro') { renderRecorrentes(); renderFinDash(); }
       pronto();
     }, erroLeitura('recorrentes'));
+    db.ref('despesasGerais').on('value', function(snap) {
+      D.despesasGerais = snapToArray(snap.val());
+      var t = document.querySelector('.tab.on');
+      if(t && t.getAttribute('data-tab')==='financeiro') { renderDespesasGerais(); renderFinDash(); }
+      pronto();
+    }, erroLeitura('despesasGerais'));
 
     db.ref('clientes').on('value', function(snap) {
       D.clientes = snapToArray(snap.val());
@@ -1118,7 +1157,7 @@ document.querySelectorAll('.tab').forEach(function(t) {
     if(id==='dashboard') renderDash();
     if(id==='financeiro') {
       popDatalistInsumos(); popDatalistFornecedores();
-      renderBoletos(); renderRecorrentes(); renderNotas(); renderInsumos(); renderFichas(); renderFinDash(); renderFornecedores(); renderFluxo();
+      renderBoletos(); renderRecorrentes(); renderNotas(); renderInsumos(); renderFichas(); renderFinDash(); renderFornecedores(); renderFluxo(); renderDespesasGerais();
     }
   });
 });
@@ -3099,6 +3138,98 @@ document.getElementById('btn-lancarrec-confirmar').addEventListener('click', fun
   });
 });
 
+// --- DESPESAS GERAIS (ex: combustivel do entregador, manutencao, etc) ---
+document.getElementById('btn-salvar-dg').addEventListener('click', function() {
+  var data = document.getElementById('dg-data').value;
+  var valor = parseFloat(document.getElementById('dg-valor').value)||0;
+  if(!data) { toast('Informe a data'); return; }
+  if(valor<=0) { toast('Informe um valor válido'); return; }
+  var obj = {
+    data:data, valor:valor,
+    desc:document.getElementById('dg-desc').value.trim(),
+    responsavel:document.getElementById('dg-resp').value.trim()
+  };
+  if(!editDespesaGeralKey) obj.id = Date.now();
+  salvarRegistro('despesasGerais', obj, editDespesaGeralKey).then(function(){
+    toast('Despesa salva!');
+    document.getElementById('dg-data').value=''; document.getElementById('dg-valor').value='';
+    document.getElementById('dg-desc').value=''; document.getElementById('dg-resp').value='';
+    editDespesaGeralKey=null; document.getElementById('btn-cancelar-dg').style.display='none';
+  });
+});
+document.getElementById('btn-cancelar-dg').addEventListener('click', function(){
+  editDespesaGeralKey=null; this.style.display='none';
+  document.getElementById('dg-data').value=''; document.getElementById('dg-valor').value='';
+  document.getElementById('dg-desc').value=''; document.getElementById('dg-resp').value='';
+});
+
+function despesasGeraisFiltradas() {
+  var mes = parseInt(document.getElementById('dg-filtro-mes').value)||0;
+  var ano = parseInt(document.getElementById('dg-filtro-ano').value)||0;
+  var resp = (document.getElementById('dg-filtro-resp').value||'').trim().toLowerCase();
+  return D.despesasGerais.filter(function(d) {
+    var dt = new Date((d.data||'')+'T00:00:00');
+    if(mes && dt.getMonth()+1!==mes) return false;
+    if(ano && dt.getFullYear()!==ano) return false;
+    if(resp && (d.responsavel||'').toLowerCase().indexOf(resp)<0) return false;
+    return true;
+  }).slice().sort(function(a,b){return (b.data||'').localeCompare(a.data||'');});
+}
+
+function renderDespesasGerais() {
+  var el = document.getElementById('lista-despesasgerais'); if(!el) return;
+  var lista = despesasGeraisFiltradas();
+
+  var resumoEl = document.getElementById('dg-resumo');
+  if(resumoEl) {
+    var total = lista.reduce(function(s,d){return s+(d.valor||0);},0);
+    resumoEl.innerHTML = '<div class="rbox" style="background:var(--rl)"><label style="color:var(--r)">Total no filtro</label><b style="color:var(--r)">'+fmt(total)+'</b></div>'+
+      '<div class="rbox"><label>Qtd. lançamentos</label><b>'+lista.length+'</b></div>';
+  }
+
+  if(!lista.length) { el.innerHTML='<div class="empty"><div class="ico">🧾</div><p>Nenhuma despesa lançada.</p></div>'; return; }
+  el.innerHTML = lista.map(function(d) {
+    return '<div class="card" style="padding:12px 16px">'+
+      '<div style="display:flex;justify-content:space-between"><b>'+(d.desc||'Despesa')+'</b><span style="font-weight:800;color:var(--r)">'+fmt(d.valor)+'</span></div>'+
+      '<div style="font-size:12px;color:#888;margin-top:2px">'+fdata(d.data)+(d.responsavel?' • '+d.responsavel:'')+'</div>'+
+      '<div style="display:flex;gap:6px;margin-top:8px">'+
+      '<button class="btn btn-sm btn-o" data-editdg="'+d._key+'">Editar</button>'+
+      '<button class="btn btn-sm btn-r" data-deldg="'+d._key+'">Excluir</button>'+
+      '</div></div>';
+  }).join('');
+  el.querySelectorAll('[data-editdg]').forEach(function(btn){ btn.addEventListener('click', function(){
+    var d = D.despesasGerais.find(function(x){return x._key===btn.getAttribute('data-editdg');});
+    editDespesaGeralKey = d._key;
+    document.getElementById('dg-data').value=d.data; document.getElementById('dg-valor').value=d.valor;
+    document.getElementById('dg-desc').value=d.desc||''; document.getElementById('dg-resp').value=d.responsavel||'';
+    document.getElementById('btn-cancelar-dg').style.display='';
+  });});
+  el.querySelectorAll('[data-deldg]').forEach(function(btn){ btn.addEventListener('click', function(){
+    if(confirm('Excluir esta despesa?')) excluirRegistro('despesasGerais', btn.getAttribute('data-deldg'));
+  });});
+}
+document.getElementById('dg-filtro-mes').addEventListener('change', renderDespesasGerais);
+document.getElementById('dg-filtro-ano').addEventListener('input', renderDespesasGerais);
+document.getElementById('dg-filtro-resp').addEventListener('input', renderDespesasGerais);
+
+document.getElementById('btn-xls-despesas').addEventListener('click', function() {
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var lista = despesasGeraisFiltradas();
+  var linhas = [['Data','Descrição','Responsável','Valor (R$)']];
+  lista.forEach(function(d){
+    linhas.push([d.data?fdata(d.data):'', d.desc||'', d.responsavel||'', d.valor||0]);
+  });
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(linhas);
+  ws['!cols'] = [{wch:12},{wch:30},{wch:20},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Despesas');
+  var mes = parseInt(document.getElementById('dg-filtro-mes').value)||0;
+  var ano = parseInt(document.getElementById('dg-filtro-ano').value)||0;
+  var sufixo = (mes?MESES[mes]:'Todos') + (ano?('_'+ano):'');
+  XLSX.writeFile(wb, 'Lele_Despesas_'+sufixo+'.xlsx');
+  toast('Excel gerado!');
+});
+
 // --- RESUMO / DASHBOARD FINANCEIRO ---
 function renderFinDash() {
   var el = document.getElementById('fin-resumo-area'); if(!el) return;
@@ -3157,13 +3288,20 @@ function gerarDRE() {
   var lucroBruto = receita - cmv;
 
   // Despesas pagas no mes, excluindo boletos originados de nota fiscal (ja contados no CMV via ficha tecnica)
-  var despesas = D.boletos.filter(function(b){
+  var despesasBoletos = D.boletos.filter(function(b){
     if(b.status!=='pago' || !b.dataPagamento) return false;
     if(b.origem==='nf') return false;
     var d = new Date(b.dataPagamento+'T00:00:00');
     return d.getMonth()+1===mes && d.getFullYear()===ano;
   }).reduce(function(s,b){return s+(b.valor||0);},0);
 
+  // Despesas gerais do mes (combustivel, manutencao, etc lancadas na aba Despesas)
+  var despesasGerais = D.despesasGerais.filter(function(dg){
+    var d = new Date((dg.data||'')+'T00:00:00');
+    return d.getMonth()+1===mes && d.getFullYear()===ano;
+  }).reduce(function(s,dg){return s+(dg.valor||0);},0);
+
+  var despesas = despesasBoletos + despesasGerais;
   var resultado = lucroBruto - despesas;
   var margemPct = receita>0 ? (resultado/receita*100) : 0;
 
@@ -3181,7 +3319,7 @@ function gerarDRE() {
   html += '<div class="div"></div>';
   html += linha('= Resultado do mês', resultado, true, resultado>=0?'var(--g)':'var(--r)');
   html += '<div class="card" style="text-align:center;padding:10px"><span style="font-size:11px;color:#888">Margem líquida do mês: </span><b style="color:'+(margemPct>=0?'var(--g)':'var(--r)')+'">'+margemPct.toFixed(1)+'%</b></div>';
-  html += '<div class="alert alert-i" style="margin-top:12px">O CMV é calculado pelas fichas técnicas × quantidade vendida. Boletos originados de nota fiscal (matéria-prima) não entram de novo em "despesas pagas", pra não contar o mesmo custo duas vezes. Só entram despesas operacionais (aluguel, recorrentes, boletos manuais).</div>';
+  html += '<div class="alert alert-i" style="margin-top:12px">O CMV é calculado pelas fichas técnicas × quantidade vendida. Boletos originados de nota fiscal (matéria-prima) não entram de novo em "despesas pagas", pra não contar o mesmo custo duas vezes. Entram despesas operacionais (aluguel, recorrentes, boletos manuais) e as despesas lançadas na aba Despesas (combustível, manutenção etc).</div>';
 
   document.getElementById('dre-area').innerHTML = html;
 }

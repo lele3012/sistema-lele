@@ -645,6 +645,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     </div>
     <div class="stitle">Contas cadastradas</div>
     <div id="bol-resumo" class="rg" style="margin-bottom:10px"></div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
+      <div class="field" style="margin-bottom:0;min-width:140px"><label>Vence de</label><input type="date" class="inp" id="bol-venc-de"></div>
+      <div class="field" style="margin-bottom:0;min-width:140px"><label>até</label><input type="date" class="inp" id="bol-venc-ate"></div>
+      <button class="btn btn-sm btn-o" id="btn-limpar-venc-bol" style="height:44px">Limpar data</button>
+    </div>
     <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
       <button class="btn btn-sm btn-g bol-filtro-btn" data-filtro="todos">Todos</button>
       <button class="btn btn-sm btn-o bol-filtro-btn" data-filtro="pendente">Em aberto</button>
@@ -1283,6 +1288,23 @@ document.querySelectorAll('.bol-filtro-btn').forEach(function(b) {
     renderBoletos();
   });
 });
+document.getElementById('bol-venc-de').addEventListener('change', renderBoletos);
+document.getElementById('bol-venc-ate').addEventListener('change', renderBoletos);
+document.getElementById('btn-limpar-venc-bol').addEventListener('click', function(){
+  document.getElementById('bol-venc-de').value='';
+  document.getElementById('bol-venc-ate').value='';
+  renderBoletos();
+});
+function filtraBoletosLista() {
+  var de = document.getElementById('bol-venc-de').value;
+  var ate = document.getElementById('bol-venc-ate').value;
+  return D.boletos.filter(function(b){
+    if(filtroBoletos!=='todos' && b.status!==filtroBoletos) return false;
+    if(de && (!b.venc || b.venc < de)) return false;
+    if(ate && (!b.venc || b.venc > ate)) return false;
+    return true;
+  });
+}
 
 // ===== CLIENTES =====
 function renderClis() {
@@ -3120,7 +3142,7 @@ document.getElementById('btn-cancelar-bp').addEventListener('click', function(){
 });
 document.getElementById('btn-xls-boletos').addEventListener('click', function() {
   if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
-  var lista = D.boletos.filter(function(b){ return filtroBoletos==='todos' || b.status===filtroBoletos; }).slice().sort(function(a,b){return (a.venc||'').localeCompare(b.venc||'');});
+  var lista = filtraBoletosLista().slice().sort(function(a,b){return (a.venc||'').localeCompare(b.venc||'');});
   var linhas = [['Fornecedor/Conta','Descrição','Valor (R$)','Vencimento','Status','Data pagamento','Pago por']];
   lista.forEach(function(b){
     linhas.push([
@@ -3133,6 +3155,8 @@ document.getElementById('btn-xls-boletos').addEventListener('click', function() 
   ws['!cols'] = [{wch:28},{wch:28},{wch:14},{wch:14},{wch:12},{wch:16},{wch:16}];
   XLSX.utils.book_append_sheet(wb, ws, 'Boletos');
   var sufixo = filtroBoletos==='pago' ? 'Pagos' : (filtroBoletos==='pendente' ? 'EmAberto' : 'Todos');
+  var de = document.getElementById('bol-venc-de').value, ate = document.getElementById('bol-venc-ate').value;
+  if(de || ate) sufixo += '_'+(de?fdata(de).replace(/\//g,'-'):'inicio')+'_a_'+(ate?fdata(ate).replace(/\//g,'-'):'fim');
   XLSX.writeFile(wb, 'Lele_Boletos_'+sufixo+'.xlsx');
   toast('Excel gerado!');
 });
@@ -3148,9 +3172,10 @@ function renderBoletos() {
       '<div class="rbox" style="background:var(--gl)"><label style="color:var(--g)">Pago</label><b style="color:var(--g)">'+fmt(totPago)+'</b></div>';
   }
 
-  var lista = D.boletos.filter(function(b){ return filtroBoletos==='todos' || b.status===filtroBoletos; });
+  var lista = filtraBoletosLista();
   if(!lista.length) {
-    var msg = filtroBoletos==='pago' ? 'Nenhuma conta paga ainda.' : (filtroBoletos==='pendente' ? 'Nenhuma conta em aberto.' : 'Nenhuma conta cadastrada.');
+    var de = document.getElementById('bol-venc-de').value, ate = document.getElementById('bol-venc-ate').value;
+    var msg = (de||ate) ? 'Nenhuma conta com vencimento nesse período.' : (filtroBoletos==='pago' ? 'Nenhuma conta paga ainda.' : (filtroBoletos==='pendente' ? 'Nenhuma conta em aberto.' : 'Nenhuma conta cadastrada.'));
     el.innerHTML='<div class="empty"><div class="ico">🔔</div><p>'+msg+'</p></div>'; return;
   }
   var hoje = fdataHoje();

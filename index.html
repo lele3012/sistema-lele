@@ -715,7 +715,20 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
         <div class="field"><label>Valor</label><input type="number" step="0.01" class="inp" id="dg-valor"></div>
       </div>
       <div class="field"><label>Descrição</label><input type="text" class="inp" id="dg-desc" placeholder="Ex: Combustivel, Manutencao da moto..."></div>
-      <div class="field"><label>Responsável / Entregador</label><input type="text" class="inp" id="dg-resp" placeholder="Ex: Joao"></div>
+      <div class="row2">
+        <div class="field"><label>Responsável / Entregador</label><input type="text" class="inp" id="dg-resp" placeholder="Ex: Joao"></div>
+        <div class="field"><label>Pago com</label>
+          <select class="inp" id="dg-banco">
+            <option value="Bradesco">Bradesco</option>
+            <option value="Santander">Santander</option>
+            <option value="Asaas">Asaas</option>
+            <option value="Pix Santander">Pix Santander</option>
+            <option value="Pix Bradesco">Pix Bradesco</option>
+            <option value="Pix Asaas">Pix Asaas</option>
+            <option value="Dinheiro">Dinheiro</option>
+          </select>
+        </div>
+      </div>
       <button class="btn btn-g" id="btn-salvar-dg">✅ Salvar despesa</button>
       <button class="btn btn-o" id="btn-cancelar-dg" style="display:none">Cancelar edição</button>
     </div>
@@ -3315,13 +3328,15 @@ document.getElementById('btn-salvar-dg').addEventListener('click', function() {
   var obj = {
     data:data, valor:valor,
     desc:document.getElementById('dg-desc').value.trim(),
-    responsavel:document.getElementById('dg-resp').value.trim()
+    responsavel:document.getElementById('dg-resp').value.trim(),
+    banco:document.getElementById('dg-banco').value
   };
   if(!editDespesaGeralKey) obj.id = Date.now();
   salvarRegistro('despesasGerais', obj, editDespesaGeralKey).then(function(){
     toast('Despesa salva!');
     document.getElementById('dg-data').value=''; document.getElementById('dg-valor').value='';
     document.getElementById('dg-desc').value=''; document.getElementById('dg-resp').value='';
+    document.getElementById('dg-banco').value='Bradesco';
     editDespesaGeralKey=null; document.getElementById('btn-cancelar-dg').style.display='none';
   });
 });
@@ -3329,6 +3344,7 @@ document.getElementById('btn-cancelar-dg').addEventListener('click', function(){
   editDespesaGeralKey=null; this.style.display='none';
   document.getElementById('dg-data').value=''; document.getElementById('dg-valor').value='';
   document.getElementById('dg-desc').value=''; document.getElementById('dg-resp').value='';
+  document.getElementById('dg-banco').value='Bradesco';
 });
 
 function despesasGeraisFiltradas() {
@@ -3359,7 +3375,7 @@ function renderDespesasGerais() {
   el.innerHTML = lista.map(function(d) {
     return '<div class="card" style="padding:12px 16px">'+
       '<div style="display:flex;justify-content:space-between"><b>'+(d.desc||'Despesa')+'</b><span style="font-weight:800;color:var(--r)">'+fmt(d.valor)+'</span></div>'+
-      '<div style="font-size:12px;color:#888;margin-top:2px">'+fdata(d.data)+(d.responsavel?' • '+d.responsavel:'')+'</div>'+
+      '<div style="font-size:12px;color:#888;margin-top:2px">'+fdata(d.data)+(d.responsavel?' • '+d.responsavel:'')+(d.banco?' • Pago com: '+d.banco:'')+'</div>'+
       '<div style="display:flex;gap:6px;margin-top:8px">'+
       '<button class="btn btn-sm btn-o" data-editdg="'+d._key+'">Editar</button>'+
       '<button class="btn btn-sm btn-r" data-deldg="'+d._key+'">Excluir</button>'+
@@ -3370,6 +3386,7 @@ function renderDespesasGerais() {
     editDespesaGeralKey = d._key;
     document.getElementById('dg-data').value=d.data; document.getElementById('dg-valor').value=d.valor;
     document.getElementById('dg-desc').value=d.desc||''; document.getElementById('dg-resp').value=d.responsavel||'';
+    document.getElementById('dg-banco').value=d.banco||'Bradesco';
     document.getElementById('btn-cancelar-dg').style.display='';
   });});
   el.querySelectorAll('[data-deldg]').forEach(function(btn){ btn.addEventListener('click', function(){
@@ -3383,13 +3400,13 @@ document.getElementById('dg-filtro-resp').addEventListener('input', renderDespes
 document.getElementById('btn-xls-despesas').addEventListener('click', function() {
   if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
   var lista = despesasGeraisFiltradas();
-  var linhas = [['Data','Descrição','Responsável','Valor (R$)']];
+  var linhas = [['Data','Descrição','Responsável','Pago com','Valor (R$)']];
   lista.forEach(function(d){
-    linhas.push([d.data?fdata(d.data):'', d.desc||'', d.responsavel||'', d.valor||0]);
+    linhas.push([d.data?fdata(d.data):'', d.desc||'', d.responsavel||'', d.banco||'', d.valor||0]);
   });
   var wb = XLSX.utils.book_new();
   var ws = XLSX.utils.aoa_to_sheet(linhas);
-  ws['!cols'] = [{wch:12},{wch:30},{wch:20},{wch:14}];
+  ws['!cols'] = [{wch:12},{wch:30},{wch:20},{wch:16},{wch:14}];
   XLSX.utils.book_append_sheet(wb, ws, 'Despesas');
   var mes = parseInt(document.getElementById('dg-filtro-mes').value)||0;
   var ano = parseInt(document.getElementById('dg-filtro-ano').value)||0;

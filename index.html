@@ -3213,12 +3213,16 @@ function renderBoletos() {
       (b.status==='pago' && b.contaPagamento ? '<div style="font-size:11px;color:#888;margin-top:2px">Pago por: '+b.contaPagamento+'</div>' : '')+
       '<div style="display:flex;gap:6px;margin-top:8px">'+
       (b.status==='pendente' ? '<button class="btn btn-sm btn-g" data-pagbol="'+b._key+'">Marcar como pago</button>' : '')+
+      (b.status==='pago' ? '<button class="btn btn-sm btn-o" data-editpag="'+b._key+'">📅 Editar pagamento</button>' : '')+
       '<button class="btn btn-sm btn-o" data-editbol="'+b._key+'">Editar</button>'+
       '<button class="btn btn-sm btn-r" data-delbol="'+b._key+'">Excluir</button>'+
       '</div></div>';
   }).join('');
   el.querySelectorAll('[data-pagbol]').forEach(function(btn){ btn.addEventListener('click', function(){
     abrirPagBol(btn.getAttribute('data-pagbol'));
+  });});
+  el.querySelectorAll('[data-editpag]').forEach(function(btn){ btn.addEventListener('click', function(){
+    abrirPagBol(btn.getAttribute('data-editpag'));
   });});
   el.querySelectorAll('[data-editbol]').forEach(function(btn){ btn.addEventListener('click', function(){
     var b = D.boletos.find(function(x){return x._key===btn.getAttribute('data-editbol');});
@@ -3238,11 +3242,13 @@ function abrirPagBol(key) {
   pagBolKey = key;
   var b = D.boletos.find(function(x){return x._key===key;});
   if(!b) return;
+  var editando = b.status==='pago';
+  document.querySelector('#modal-pagbol .mhead h2').textContent = editando ? 'Editar data/banco do pagamento' : 'Marcar como pago';
   document.getElementById('pagbol-info').innerHTML = '<div style="font-size:14px;font-weight:700">'+b.fornecedor+'</div>'+
     (b.desc ? '<div style="font-size:12px;color:#888;margin-top:2px">'+b.desc+'</div>' : '')+
     '<div style="font-size:18px;font-weight:900;color:var(--r);margin-top:6px">'+fmt(b.valor)+'</div>';
-  document.getElementById('pagbol-data').value = new Date().toISOString().split('T')[0];
-  document.getElementById('pagbol-conta').value = 'Bradesco';
+  document.getElementById('pagbol-data').value = b.dataPagamento || new Date().toISOString().split('T')[0];
+  document.getElementById('pagbol-conta').value = b.contaPagamento || 'Bradesco';
   document.getElementById('modal-pagbol').classList.add('on');
 }
 document.getElementById('btn-pagbol-close').addEventListener('click', function(){ document.getElementById('modal-pagbol').classList.remove('on'); });
@@ -3251,8 +3257,12 @@ document.getElementById('btn-pagbol-confirmar').addEventListener('click', functi
   var data = document.getElementById('pagbol-data').value;
   if(!data) { toast('Informe a data'); return; }
   var conta = document.getElementById('pagbol-conta').value;
+  var bAntes = D.boletos.find(function(x){return x._key===pagBolKey;});
+  var eraEdicao = bAntes && bAntes.status==='pago';
   document.getElementById('modal-pagbol').classList.remove('on');
-  atualizarRegistro('boletos', pagBolKey, {status:'pago', dataPagamento:data, contaPagamento:conta}).then(function(){ toast('Marcado como pago!'); });
+  atualizarRegistro('boletos', pagBolKey, {status:'pago', dataPagamento:data, contaPagamento:conta}).then(function(){
+    toast(eraEdicao ? 'Data/banco do pagamento atualizados!' : 'Marcado como pago!');
+  });
 });
 
 // --- CONTAS RECORRENTES ---

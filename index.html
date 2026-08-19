@@ -811,6 +811,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
         </select>
       </div>
       <div class="field" style="flex:1;min-width:100px;margin-bottom:0"><label>Ano</label><input type="number" class="inp" id="nf-filtro-ano" value="2026"></div>
+      <div class="field" style="flex:1;min-width:160px;margin-bottom:0"><label>Fornecedor</label><input type="text" class="inp" id="nf-filtro-forn" placeholder="Todos" list="dl-fornecedores"></div>
       <button class="btn btn-o btn-sm" id="btn-xls-notas" style="margin-top:0;height:44px">📊 Exportar Excel</button>
     </div>
     <div id="lista-notas"></div>
@@ -3077,7 +3078,9 @@ document.getElementById('btn-salvar-nf').addEventListener('click', function() {
 function notasFiltradas() {
   var mes = parseInt(document.getElementById('nf-filtro-mes').value)||0;
   var ano = parseInt(document.getElementById('nf-filtro-ano').value)||0;
+  var forn = (document.getElementById('nf-filtro-forn').value||'').trim().toLowerCase();
   return D.notasFiscais.filter(function(n){
+    if(forn && (n.fornecedor||'').toLowerCase().indexOf(forn)<0) return false;
     if(!mes && !ano) return true;
     if(!n.data) return false;
     var d = new Date(n.data+'T00:00:00');
@@ -3103,6 +3106,7 @@ function renderNotas() {
 }
 document.getElementById('nf-filtro-mes').addEventListener('change', renderNotas);
 document.getElementById('nf-filtro-ano').addEventListener('input', renderNotas);
+document.getElementById('nf-filtro-forn').addEventListener('input', renderNotas);
 document.getElementById('btn-xls-notas').addEventListener('click', function() {
   if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
   var lista = notasFiltradas();
@@ -3127,7 +3131,8 @@ document.getElementById('btn-xls-notas').addEventListener('click', function() {
   XLSX.utils.book_append_sheet(wb, ws, 'Notas Fiscais');
   var mes = parseInt(document.getElementById('nf-filtro-mes').value)||0;
   var ano = parseInt(document.getElementById('nf-filtro-ano').value)||0;
-  var sufixo = (mes?MESES[mes]:'Todos') + (ano?('_'+ano):'');
+  var forn = document.getElementById('nf-filtro-forn').value.trim();
+  var sufixo = (mes?MESES[mes]:'Todos') + (ano?('_'+ano):'') + (forn?('_'+forn.replace(/[^a-zA-Z0-9]/g,'')):'');
   XLSX.writeFile(wb, 'Lele_NotasFiscais_'+sufixo+'.xlsx');
   toast('Excel gerado!');
 });

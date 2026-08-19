@@ -3141,7 +3141,18 @@ document.getElementById('btn-salvar-bp').addEventListener('click', function() {
     valor:parseFloat(document.getElementById('bp-valor').value)||0, venc:venc,
     status:'pendente', origem:'manual'
   };
-  if(!editBoletoKey) obj.id = Date.now();
+  if(editBoletoKey) {
+    var existente = D.boletos.find(function(x){ return x._key===editBoletoKey; });
+    if(existente) {
+      obj.status = existente.status;
+      obj.origem = existente.origem;
+      if(existente.dataPagamento) obj.dataPagamento = existente.dataPagamento;
+      if(existente.contaPagamento) obj.contaPagamento = existente.contaPagamento;
+      if(existente.id) obj.id = existente.id;
+    }
+  } else {
+    obj.id = Date.now();
+  }
   salvarRegistro('boletos', obj, editBoletoKey).then(function(){
     toast('Conta salva!');
     document.getElementById('bp-forn').value=''; document.getElementById('bp-desc').value=''; document.getElementById('bp-valor').value='';
@@ -3215,6 +3226,8 @@ function renderBoletos() {
     document.getElementById('bp-forn').value=b.fornecedor; document.getElementById('bp-desc').value=b.desc||'';
     document.getElementById('bp-valor').value=b.valor; document.getElementById('bp-venc').value=b.venc;
     document.getElementById('btn-cancelar-bp').style.display='';
+    document.getElementById('bp-forn').scrollIntoView({behavior:'smooth', block:'center'});
+    toast('Editando '+b.fornecedor+' — role para cima, ajuste e clique em Salvar conta');
   });});
   el.querySelectorAll('[data-delbol]').forEach(function(btn){ btn.addEventListener('click', function(){
     if(confirm('Excluir esta conta?')) excluirRegistro('boletos', btn.getAttribute('data-delbol'));

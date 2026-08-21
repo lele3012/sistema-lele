@@ -91,6 +91,16 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 
 /* BADGE */
 .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700}
+.badge-cat{background:#eef2f7;color:#4a5568}
+.dg-row{background:#fff;border:1px solid var(--b);border-radius:10px;padding:10px 14px;margin-bottom:6px}
+.dg-row-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.dg-row-desc{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dg-row-valor{font-weight:800;color:var(--r);white-space:nowrap;font-size:14px}
+.dg-row-bottom{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:4px}
+.dg-row-meta{font-size:12px;color:#888;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dg-row-actions{display:flex;gap:4px;flex-shrink:0}
+.dg-icon-btn{border:none;background:transparent;font-size:15px;cursor:pointer;padding:2px 5px;border-radius:6px;line-height:1}
+.dg-icon-btn:hover{background:#f0f0f0}
 .badge-g{background:var(--gl);color:var(--g)}
 .badge-r{background:var(--rl);color:var(--r)}
 .badge-y{background:#fff3cd;color:#856404}
@@ -3477,13 +3487,16 @@ function renderDespesasGerais() {
 
   if(!lista.length) { el.innerHTML='<div class="empty"><div class="ico">🧾</div><p>Nenhuma despesa lançada.</p></div>'; return; }
   el.innerHTML = lista.map(function(d) {
-    return '<div class="card" style="padding:12px 16px">'+
-      '<div style="display:flex;justify-content:space-between"><b>'+(d.desc||'Despesa')+'</b><span style="font-weight:800;color:var(--r)">'+fmt(d.valor)+'</span></div>'+
-      '<div style="font-size:12px;color:#888;margin-top:2px">'+fdata(d.data)+(d.responsavel?' • '+d.responsavel:'')+(d.banco?' • Pago com: '+d.banco:'')+'</div>'+
-      '<div style="display:flex;gap:6px;margin-top:8px">'+
-      '<button class="btn btn-sm btn-o" data-editdg="'+d._key+'">Editar</button>'+
-      '<button class="btn btn-sm btn-r" data-deldg="'+d._key+'">Excluir</button>'+
-      '</div></div>';
+    var meta = [fdata(d.data)];
+    if(d.responsavel) meta.push('<span class="badge badge-cat">'+d.responsavel+'</span>');
+    if(d.banco) meta.push(d.banco);
+    return '<div class="dg-row">'+
+      '<div class="dg-row-top"><span class="dg-row-desc">'+(d.desc||'Despesa')+'</span><span class="dg-row-valor">'+fmt(d.valor)+'</span></div>'+
+      '<div class="dg-row-bottom"><span class="dg-row-meta">'+meta.join(' &nbsp;·&nbsp; ')+'</span>'+
+      '<span class="dg-row-actions">'+
+      '<button class="dg-icon-btn" title="Editar" data-editdg="'+d._key+'">✏️</button>'+
+      '<button class="dg-icon-btn" title="Excluir" data-deldg="'+d._key+'">🗑️</button>'+
+      '</span></div></div>';
   }).join('');
   el.querySelectorAll('[data-editdg]').forEach(function(btn){ btn.addEventListener('click', function(){
     var d = D.despesasGerais.find(function(x){return x._key===btn.getAttribute('data-editdg');});

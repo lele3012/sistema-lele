@@ -650,7 +650,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
       <div class="field" style="margin-bottom:0;min-width:140px"><label>Vence de</label><input type="date" class="inp" id="bol-venc-de"></div>
       <div class="field" style="margin-bottom:0;min-width:140px"><label>até</label><input type="date" class="inp" id="bol-venc-ate"></div>
-      <button class="btn btn-sm btn-o" id="btn-limpar-venc-bol" style="height:44px">Limpar data</button>
+      <div class="field" style="margin-bottom:0;min-width:160px"><label>Fornecedor</label><input type="text" class="inp" id="bol-filtro-forn" placeholder="Todos" list="dl-fornecedores"></div>
+      <button class="btn btn-sm btn-o" id="btn-limpar-venc-bol" style="height:44px">Limpar filtros</button>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
       <button class="btn btn-sm btn-g bol-filtro-btn" data-filtro="todos">Todos</button>
@@ -749,7 +750,13 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       </div>
       <div class="field" style="flex:1;min-width:100px;margin-bottom:0"><label>Ano</label><input type="number" class="inp" id="dg-filtro-ano" value="2026"></div>
       <div class="field" style="flex:1;min-width:120px;margin-bottom:0"><label>Responsável</label><input type="text" class="inp" id="dg-filtro-resp" placeholder="Todos"></div>
+      <div class="field" style="flex:1;min-width:140px;margin-bottom:0"><label>Descrição</label><input type="text" class="inp" id="dg-filtro-desc" placeholder="Ex: combustivel"></div>
       <button class="btn btn-o btn-sm" id="btn-xls-despesas" style="margin-top:0;height:44px">📊 Exportar Excel</button>
+    </div>
+    <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:12px">
+      <div class="field" style="flex:1;min-width:140px;margin-bottom:0"><label>Data de</label><input type="date" class="inp" id="dg-filtro-data-de"></div>
+      <div class="field" style="flex:1;min-width:140px;margin-bottom:0"><label>até</label><input type="date" class="inp" id="dg-filtro-data-ate"></div>
+      <button class="btn btn-o btn-sm" id="btn-limpar-filtros-dg" style="height:44px">Limpar filtros</button>
     </div>
     <div id="dg-resumo" class="rg" style="margin-bottom:10px"></div>
     <div id="lista-despesasgerais"></div>
@@ -1308,18 +1315,22 @@ document.querySelectorAll('.bol-filtro-btn').forEach(function(b) {
 });
 document.getElementById('bol-venc-de').addEventListener('change', renderBoletos);
 document.getElementById('bol-venc-ate').addEventListener('change', renderBoletos);
+document.getElementById('bol-filtro-forn').addEventListener('input', renderBoletos);
 document.getElementById('btn-limpar-venc-bol').addEventListener('click', function(){
   document.getElementById('bol-venc-de').value='';
   document.getElementById('bol-venc-ate').value='';
+  document.getElementById('bol-filtro-forn').value='';
   renderBoletos();
 });
 function filtraBoletosLista() {
   var de = document.getElementById('bol-venc-de').value;
   var ate = document.getElementById('bol-venc-ate').value;
+  var forn = (document.getElementById('bol-filtro-forn').value||'').trim().toLowerCase();
   return D.boletos.filter(function(b){
     if(filtroBoletos!=='todos' && b.status!==filtroBoletos) return false;
     if(de && (!b.venc || b.venc < de)) return false;
     if(ate && (!b.venc || b.venc > ate)) return false;
+    if(forn && (b.fornecedor||'').toLowerCase().indexOf(forn)<0) return false;
     return true;
   });
 }
@@ -3200,6 +3211,8 @@ document.getElementById('btn-xls-boletos').addEventListener('click', function() 
   var sufixo = filtroBoletos==='pago' ? 'Pagos' : (filtroBoletos==='pendente' ? 'EmAberto' : 'Todos');
   var de = document.getElementById('bol-venc-de').value, ate = document.getElementById('bol-venc-ate').value;
   if(de || ate) sufixo += '_'+(de?fdata(de).replace(/\//g,'-'):'inicio')+'_a_'+(ate?fdata(ate).replace(/\//g,'-'):'fim');
+  var fornXls = document.getElementById('bol-filtro-forn').value.trim();
+  if(fornXls) sufixo += '_'+fornXls.replace(/[^a-zA-Z0-9]/g,'');
   XLSX.writeFile(wb, 'Lele_Boletos_'+sufixo+'.xlsx');
   toast('Excel gerado!');
 });
@@ -3218,7 +3231,8 @@ function renderBoletos() {
   var lista = filtraBoletosLista();
   if(!lista.length) {
     var de = document.getElementById('bol-venc-de').value, ate = document.getElementById('bol-venc-ate').value;
-    var msg = (de||ate) ? 'Nenhuma conta com vencimento nesse período.' : (filtroBoletos==='pago' ? 'Nenhuma conta paga ainda.' : (filtroBoletos==='pendente' ? 'Nenhuma conta em aberto.' : 'Nenhuma conta cadastrada.'));
+    var forn = document.getElementById('bol-filtro-forn').value.trim();
+    var msg = (de||ate||forn) ? 'Nenhuma conta encontrada para esse filtro.' : (filtroBoletos==='pago' ? 'Nenhuma conta paga ainda.' : (filtroBoletos==='pendente' ? 'Nenhuma conta em aberto.' : 'Nenhuma conta cadastrada.'));
     el.innerHTML='<div class="empty"><div class="ico">🔔</div><p>'+msg+'</p></div>'; return;
   }
   var hoje = fdataHoje();
@@ -3393,11 +3407,17 @@ function despesasGeraisFiltradas() {
   var mes = parseInt(document.getElementById('dg-filtro-mes').value)||0;
   var ano = parseInt(document.getElementById('dg-filtro-ano').value)||0;
   var resp = (document.getElementById('dg-filtro-resp').value||'').trim().toLowerCase();
+  var desc = (document.getElementById('dg-filtro-desc').value||'').trim().toLowerCase();
+  var dataDe = document.getElementById('dg-filtro-data-de').value;
+  var dataAte = document.getElementById('dg-filtro-data-ate').value;
   return D.despesasGerais.filter(function(d) {
     var dt = new Date((d.data||'')+'T00:00:00');
     if(mes && dt.getMonth()+1!==mes) return false;
     if(ano && dt.getFullYear()!==ano) return false;
     if(resp && (d.responsavel||'').toLowerCase().indexOf(resp)<0) return false;
+    if(desc && (d.desc||'').toLowerCase().indexOf(desc)<0) return false;
+    if(dataDe && (!d.data || d.data < dataDe)) return false;
+    if(dataAte && (!d.data || d.data > dataAte)) return false;
     return true;
   }).slice().sort(function(a,b){return (b.data||'').localeCompare(a.data||'');});
 }
@@ -3430,6 +3450,8 @@ function renderDespesasGerais() {
     document.getElementById('dg-desc').value=d.desc||''; document.getElementById('dg-resp').value=d.responsavel||'';
     document.getElementById('dg-banco').value=d.banco||'Bradesco';
     document.getElementById('btn-cancelar-dg').style.display='';
+    document.getElementById('dg-data').scrollIntoView({behavior:'smooth', block:'center'});
+    toast('Editando despesa "'+(d.desc||'sem descrição')+'" — ajuste os campos e clique em Salvar despesa');
   });});
   el.querySelectorAll('[data-deldg]').forEach(function(btn){ btn.addEventListener('click', function(){
     if(confirm('Excluir esta despesa?')) excluirRegistro('despesasGerais', btn.getAttribute('data-deldg'));
@@ -3438,6 +3460,17 @@ function renderDespesasGerais() {
 document.getElementById('dg-filtro-mes').addEventListener('change', renderDespesasGerais);
 document.getElementById('dg-filtro-ano').addEventListener('input', renderDespesasGerais);
 document.getElementById('dg-filtro-resp').addEventListener('input', renderDespesasGerais);
+document.getElementById('dg-filtro-desc').addEventListener('input', renderDespesasGerais);
+document.getElementById('dg-filtro-data-de').addEventListener('change', renderDespesasGerais);
+document.getElementById('dg-filtro-data-ate').addEventListener('change', renderDespesasGerais);
+document.getElementById('btn-limpar-filtros-dg').addEventListener('click', function(){
+  document.getElementById('dg-filtro-mes').value='0';
+  document.getElementById('dg-filtro-resp').value='';
+  document.getElementById('dg-filtro-desc').value='';
+  document.getElementById('dg-filtro-data-de').value='';
+  document.getElementById('dg-filtro-data-ate').value='';
+  renderDespesasGerais();
+});
 
 document.getElementById('btn-xls-despesas').addEventListener('click', function() {
   if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }

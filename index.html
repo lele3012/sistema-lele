@@ -774,6 +774,15 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <button class="btn btn-g" id="btn-salvar-dg">✅ Salvar despesa</button>
       <button class="btn btn-o" id="btn-cancelar-dg" style="display:none">Cancelar edição</button>
     </div>
+
+    <div id="painel-revisar-cat" class="card" style="display:none;border:1.5px solid #f0b429;background:#fffbeb">
+      <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" id="toggle-revisar-cat">
+        <div><b id="revisar-cat-titulo">Despesas sem categoria</b><div style="font-size:12px;color:#946200" id="revisar-cat-sub"></div></div>
+        <span id="revisar-cat-seta">▾</span>
+      </div>
+      <div id="lista-revisar-cat" style="margin-top:12px"></div>
+    </div>
+
     <div class="stitle">Despesas lançadas</div>
     <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:12px">
       <div class="field" style="flex:1;min-width:120px;margin-bottom:0"><label>Mês</label>
@@ -1116,6 +1125,13 @@ var cobSelecionados = new Set();
 var pagBolKey = null;
 var lancarRecKey = null;
 var editBoletoKey = null, editRecorrenteKey = null, editInsumoKey = null, editFornecedorKey = null, editDespesaGeralKey = null;
+var CATEGORIAS_DESPESA = ['Despesa com folha','Prestação de serviço','Manutenção','Impostos e taxas','Material de escritorio','Material de limpeza','Alimentação','Aniversário','Vale transporte','Marketing','Aluguel','Combustível','Retirada de lucro','Insumos','Embalagens e Isopores','Água/Esgoto','Energia elétrica','Gás','Uniforme','Contabilidade','Segurança','Diversos','Telefone/Internet'];
+['dg-resp','dg-filtro-resp'].forEach(function(id){
+  var sel = document.getElementById(id);
+  if(!sel) return;
+  var placeholder = id==='dg-resp' ? '<option value="">Selecione...</option>' : '<option value="">Todas</option>';
+  sel.innerHTML = placeholder + CATEGORIAS_DESPESA.map(function(c){ return '<option value="'+c+'">'+(c==='Material de escritorio'?'Material de escritório':c)+'</option>'; }).join('');
+});
 
 var PRECO = {bola:8.50, integral:8.50, las250:11.00, las500:14.50, mini:2.30, suco:0, salada:0};
 var NOME = {bola:'Pao Bola', integral:'Pao Integral', las250:'Lasanha 250g', las500:'Lasanha 500g', mini:'Mini Sanduiche', suco:'Suco de Laranja', salada:'Salada de Frutas'};
@@ -3488,6 +3504,7 @@ function despesasGeraisFiltradas() {
 
 function renderDespesasGerais() {
   var el = document.getElementById('lista-despesasgerais'); if(!el) return;
+  renderRevisaoCategorias();
   var lista = despesasGeraisFiltradas();
 
   var resumoEl = document.getElementById('dg-resumo');
@@ -3524,6 +3541,44 @@ function renderDespesasGerais() {
     if(confirm('Excluir esta despesa?')) excluirRegistro('despesasGerais', btn.getAttribute('data-deldg'));
   });});
 }
+
+function renderRevisaoCategorias() {
+  var painel = document.getElementById('painel-revisar-cat');
+  if(!painel) return;
+  var pendentes = D.despesasGerais.filter(function(d){ return !d.responsavel || CATEGORIAS_DESPESA.indexOf(d.responsavel)<0; });
+  if(!pendentes.length) { painel.style.display='none'; return; }
+  painel.style.display='';
+  document.getElementById('revisar-cat-sub').textContent = pendentes.length+' despesa(s) sem categoria válida — escolha a categoria de cada uma abaixo';
+  var listaEl = document.getElementById('lista-revisar-cat');
+  pendentes.sort(function(a,b){return (b.data||'').localeCompare(a.data||'');});
+  listaEl.innerHTML = pendentes.map(function(d){
+    var valorAntigo = d.responsavel ? ' <span style="color:#946200;font-size:11px">(estava: "'+d.responsavel+'")</span>' : '';
+    return '<div class="dg-row" style="background:#fff">'+
+      '<div class="dg-row-top"><span class="dg-row-desc">'+(d.desc||'Despesa')+valorAntigo+'</span><span class="dg-row-valor">'+fmt(d.valor)+'</span></div>'+
+      '<div class="dg-row-bottom" style="margin-top:8px">'+
+      '<span class="dg-row-meta">'+fdata(d.data)+(d.banco?' &nbsp;·&nbsp; '+d.banco:'')+'</span>'+
+      '<select class="inp" style="width:auto;max-width:220px;padding:6px 8px;font-size:13px" data-revcat="'+d._key+'">'+
+      '<option value="">Escolher categoria...</option>'+
+      CATEGORIAS_DESPESA.map(function(c){ return '<option value="'+c+'">'+(c==='Material de escritorio'?'Material de escritório':c)+'</option>'; }).join('')+
+      '</select></div></div>';
+  }).join('');
+  listaEl.querySelectorAll('[data-revcat]').forEach(function(sel){
+    sel.addEventListener('change', function(){
+      if(!this.value) return;
+      var key = this.getAttribute('data-revcat');
+      atualizarRegistro('despesasGerais', key, {responsavel:this.value}).then(function(){
+        toast('Categoria salva!');
+      });
+    });
+  });
+}
+document.getElementById('toggle-revisar-cat').addEventListener('click', function(){
+  var lista = document.getElementById('lista-revisar-cat');
+  var seta = document.getElementById('revisar-cat-seta');
+  var aberto = lista.style.display!=='none';
+  lista.style.display = aberto ? 'none' : '';
+  seta.textContent = aberto ? '▸' : '▾';
+});
 document.getElementById('dg-filtro-mes').addEventListener('change', renderDespesasGerais);
 document.getElementById('dg-filtro-ano').addEventListener('input', renderDespesasGerais);
 document.getElementById('dg-filtro-resp').addEventListener('change', renderDespesasGerais);

@@ -235,6 +235,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 <div class="pnl" id="pnl-cobrancas">
   <div class="stitle" style="margin-top:0">Boletos em aberto</div>
   <div id="resumo-cob"></div>
+  <div class="field" style="max-width:320px"><label>Filtrar por cliente</label><input type="text" class="inp" id="cob-filtro-cliente" placeholder="Todos" list="dl-clientes-cob"></div>
+  <datalist id="dl-clientes-cob"></datalist>
   <div id="cob-lote-bar" style="display:none;position:sticky;top:0;z-index:5;background:#fff;padding:10px;margin-bottom:10px;border-radius:10px;border:1.5px solid var(--g)">
     <div style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap">
       <span style="font-size:13px;font-weight:700"><b id="cob-lote-count">0</b> selecionado(s) — <span id="cob-lote-total">R$ 0</span></span>
@@ -1713,6 +1715,15 @@ function renderCob() {
     var item = {id:e.id, cliente:c?(c.fantasia||c.nome):'?', data:e.data, venc:venc, valor:e.valorTotal, boleto:e.boleto, tipo:e.pagamento==='boleto7'?'Boleto 7 dias':'Mensal', pago:e.pago, pgData:e.pgData, pgObs:e.pgObs};
     if(e.pago) pagos.push(item); else aberto.push(item);
   });
+
+  var dlCob = document.getElementById('dl-clientes-cob');
+  if(dlCob) dlCob.innerHTML = D.clientes.map(function(c){ return '<option value="'+(c.fantasia||c.nome)+'">'; }).join('');
+  var filtroCli = (document.getElementById('cob-filtro-cliente').value||'').trim().toLowerCase();
+  if(filtroCli) {
+    aberto = aberto.filter(function(i){ return i.cliente.toLowerCase().indexOf(filtroCli)>=0; });
+    pagos = pagos.filter(function(i){ return i.cliente.toLowerCase().indexOf(filtroCli)>=0; });
+  }
+
   aberto.sort(function(a,b){return a.venc-b.venc;});
   pagos.sort(function(a,b){return (b.pgData||'').localeCompare(a.pgData||'');});
 
@@ -1723,7 +1734,7 @@ function renderCob() {
 
   var lEl = document.getElementById('lista-cob');
   var selBox = document.getElementById('cob-sel-todos-box');
-  if(!aberto.length) { lEl.innerHTML='<div class="empty"><div class="ico">🔔</div><p>Nenhum boleto em aberto.</p></div>'; selBox.style.display='none'; }
+  if(!aberto.length) { lEl.innerHTML='<div class="empty"><div class="ico">🔔</div><p>'+(filtroCli?'Nenhum boleto em aberto para esse cliente.':'Nenhum boleto em aberto.')+'</p></div>'; selBox.style.display='none'; }
   else {
     selBox.style.display='block';
     lEl.innerHTML = aberto.map(function(item) {
@@ -1740,7 +1751,7 @@ function renderCob() {
   Array.from(cobSelecionados).forEach(function(id){ if(!idsAtuais[String(id)]) cobSelecionados.delete(id); });
 
   var pEl = document.getElementById('lista-pagos');
-  if(!pagos.length) { pEl.innerHTML='<div class="empty"><div class="ico">✅</div><p>Nenhum pagamento registrado.</p></div>'; }
+  if(!pagos.length) { pEl.innerHTML='<div class="empty"><div class="ico">✅</div><p>'+(filtroCli?'Nenhum pagamento registrado para esse cliente.':'Nenhum pagamento registrado.')+'</p></div>'; }
   else {
     pEl.innerHTML = pagos.map(function(item) {
       return '<div class="citem ok"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700">'+item.cliente+'</div><div style="font-size:11px;color:#888;margin-top:2px">'+item.tipo+' | Entrega '+fdata(item.data)+(item.pgData?' | Pago em '+fdata(item.pgData):'')+(item.pgObs?' | '+item.pgObs:'')+'</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:800;color:var(--g)">'+fmt(item.valor)+'</div><button class="btn-desfazer" data-id="'+item.id+'" style="background:none;border:none;font-size:11px;color:#888;cursor:pointer;text-decoration:underline">desfazer</button></div></div></div>';
@@ -1827,6 +1838,7 @@ document.getElementById('btn-cob-limpar-sel').addEventListener('click', function
   var selTodos = document.getElementById('cob-sel-todos'); if(selTodos) selTodos.checked=false;
   atualizarBarraCob();
 });
+document.getElementById('cob-filtro-cliente').addEventListener('input', renderCob);
 document.getElementById('btn-cob-baixar-lote').addEventListener('click', function() {
   if(!cobSelecionados.size) return;
   var total = 0;

@@ -719,7 +719,27 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       </div>
       <div class="field"><label>Descrição</label><input type="text" class="inp" id="dg-desc" placeholder="Ex: Combustivel, Manutencao da moto..."></div>
       <div class="row2">
-        <div class="field"><label>Responsável / Entregador</label><input type="text" class="inp" id="dg-resp" placeholder="Ex: Joao"></div>
+        <div class="field"><label>Categoria da despesa</label>
+          <select class="inp" id="dg-resp">
+            <option value="">Selecione...</option>
+            <option value="Despesa com folha">Despesa com folha</option>
+            <option value="Prestação de serviço">Prestação de serviço</option>
+            <option value="Manutenção carro">Manutenção carro</option>
+            <option value="Impostos e taxas">Impostos e taxas</option>
+            <option value="Material de escritorio">Material de escritório</option>
+            <option value="Material de limpeza">Material de limpeza</option>
+            <option value="Alimentação">Alimentação</option>
+            <option value="Aniversário">Aniversário</option>
+            <option value="Vale transporte">Vale transporte</option>
+            <option value="Marketing">Marketing</option>
+            <option value="Aluguel">Aluguel</option>
+            <option value="Combustível">Combustível</option>
+            <option value="Retirada de lucro">Retirada de lucro</option>
+            <option value="Despesas administrativas">Despesas administrativas</option>
+            <option value="Diversos">Diversos</option>
+            <option value="Telefone/Internet">Telefone/Internet</option>
+          </select>
+        </div>
         <div class="field"><label>Pago com</label>
           <select class="inp" id="dg-banco">
             <option value="Bradesco">Bradesco</option>
@@ -749,7 +769,27 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
         </select>
       </div>
       <div class="field" style="flex:1;min-width:100px;margin-bottom:0"><label>Ano</label><input type="number" class="inp" id="dg-filtro-ano" value="2026"></div>
-      <div class="field" style="flex:1;min-width:120px;margin-bottom:0"><label>Responsável</label><input type="text" class="inp" id="dg-filtro-resp" placeholder="Todos"></div>
+      <div class="field" style="flex:1;min-width:120px;margin-bottom:0"><label>Categoria</label>
+        <select class="inp" id="dg-filtro-resp">
+          <option value="">Todas</option>
+          <option value="Despesa com folha">Despesa com folha</option>
+          <option value="Prestação de serviço">Prestação de serviço</option>
+          <option value="Manutenção carro">Manutenção carro</option>
+          <option value="Impostos e taxas">Impostos e taxas</option>
+          <option value="Material de escritorio">Material de escritório</option>
+          <option value="Material de limpeza">Material de limpeza</option>
+          <option value="Alimentação">Alimentação</option>
+          <option value="Aniversário">Aniversário</option>
+          <option value="Vale transporte">Vale transporte</option>
+          <option value="Marketing">Marketing</option>
+          <option value="Aluguel">Aluguel</option>
+          <option value="Combustível">Combustível</option>
+          <option value="Retirada de lucro">Retirada de lucro</option>
+          <option value="Despesas administrativas">Despesas administrativas</option>
+          <option value="Diversos">Diversos</option>
+          <option value="Telefone/Internet">Telefone/Internet</option>
+        </select>
+      </div>
       <div class="field" style="flex:1;min-width:140px;margin-bottom:0"><label>Descrição</label><input type="text" class="inp" id="dg-filtro-desc" placeholder="Ex: combustivel"></div>
       <button class="btn btn-o btn-sm" id="btn-xls-despesas" style="margin-top:0;height:44px">📊 Exportar Excel</button>
     </div>
@@ -3459,7 +3499,7 @@ function renderDespesasGerais() {
 }
 document.getElementById('dg-filtro-mes').addEventListener('change', renderDespesasGerais);
 document.getElementById('dg-filtro-ano').addEventListener('input', renderDespesasGerais);
-document.getElementById('dg-filtro-resp').addEventListener('input', renderDespesasGerais);
+document.getElementById('dg-filtro-resp').addEventListener('change', renderDespesasGerais);
 document.getElementById('dg-filtro-desc').addEventListener('input', renderDespesasGerais);
 document.getElementById('dg-filtro-data-de').addEventListener('change', renderDespesasGerais);
 document.getElementById('dg-filtro-data-ate').addEventListener('change', renderDespesasGerais);
@@ -3475,7 +3515,7 @@ document.getElementById('btn-limpar-filtros-dg').addEventListener('click', funct
 document.getElementById('btn-xls-despesas').addEventListener('click', function() {
   if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
   var lista = despesasGeraisFiltradas();
-  var linhas = [['Data','Descrição','Responsável','Pago com','Valor (R$)']];
+  var linhas = [['Data','Descrição','Categoria','Pago com','Valor (R$)']];
   lista.forEach(function(d){
     linhas.push([d.data?fdata(d.data):'', d.desc||'', d.responsavel||'', d.banco||'', d.valor||0]);
   });

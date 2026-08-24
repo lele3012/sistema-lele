@@ -3669,6 +3669,14 @@ function gerarDRE() {
   });
   var lucroBruto = receita - cmv;
 
+  // Notas fiscais pagas no mes (informativo, para comparar com o CMV calculado via ficha tecnica)
+  var nfPagas = D.boletos.filter(function(b){
+    if(b.status!=='pago' || !b.dataPagamento) return false;
+    if(b.origem!=='nf') return false;
+    var d = new Date(b.dataPagamento+'T00:00:00');
+    return d.getMonth()+1===mes && d.getFullYear()===ano;
+  }).reduce(function(s,b){return s+(b.valor||0);},0);
+
   // Despesas pagas no mes, excluindo boletos originados de nota fiscal (ja contados no CMV via ficha tecnica)
   var despesasBoletos = D.boletos.filter(function(b){
     if(b.status!=='pago' || !b.dataPagamento) return false;
@@ -3693,15 +3701,22 @@ function gerarDRE() {
       '<b style="font-size:'+(destaque?'18px':'15px')+';color:'+(cor||'#1a1a1a')+'">'+fmt(valor)+'</b></div></div>';
   }
 
+  var difNfCmv = nfPagas - cmv;
+  var difPct = cmv>0 ? (difNfCmv/cmv*100) : (nfPagas>0?100:0);
+
   var html = '';
   html += linha('Receita (vendas do mês)', receita, false, 'var(--g)');
   html += linha('(-) Custo de produção (CMV)', -cmv, false, 'var(--r)');
+  html += '<div class="card" style="padding:10px 16px;background:#f7f5f1"><div style="display:flex;justify-content:space-between;align-items:center">'+
+    '<span style="font-size:12px;color:#666">ℹ️ Notas fiscais pagas no mês (comparativo)</span>'+
+    '<b style="font-size:13px;color:#666">'+fmt(nfPagas)+'</b></div>'+
+    '<div style="font-size:11px;color:#999;margin-top:4px">Diferença vs. CMV: '+(difNfCmv>=0?'+':'')+fmt(difNfCmv)+' ('+(difPct>=0?'+':'')+difPct.toFixed(0)+'%)</div></div>';
   html += linha('= Lucro bruto', lucroBruto, true);
   html += linha('(-) Despesas pagas no mês', -despesas, false, 'var(--r)');
   html += '<div class="div"></div>';
   html += linha('= Resultado do mês', resultado, true, resultado>=0?'var(--g)':'var(--r)');
   html += '<div class="card" style="text-align:center;padding:10px"><span style="font-size:11px;color:#888">Margem líquida do mês: </span><b style="color:'+(margemPct>=0?'var(--g)':'var(--r)')+'">'+margemPct.toFixed(1)+'%</b></div>';
-  html += '<div class="alert alert-i" style="margin-top:12px">O CMV é calculado pelas fichas técnicas × quantidade vendida. Boletos originados de nota fiscal (matéria-prima) não entram de novo em "despesas pagas", pra não contar o mesmo custo duas vezes. Entram despesas operacionais (aluguel, recorrentes, boletos manuais) e as despesas lançadas na aba Despesas (combustível, manutenção etc).</div>';
+  html += '<div class="alert alert-i" style="margin-top:12px">O CMV é calculado pelas fichas técnicas × quantidade vendida. A linha de "Notas fiscais pagas" é só informativa, pra comparar com o CMV — ela NÃO entra no cálculo do Resultado, pra não contar o custo de matéria-prima duas vezes. Em "Despesas pagas no mês" entram despesas operacionais (aluguel, recorrentes, boletos manuais) e as despesas lançadas na aba Despesas (combustível, manutenção etc).</div>';
 
   document.getElementById('dre-area').innerHTML = html;
 }

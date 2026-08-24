@@ -481,6 +481,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <button class="btn btn-g" id="btn-gerar-dre">Gerar DRE</button>
     </div>
     <div id="dre-area"></div>
+    <div id="btn-xls-dre-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-dre">📊 Exportar Excel</button></div>
   </div>
 
   <div class="fin-sub" id="fs-franking" style="display:none">
@@ -3719,8 +3720,43 @@ function gerarDRE() {
   html += '<div class="alert alert-i" style="margin-top:12px">O CMV é calculado pelas fichas técnicas × quantidade vendida. A linha de "Notas fiscais pagas" é só informativa, pra comparar com o CMV — ela NÃO entra no cálculo do Resultado, pra não contar o custo de matéria-prima duas vezes. Em "Despesas pagas no mês" entram despesas operacionais (aluguel, recorrentes, boletos manuais) e as despesas lançadas na aba Despesas (combustível, manutenção etc).</div>';
 
   document.getElementById('dre-area').innerHTML = html;
+
+  ultimaDRE = {
+    mes:mes, ano:ano, receita:receita, cmv:cmv, lucroBruto:lucroBruto,
+    nfPagas:nfPagas, despesasBoletos:despesasBoletos, despesasGerais:despesasGerais,
+    despesas:despesas, resultado:resultado, margemPct:margemPct
+  };
+  document.getElementById('btn-xls-dre-area').style.display='';
 }
 document.getElementById('btn-gerar-dre').addEventListener('click', gerarDRE);
+document.getElementById('dre-mes').addEventListener('change', function(){ ultimaDRE=null; document.getElementById('btn-xls-dre-area').style.display='none'; });
+document.getElementById('dre-ano').addEventListener('input', function(){ ultimaDRE=null; document.getElementById('btn-xls-dre-area').style.display='none'; });
+
+var ultimaDRE = null;
+document.getElementById('btn-xls-dre').addEventListener('click', function() {
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  if(!ultimaDRE) { toast('Gere a DRE primeiro.'); return; }
+  var d = ultimaDRE;
+  var linhas = [
+    ['DRE Mensal', MESES[d.mes]+'/'+d.ano],
+    [],
+    ['Receita (vendas do mês)', d.receita],
+    ['(-) Custo de produção (CMV)', -d.cmv],
+    ['Notas fiscais pagas no mês (comparativo, informativo)', d.nfPagas],
+    ['Diferença NF vs. CMV', d.nfPagas - d.cmv],
+    ['= Lucro bruto', d.lucroBruto],
+    ['(-) Despesas pagas no mês', -d.despesas],
+    ['   dos quais: boletos pagos (não-NF)', -d.despesasBoletos],
+    ['   dos quais: despesas gerais (aba Despesas)', -d.despesasGerais],
+    ['= Resultado do mês', d.resultado],
+    ['Margem líquida do mês (%)', d.margemPct.toFixed(1)+'%']
+  ];
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(linhas);
+  ws['!cols'] = [{wch:45},{wch:18}];
+  XLSX.utils.book_append_sheet(wb, ws, 'DRE');
+  XLSX.writeFile(wb, 'DRE_'+MESES[d.mes]+'_'+d.ano+'.xlsx');
+});
 
 // --- RANKINGS (clientes e fornecedores) ---
 function gerarRanking() {

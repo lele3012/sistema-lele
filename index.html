@@ -201,6 +201,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <div class="alert alert-y">⚠️ Máximo 20% do valor do pedido anterior</div>
     <div class="pline"><span class="pname">⬜ Pão Bola</span><div class="qctrl"><button class="qbtn" data-key="t-bola" data-op="-">−</button><input type="number" class="qinp" id="q-t-bola" value="0" min="0"><button class="qbtn" data-key="t-bola" data-op="+">+</button></div></div>
     <div class="pline"><span class="pname">🟫 Pão Integral</span><div class="qctrl"><button class="qbtn" data-key="t-integral" data-op="-">−</button><input type="number" class="qinp" id="q-t-integral" value="0" min="0"><button class="qbtn" data-key="t-integral" data-op="+">+</button></div></div>
+    <div class="pline"><span class="pname">🥪 Mini Sanduíche</span><div class="qctrl"><button class="qbtn" data-key="t-mini" data-op="-">−</button><input type="number" class="qinp" id="q-t-mini" value="0" min="0"><button class="qbtn" data-key="t-mini" data-op="+">+</button></div></div>
     <div class="pline"><span class="pname">🫕 Lasanha 250g</span><div class="qctrl"><button class="qbtn" data-key="t-las250" data-op="-">−</button><input type="number" class="qinp" id="q-t-las250" value="0" min="0"><button class="qbtn" data-key="t-las250" data-op="+">+</button></div></div>
     <div class="pline"><span class="pname">🫕 Lasanha 500g</span><div class="qctrl"><button class="qbtn" data-key="t-las500" data-op="-">−</button><input type="number" class="qinp" id="q-t-las500" value="0" min="0"><button class="qbtn" data-key="t-las500" data-op="+">+</button></div></div>
   </div>
@@ -1619,7 +1620,7 @@ function calcResumo() {
     totalUn += q;
     totalVal += q * precoDoItem(k, cliId);
   });
-  ['bola','integral','las250','las500'].forEach(function(k) {
+  ['bola','integral','mini','las250','las500'].forEach(function(k) {
     var q = parseInt(document.getElementById('q-t-'+k).value)||0;
     trocaVal += q * (cliId ? getPreco(cliId,k) : PRECO[k]);
   });
@@ -1723,7 +1724,7 @@ document.getElementById('btn-salvar-ent').addEventListener('click', function() {
     if(q>0) bonificacao[k]=q;
   });
   if(!Object.keys(prods).length && !Object.keys(bonificacao).length) { toast('Adicione pelo menos um produto'); return; }
-  ['bola','integral','las250','las500'].forEach(function(k) {
+  ['bola','integral','mini','las250','las500'].forEach(function(k) {
     var q = parseInt(document.getElementById('q-t-'+k).value)||0;
     if(q>0) { trocas[k]=q; trocaVal += q*getPreco(parseInt(cliId),k); }
   });
@@ -1751,7 +1752,7 @@ document.getElementById('btn-salvar-ent').addEventListener('click', function() {
 document.getElementById('btn-limpar-ent').addEventListener('click', limparEnt);
 function limparEnt() {
   ['bola','integral','mini','las250','las500','suco','salada'].forEach(function(k){document.getElementById('q-'+k).value=0;});
-  ['bola','integral','las250','las500'].forEach(function(k){document.getElementById('q-t-'+k).value=0;});
+  ['bola','integral','mini','las250','las500'].forEach(function(k){document.getElementById('q-t-'+k).value=0;});
   ['bola','integral','mini','las250','las500','suco','salada'].forEach(function(k){document.getElementById('q-bf-'+k).value=0;});
   document.getElementById('p-suco').value=0; document.getElementById('p-salada').value=0;
   document.getElementById('e-resumo').style.display='none';
@@ -1781,7 +1782,7 @@ function editarEntrega(key) {
   document.getElementById('e-bol').value = e.boleto||'';
   document.getElementById('e-pgto').value = e.pagamento||'prazo';
   ['bola','integral','mini','las250','las500','suco','salada'].forEach(function(k){ document.getElementById('q-'+k).value = (e.produtos&&e.produtos[k])||0; });
-  ['bola','integral','las250','las500'].forEach(function(k){ document.getElementById('q-t-'+k).value = (e.trocas&&e.trocas[k])||0; });
+  ['bola','integral','mini','las250','las500'].forEach(function(k){ document.getElementById('q-t-'+k).value = (e.trocas&&e.trocas[k])||0; });
   ['bola','integral','mini','las250','las500','suco','salada'].forEach(function(k){ document.getElementById('q-bf-'+k).value = (e.bonificacao&&e.bonificacao[k])||0; });
   document.getElementById('p-suco').value = (e.precosUsados&&e.precosUsados.suco)||0;
   document.getElementById('p-salada').value = (e.precosUsados&&e.precosUsados.salada)||0;
@@ -2185,7 +2186,7 @@ function renderDash() {
   var totalTroca=ents.reduce(function(s,e){return s+(e.valorTroca||0);},0);
   var prodTots={bola:0,integral:0,mini:0,las250:0,las500:0,suco:0,salada:0};
   ents.forEach(function(e){Object.keys(e.produtos||{}).forEach(function(k){if(prodTots[k]!==undefined)prodTots[k]+=e.produtos[k];});});
-  var prodTrocas={bola:0,integral:0,las250:0,las500:0};
+  var prodTrocas={bola:0,integral:0,mini:0,las250:0,las500:0};
   var totalUnTroca=0;
   ents.forEach(function(e){if(e.trocas)Object.keys(e.trocas).forEach(function(k){if(prodTrocas[k]!==undefined){prodTrocas[k]+=e.trocas[k];totalUnTroca+=e.trocas[k];}});});
   var pgtoNomes={prazo:'A prazo (mensal)',boleto7:'Boleto 7 dias',vista:'A vista',pix:'PIX'};

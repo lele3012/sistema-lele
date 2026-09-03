@@ -2044,6 +2044,7 @@ function calcTotsProd() {
 }
 
 var editProducaoKey = null;
+var mostrarTodosProd = false;
 
 function renderProd() {
   var el=document.getElementById('lista-prod');
@@ -2051,6 +2052,17 @@ function renderProd() {
   var ano = parseInt(document.getElementById('prod-filtro-ano').value)||0;
   var dataDe = document.getElementById('prod-filtro-data-de').value;
   var dataAte = document.getElementById('prod-filtro-data-ate').value;
+  var temFiltro = mes || ano || dataDe || dataAte;
+
+  if(!D.producao.length){el.innerHTML='<div class="empty"><div class="ico">🏭</div><p>Nenhum lancamento.</p></div>';return;}
+
+  if(!temFiltro && !mostrarTodosProd){
+    el.innerHTML='<div class="empty"><div class="ico">🔎</div><p>Use os filtros acima pra buscar um lançamento por mês ou data.</p>'+
+      '<button class="btn btn-sm btn-o" id="btn-ver-todos-prod" style="margin-top:8px">Ver todos os lançamentos ('+D.producao.length+')</button></div>';
+    var btnVerTodos = document.getElementById('btn-ver-todos-prod');
+    if(btnVerTodos) btnVerTodos.addEventListener('click', function(){ mostrarTodosProd=true; renderProd(); });
+    return;
+  }
 
   var lista = D.producao.filter(function(p){
     if(!p.data) return false;
@@ -2064,7 +2076,6 @@ function renderProd() {
     return true;
   });
 
-  if(!D.producao.length){el.innerHTML='<div class="empty"><div class="ico">🏭</div><p>Nenhum lancamento.</p></div>';return;}
   if(!lista.length){el.innerHTML='<div class="empty"><div class="ico">🔎</div><p>Nenhum lancamento encontrado para esse filtro.</p></div>';return;}
   el.innerHTML=lista.slice().sort(function(a,b){return b.data.localeCompare(a.data);}).map(function(p){
     var tot=Object.values(p.produtos).reduce(function(s,v){return s+v;},0);
@@ -2118,6 +2129,7 @@ document.getElementById('btn-limpar-filtros-prod').addEventListener('click', fun
   document.getElementById('prod-filtro-ano').value='';
   document.getElementById('prod-filtro-data-de').value='';
   document.getElementById('prod-filtro-data-ate').value='';
+  mostrarTodosProd=false;
   renderProd();
 });
 

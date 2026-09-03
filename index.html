@@ -340,6 +340,21 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   </div>
 
   <div class="stitle">Historico</div>
+  <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:12px">
+    <div class="field" style="flex:1;min-width:120px;margin-bottom:0"><label>Mês</label>
+      <select class="inp" id="prod-filtro-mes">
+        <option value="0">Todos</option>
+        <option value="1">Janeiro</option><option value="2">Fevereiro</option><option value="3">Marco</option>
+        <option value="4">Abril</option><option value="5">Maio</option><option value="6">Junho</option>
+        <option value="7">Julho</option><option value="8">Agosto</option><option value="9">Setembro</option>
+        <option value="10">Outubro</option><option value="11">Novembro</option><option value="12">Dezembro</option>
+      </select>
+    </div>
+    <div class="field" style="flex:1;min-width:100px;margin-bottom:0"><label>Ano</label><input type="number" class="inp" id="prod-filtro-ano" placeholder="Ex: 2026"></div>
+    <div class="field" style="flex:1;min-width:140px;margin-bottom:0"><label>Data de</label><input type="date" class="inp" id="prod-filtro-data-de"></div>
+    <div class="field" style="flex:1;min-width:140px;margin-bottom:0"><label>até</label><input type="date" class="inp" id="prod-filtro-data-ate"></div>
+    <button class="btn btn-o btn-sm" id="btn-limpar-filtros-prod" style="height:44px">Limpar filtros</button>
+  </div>
   <div id="lista-prod"><div class="empty"><div class="ico">🏭</div><p>Nenhum lancamento ainda.</p></div></div>
   <button class="btn btn-g" id="btn-salvar-prod">✅ Salvar producao do dia</button>
   <button class="btn btn-o" id="btn-limpar-prod" style="margin-top:6px">Limpar</button>
@@ -2032,8 +2047,26 @@ var editProducaoKey = null;
 
 function renderProd() {
   var el=document.getElementById('lista-prod');
+  var mes = parseInt(document.getElementById('prod-filtro-mes').value)||0;
+  var ano = parseInt(document.getElementById('prod-filtro-ano').value)||0;
+  var dataDe = document.getElementById('prod-filtro-data-de').value;
+  var dataAte = document.getElementById('prod-filtro-data-ate').value;
+
+  var lista = D.producao.filter(function(p){
+    if(!p.data) return false;
+    if(dataDe && p.data < dataDe) return false;
+    if(dataAte && p.data > dataAte) return false;
+    if(!dataDe && !dataAte){
+      var d = new Date(p.data+'T00:00:00');
+      if(mes && d.getMonth()+1!==mes) return false;
+      if(ano && d.getFullYear()!==ano) return false;
+    }
+    return true;
+  });
+
   if(!D.producao.length){el.innerHTML='<div class="empty"><div class="ico">🏭</div><p>Nenhum lancamento.</p></div>';return;}
-  el.innerHTML=D.producao.slice().sort(function(a,b){return b.data.localeCompare(a.data);}).map(function(p){
+  if(!lista.length){el.innerHTML='<div class="empty"><div class="ico">🔎</div><p>Nenhum lancamento encontrado para esse filtro.</p></div>';return;}
+  el.innerHTML=lista.slice().sort(function(a,b){return b.data.localeCompare(a.data);}).map(function(p){
     var tot=Object.values(p.produtos).reduce(function(s,v){return s+v;},0);
     var det=Object.keys(p.produtos).map(function(k){return k+': '+p.produtos[k];}).join(', ');
     return '<div class="hitem"><div class="hhead"><span class="hdata">'+fdata(p.data)+'</span><span class="hval">'+tot+' un</span></div><div class="hprod">'+det+'</div>'+
@@ -2073,6 +2106,20 @@ function renderProd() {
     });
   });
 }
+
+['prod-filtro-mes','prod-filtro-ano'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', renderProd);
+});
+['prod-filtro-data-de','prod-filtro-data-ate'].forEach(function(id){
+  document.getElementById(id).addEventListener('change', renderProd);
+});
+document.getElementById('btn-limpar-filtros-prod').addEventListener('click', function(){
+  document.getElementById('prod-filtro-mes').value='0';
+  document.getElementById('prod-filtro-ano').value='';
+  document.getElementById('prod-filtro-data-de').value='';
+  document.getElementById('prod-filtro-data-ate').value='';
+  renderProd();
+});
 
 document.getElementById('btn-salvar-prod').addEventListener('click', function() {
   var data=document.getElementById('prod-data').value;

@@ -354,6 +354,8 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <div class="field" style="flex:1;min-width:140px;margin-bottom:0"><label>Data de</label><input type="date" class="inp" id="prod-filtro-data-de"></div>
     <div class="field" style="flex:1;min-width:140px;margin-bottom:0"><label>até</label><input type="date" class="inp" id="prod-filtro-data-ate"></div>
     <button class="btn btn-o btn-sm" id="btn-limpar-filtros-prod" style="height:44px">Limpar filtros</button>
+    <button class="btn btn-o btn-sm" id="btn-xls-prod" style="height:44px">📊 Exportar Excel</button>
+    <button class="btn btn-o btn-sm" id="btn-pdf-prod" style="height:44px">📄 Relatório PDF</button>
   </div>
   <div id="lista-prod"><div class="empty"><div class="ico">🏭</div><p>Nenhum lancamento ainda.</p></div></div>
   <button class="btn btn-g" id="btn-salvar-prod">✅ Salvar producao do dia</button>
@@ -2045,6 +2047,7 @@ function calcTotsProd() {
 
 var editProducaoKey = null;
 var mostrarTodosProd = false;
+var ultimaListaProd = [];
 
 function renderProd() {
   var el=document.getElementById('lista-prod');
@@ -2054,13 +2057,14 @@ function renderProd() {
   var dataAte = document.getElementById('prod-filtro-data-ate').value;
   var temFiltro = mes || ano || dataDe || dataAte;
 
-  if(!D.producao.length){el.innerHTML='<div class="empty"><div class="ico">🏭</div><p>Nenhum lancamento.</p></div>';return;}
+  if(!D.producao.length){el.innerHTML='<div class="empty"><div class="ico">🏭</div><p>Nenhum lancamento.</p></div>';ultimaListaProd=[];return;}
 
   if(!temFiltro && !mostrarTodosProd){
     el.innerHTML='<div class="empty"><div class="ico">🔎</div><p>Use os filtros acima pra buscar um lançamento por mês ou data.</p>'+
       '<button class="btn btn-sm btn-o" id="btn-ver-todos-prod" style="margin-top:8px">Ver todos os lançamentos ('+D.producao.length+')</button></div>';
     var btnVerTodos = document.getElementById('btn-ver-todos-prod');
     if(btnVerTodos) btnVerTodos.addEventListener('click', function(){ mostrarTodosProd=true; renderProd(); });
+    ultimaListaProd=[];
     return;
   }
 
@@ -2076,7 +2080,8 @@ function renderProd() {
     return true;
   });
 
-  if(!lista.length){el.innerHTML='<div class="empty"><div class="ico">🔎</div><p>Nenhum lancamento encontrado para esse filtro.</p></div>';return;}
+  if(!lista.length){el.innerHTML='<div class="empty"><div class="ico">🔎</div><p>Nenhum lancamento encontrado para esse filtro.</p></div>';ultimaListaProd=[];return;}
+  ultimaListaProd = lista;
   el.innerHTML=lista.slice().sort(function(a,b){return b.data.localeCompare(a.data);}).map(function(p){
     var tot=Object.values(p.produtos).reduce(function(s,v){return s+v;},0);
     var det=Object.keys(p.produtos).map(function(k){return k+': '+p.produtos[k];}).join(', ');
@@ -2131,6 +2136,101 @@ document.getElementById('btn-limpar-filtros-prod').addEventListener('click', fun
   document.getElementById('prod-filtro-data-ate').value='';
   mostrarTodosProd=false;
   renderProd();
+});
+document.getElementById('btn-xls-prod').addEventListener('click', function(){
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  if(!ultimaListaProd.length){ toast('Nenhum lançamento pra exportar. Ajuste os filtros primeiro.'); return; }
+  var linhas = [['Data','Total (un)','Detalhe']];
+  ultimaListaProd.slice().sort(function(a,b){return a.data.localeCompare(b.data);}).forEach(function(p){
+    var tot=Object.values(p.produtos).reduce(function(s,v){return s+v;},0);
+    var det=Object.keys(p.produtos).map(function(k){return k+': '+p.produtos[k];}).join(', ');
+    linhas.push([fdata(p.data), tot, det]);
+  });
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(linhas);
+  ws['!cols'] = [{wch:14},{wch:12},{wch:90}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Producao');
+  XLSX.writeFile(wb, 'Lele_Producao_'+new Date().toISOString().slice(0,10)+'.xlsx');
+});
+
+var TIPO_NOME_PROD = {bola:'Pão Bola', integral:'Pão Integral', las250:'Lasanha 250g', las500:'Lasanha 500g', mini:'Mini Sanduíche'};
+var TIPO_ORDEM_PROD = ['bola','integral','las250','las500','mini'];
+
+document.getElementById('btn-pdf-prod').addEventListener('click', function(){
+  if(!ultimaListaProd.length){ toast('Nenhum lançamento pra gerar relatório. Ajuste os filtros primeiro.'); return; }
+  if(typeof window.jspdf === 'undefined') { toast('PDF indisponivel. Tente recarregar a pagina.'); return; }
+
+  // Monta rotulo do periodo com base nos filtros atuais
+  var mes = parseInt(document.getElementById('prod-filtro-mes').value)||0;
+  var ano = parseInt(document.getElementById('prod-filtro-ano').value)||0;
+  var dataDe = document.getElementById('prod-filtro-data-de').value;
+  var dataAte = document.getElementById('prod-filtro-data-ate').value;
+  var periodoLabel;
+  if(dataDe || dataAte) periodoLabel = (dataDe?fdata(dataDe):'início') + ' a ' + (dataAte?fdata(dataAte):'hoje');
+  else if(mes && ano) periodoLabel = MESES[mes]+'/'+ano;
+  else if(ano) periodoLabel = ano;
+  else periodoLabel = 'Todos os lançamentos';
+
+  // Soma quantidades por chave de produto
+  var tots = {};
+  ultimaListaProd.forEach(function(p){ Object.keys(p.produtos||{}).forEach(function(k){ tots[k]=(tots[k]||0)+p.produtos[k]; }); });
+
+  // Agrupa por tipo de pao, e dentro por sabor
+  var porTipo = {};
+  Object.keys(tots).forEach(function(k){
+    var tipo = catDoProdKey(k);
+    if(!tipo) return;
+    if(!porTipo[tipo]) porTipo[tipo]=[];
+    var nomeCompleto = NOME_PROD[k]||k;
+    var sabor = nomeCompleto.indexOf(' - ')>=0 ? nomeCompleto.split(' - ')[1] : nomeCompleto;
+    porTipo[tipo].push({sabor:sabor, qtd:tots[k]});
+  });
+  var totalGeral = Object.values(tots).reduce(function(s,v){return s+v;},0);
+
+  var { jsPDF } = window.jspdf;
+  var doc = new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+  var pw=210, m=16, cw=178, y=0;
+
+  doc.setFillColor(42,122,59); doc.rect(0,0,pw,32,'F');
+  doc.setTextColor(255,255,255); doc.setFontSize(18); doc.setFont('helvetica','bold');
+  doc.text('LELE DA KUKA', m, 13);
+  doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(200,240,210);
+  doc.text('Relatório de Produção por Tipo e Sabor — '+periodoLabel, m, 20);
+  var agora = new Date();
+  doc.text('Gerado: '+agora.toLocaleDateString('pt-BR'), pw-m, 20, {align:'right'});
+  y=42;
+
+  TIPO_ORDEM_PROD.forEach(function(tipo){
+    if(!porTipo[tipo] || !porTipo[tipo].length) return;
+    if(y>260){doc.addPage();y=20;}
+    var lista = porTipo[tipo].sort(function(a,b){return b.qtd-a.qtd;});
+    var subtotal = lista.reduce(function(s,r){return s+r.qtd;},0);
+
+    doc.setFillColor(247,245,241); doc.roundedRect(m,y,cw,9,2,2,'F');
+    doc.setTextColor(42,122,59); doc.setFontSize(10); doc.setFont('helvetica','bold');
+    doc.text(TIPO_NOME_PROD[tipo], m+3, y+6);
+    doc.text(subtotal+' un', pw-m-3, y+6, {align:'right'});
+    y+=13;
+
+    lista.forEach(function(r){
+      if(y>270){doc.addPage();y=20;}
+      doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(60,60,60);
+      doc.text('  '+r.sabor, m+3, y);
+      doc.setFont('helvetica','bold'); doc.setTextColor(26,26,26);
+      doc.text(r.qtd+' un', pw-m-3, y, {align:'right'});
+      y+=5.5;
+    });
+    y+=5;
+  });
+
+  if(y>250){doc.addPage();y=20;}
+  doc.setFillColor(42,122,59); doc.roundedRect(m,y,cw,16,3,3,'F');
+  doc.setTextColor(255,255,255); doc.setFontSize(12); doc.setFont('helvetica','bold');
+  doc.text('TOTAL GERAL PRODUZIDO: '+totalGeral+' un', m+4, y+10);
+
+  var arqPeriodo = (dataDe||dataAte) ? (dataDe||'ini')+'_'+(dataAte||'fim') : (mes&&ano ? String(mes).padStart(2,'0')+'_'+ano : 'geral');
+  doc.save('Lele_Producao_PorTipoSabor_'+arqPeriodo+'.pdf');
+  toast('PDF gerado!');
 });
 
 document.getElementById('btn-salvar-prod').addEventListener('click', function() {

@@ -6,12 +6,24 @@
 <title>Sistema Lelé da Kuka</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1a;min-height:100vh}
 :root{--g:#2a7a3b;--gl:#e8f5eb;--b:#e0dbd3;--r:#c0392b;--rl:#fdecea}
+
+/* LOGIN */
+#tela-login{position:fixed;inset:0;z-index:100000;background:#f5f2ed;display:none;align-items:center;justify-content:center;padding:20px}
+#tela-login .caixa-login{background:#fff;border:1px solid var(--b);border-radius:14px;padding:32px 26px;max-width:360px;width:100%;text-align:center}
+#tela-login h2{font-size:20px;font-weight:800;color:var(--g);margin-bottom:6px}
+#tela-login p{font-size:13px;color:#666;margin-bottom:22px;line-height:1.5}
+#btn-login-google{width:100%;padding:12px 16px;border:none;border-radius:10px;background:var(--g);color:#fff;font-size:15px;font-weight:700;cursor:pointer}
+#btn-login-google:focus-visible,#btn-sair:focus-visible{outline:3px solid #9fd3aa;outline-offset:2px}
+#login-erro{margin-top:14px;font-size:13px;color:var(--r);display:none;line-height:1.4}
+#btn-sair{margin-left:auto;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;display:none}
+#usuario-logado{font-size:11px;opacity:.8;margin-left:auto;display:none;max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* TOPBAR */
 .top{background:var(--g);color:#fff;padding:14px 18px;position:sticky;top:0;z-index:100;display:flex;align-items:center;gap:10px}
@@ -132,11 +144,22 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 </head>
 <body>
 
+<div id="tela-login">
+  <div class="caixa-login">
+    <h2>🥪 Lelé da Kuka</h2>
+    <p>Sistema de Gestão. Entre com uma conta Google autorizada para acessar.</p>
+    <button id="btn-login-google" type="button" onclick="entrarComGoogle()">Entrar com Google</button>
+    <div id="login-erro"></div>
+  </div>
+</div>
+
 <div class="top">
   <div>
     <h1>🥪 Lelé da Kuka</h1>
     <p>Sistema de Gestão</p>
   </div>
+  <span id="usuario-logado"></span>
+  <button id="btn-sair" type="button" onclick="sairDoSistema()">Sair</button>
 </div>
 
 <div class="nav">
@@ -1125,11 +1148,29 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 
 <script>
 // ===== FIREBASE =====
+// Configuração do app Web (Firebase > Configurações do projeto > Seus apps).
+// Esses valores são públicos por natureza; quem protege os dados são as Regras do banco.
 var firebaseConfig = {
-  databaseURL: "https://lele-da-kuka-sistema-default-rtdb.firebaseio.com"
+  apiKey: "AIzaSyCbXloSswZIhrBUyuIRhh_O1SMdlcjyTvc",
+  authDomain: "lele-da-kuka-sistema.firebaseapp.com",
+  databaseURL: "https://lele-da-kuka-sistema-default-rtdb.firebaseio.com",
+  projectId: "lele-da-kuka-sistema",
+  storageBucket: "lele-da-kuka-sistema.firebasestorage.app",
+  messagingSenderId: "14233599355",
+  appId: "1:14233599355:web:3ecc392fb1b16c6530d1de"
 };
 firebase.initializeApp(firebaseConfig);
 var db = firebase.database();
+var auth = firebase.auth();
+
+// E-mails que podem entrar. A proteção de verdade está nas Regras do Realtime
+// Database (que devem ter a mesma lista); esta lista só evita mostrar o sistema
+// vazio para quem não tem acesso.
+var EMAILS_AUTORIZADOS = [
+  'barbara160393@gmail.com',
+  'lele.dakuka26@gmail.com',
+  'lauracarvalhodemacedo@gmail.com'
+];
 
 // ===== DADOS =====
 // A partir de agora cada coleção vive no seu proprio caminho no Firebase
@@ -4610,8 +4651,54 @@ function renderFluxo() {
   el.innerHTML = html || '<div class="empty"><div class="ico">💵</div><p>Nenhuma movimentação pendente.</p></div>';
 }
 
-// ===== INIT =====
-carregar();
+// ===== LOGIN =====
+function mostrarErroLogin(msg) {
+  var el = document.getElementById('login-erro');
+  el.textContent = msg; el.style.display = msg ? 'block' : 'none';
+}
+function entrarComGoogle() {
+  mostrarErroLogin('');
+  var provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({prompt:'select_account'});
+  auth.signInWithPopup(provider).catch(function(e) {
+    if(e && (e.code==='auth/popup-blocked' || e.code==='auth/operation-not-supported-in-this-environment')) {
+      return auth.signInWithRedirect(provider);
+    }
+    if(e && (e.code==='auth/popup-closed-by-user' || e.code==='auth/cancelled-popup-request')) return;
+    if(e && e.code==='auth/unauthorized-domain') {
+      mostrarErroLogin('Este endereço ainda não está liberado no Firebase. Adicione o domínio em Authentication > Configurações > Domínios autorizados.');
+      return;
+    }
+    mostrarErroLogin('Não foi possível entrar: ' + ((e && e.message) || e));
+  });
+}
+function sairDoSistema() {
+  auth.signOut().then(function(){ location.reload(); });
+}
+var sistemaCarregado = false;
+auth.onAuthStateChanged(function(user) {
+  var tela = document.getElementById('tela-login');
+  var btnSair = document.getElementById('btn-sair');
+  var lblUser = document.getElementById('usuario-logado');
+  if(!user) {
+    tela.style.display = 'flex';
+    btnSair.style.display = 'none'; lblUser.style.display = 'none';
+    return;
+  }
+  var email = (user.email || '').toLowerCase();
+  var autorizado = EMAILS_AUTORIZADOS.some(function(e){ return e.toLowerCase() === email; });
+  if(!autorizado) {
+    auth.signOut();
+    tela.style.display = 'flex';
+    mostrarErroLogin('A conta ' + email + ' não tem acesso a este sistema. Entre com uma conta autorizada.');
+    return;
+  }
+  tela.style.display = 'none';
+  lblUser.textContent = email; lblUser.style.display = 'inline';
+  btnSair.style.display = 'inline-block';
+  btnSair.style.marginLeft = '10px';
+  if(!sistemaCarregado) { sistemaCarregado = true; carregar(); }
+});
 </script>
 </body>
 </html>

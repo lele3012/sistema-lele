@@ -895,7 +895,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
         <div class="field"><label>Número da nota</label><input type="text" class="inp" id="nf-num"></div>
         <div class="field"><label>Data de emissão</label><input type="date" class="inp" id="nf-data"></div>
       </div>
-      <div class="field"><label>Categoria</label>
+      <div class="field"><label>Categoria padrão da nota <span style="font-weight:400;color:#888">(cada item pode ter a sua, ao lado)</span></label>
         <select class="inp" id="nf-cat">
           <option value="materia_prima">Matéria-prima</option>
           <option value="embalagem">Embalagem</option>
@@ -3060,7 +3060,7 @@ document.getElementById('btn-recalc-bases').addEventListener('click', function()
 });
 
 // Busca (ou cria) um insumo pelo nome, e atualiza o custo unitario com o valor mais recente
-function upsertInsumoPorNome(nome, unidade, valorUnit) {
+function upsertInsumoPorNome(nome, unidade, valorUnit, categoria) {
   var nomeNorm = nome.toLowerCase().trim();
   var existente = D.insumos.find(function(i){ return (i.nome||'').toLowerCase().trim()===nomeNorm; });
   if(!existente) {
@@ -3071,9 +3071,13 @@ function upsertInsumoPorNome(nome, unidade, valorUnit) {
   }
   if(existente) {
     if(existente.tipo==='base') return Promise.resolve(); // custo de base e calculado pela receita, nao sobrescreve via NF
-    return atualizarRegistro('insumos', existente._key, {custoUnit: valorUnit}).then(function(r){ recalcularBases(); return r; });
+    var upd = {custoUnit: valorUnit};
+    if(categoria) upd.categoria = categoria;
+    return atualizarRegistro('insumos', existente._key, upd).then(function(r){ recalcularBases(); return r; });
   }
-  return salvarRegistro('insumos', {id:Date.now()+Math.random(), nome:nome, unidade:unidade||'un', tipo:'simples', custoUnit:valorUnit});
+  var novo = {id:Date.now()+Math.random(), nome:nome, unidade:unidade||'un', tipo:'simples', custoUnit:valorUnit};
+  if(categoria) novo.categoria = categoria;
+  return salvarRegistro('insumos', novo);
 }
 
 // --- FICHAS TECNICAS ---
@@ -3275,19 +3279,41 @@ document.getElementById('nf-xml-file').addEventListener('change', function(e) {
 });
 
 // --- NOTAS FISCAIS ---
-function nfAddItem(nome, qtd, valorUnit) {
+function nfCatOptions(sel) {
+  return Object.keys(CAT_NOMES).map(function(k){ return '<option value="'+k+'"'+(k===sel?' selected':'')+'>'+CAT_NOMES[k]+'</option>'; }).join('');
+}
+function nfAddItem(nome, qtd, valorUnit, cat) {
   var wrap = document.getElementById('nf-itens');
   var row = document.createElement('div');
   row.className = 'row2 nf-item-row';
   row.style.alignItems = 'flex-end';
+  var catIns = getCategoriaPorNome(nome);
+  var catIni = cat || catIns || document.getElementById('nf-cat').value;
   row.innerHTML = '<div class="field"><label>Item</label><input type="text" class="inp nf-item-nome" list="dl-insumos" value="'+(nome||'')+'"></div>'+
     '<div class="field" style="max-width:80px"><label>Qtd</label><input type="number" step="0.01" class="inp nf-item-qtd" value="'+(qtd||1)+'"></div>'+
     '<div class="field" style="max-width:110px"><label>Vlr Unit.</label><input type="number" step="0.01" class="inp nf-item-valor" value="'+(valorUnit||0)+'"></div>'+
+    '<div class="field" style="max-width:140px"><label>Categoria</label><select class="inp nf-item-cat">'+nfCatOptions(catIni)+'</select></div>'+
     '<button class="btn btn-r btn-sm" type="button" style="margin-bottom:12px" onclick="this.parentElement.remove();calcNfTotal();">✕</button>';
   wrap.appendChild(row);
+  var selCat = row.querySelector('.nf-item-cat');
+  // "manual" = a pessoa escolheu a categoria desse item; nesse caso nada mais muda ela automaticamente
+  if(cat || catIns) selCat.setAttribute('data-fixa', '1');
+  selCat.addEventListener('change', function(){ selCat.setAttribute('data-fixa', '1'); selCat.setAttribute('data-manual', '1'); });
+  row.querySelector('.nf-item-nome').addEventListener('change', function(){
+    if(selCat.getAttribute('data-manual')) return;
+    var c = getCategoriaPorNome(this.value);
+    if(c) { selCat.value = c; selCat.setAttribute('data-fixa', '1'); }
+  });
   row.querySelectorAll('input').forEach(function(inp){ inp.addEventListener('input', calcNfTotal); });
   calcNfTotal();
 }
+// Mudou a categoria padrao da nota: aplica nos itens que ainda nao tem categoria propria
+document.getElementById('nf-cat').addEventListener('change', function() {
+  var v = this.value;
+  document.querySelectorAll('.nf-item-row .nf-item-cat').forEach(function(sel){
+    if(!sel.getAttribute('data-fixa')) sel.value = v;
+  });
+});
 document.getElementById('btn-add-item-nf').addEventListener('click', function(){ nfAddItem(); });
 function calcNfTotal() {
   var total = 0;
@@ -3349,7 +3375,8 @@ document.getElementById('btn-salvar-nf').addEventListener('click', function() {
     var nome = row.querySelector('.nf-item-nome').value.trim();
     var qtd = parseFloat(row.querySelector('.nf-item-qtd').value)||0;
     var valorUnit = parseFloat(row.querySelector('.nf-item-valor').value)||0;
-    if(nome) itens.push({nome:nome, qtd:qtd, valorUnit:valorUnit});
+    var catItem = row.querySelector('.nf-item-cat') ? row.querySelector('.nf-item-cat').value : '';
+    if(nome) itens.push({nome:nome, qtd:qtd, valorUnit:valorUnit, categoria:catItem});
   });
   var total = calcNfTotal();
   var geraBoleto = document.getElementById('nf-gera-boleto').value==='sim';
@@ -3364,7 +3391,7 @@ document.getElementById('btn-salvar-nf').addEventListener('click', function() {
     data:document.getElementById('nf-data').value || fdataHoje(), categoria:document.getElementById('nf-cat').value,
     itens:itens, total:total
   };
-  var proms = itens.map(function(it){ return upsertInsumoPorNome(it.nome, null, it.valorUnit); });
+  var proms = itens.map(function(it){ return upsertInsumoPorNome(it.nome, null, it.valorUnit, it.categoria); });
   Promise.all(proms).then(function(){
     return salvarRegistro('notasFiscais', nf);
   }).then(function(){
@@ -3422,7 +3449,7 @@ document.getElementById('btn-xls-notas').addEventListener('click', function() {
   if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
   var lista = notasFiltradas();
   if(!lista.length) { toast('Nenhuma nota para exportar nesse filtro.'); return; }
-  var linhas = [['Fornecedor','Número','Data','Categoria','Item','Qtd','Vlr Unit. (R$)','Vlr Total Item (R$)','Total da Nota (R$)']];
+  var linhas = [['Fornecedor','Número','Data','Categoria','Item','Qtd','Vlr Unit. (R$)','Vlr Total Item (R$)','Total da Nota (R$)']]; // Categoria = do item (ou da nota, em notas antigas)
   lista.forEach(function(n){
     var itens = (n.itens && n.itens.length) ? n.itens : [{nome:'',qtd:'',valorUnit:''}];
     itens.forEach(function(it, idx){
@@ -3430,7 +3457,7 @@ document.getElementById('btn-xls-notas').addEventListener('click', function() {
         idx===0 ? (n.fornecedor||'') : '',
         idx===0 ? (n.numero||'') : '',
         idx===0 ? (n.data?fdata(n.data):'') : '',
-        idx===0 ? (CAT_NOMES[n.categoria]||n.categoria||'') : '',
+        (function(){ var c = it.categoria || (it.nome ? getCategoriaPorNome(it.nome) : '') || n.categoria; return CAT_NOMES[c]||c||''; })(),
         it.nome||'', it.qtd||0, it.valorUnit||0, (it.qtd||0)*(it.valorUnit||0),
         idx===0 ? (n.total||0) : ''
       ]);
@@ -3854,7 +3881,10 @@ function renderFinDash() {
 
 // Acha a categoria do insumo correspondente ao nome de um item de nota fiscal (mesma logica de match do upsertInsumoPorNome)
 function getCategoriaPorNome(nome) {
-  var ins = D.insumos.find(function(i){ return (i.nome||'').toLowerCase().trim()===String(nome||'').toLowerCase().trim(); });
+  var n = String(nome||'').toLowerCase().trim();
+  if(!n) return '';
+  var ins = D.insumos.find(function(i){ return (i.nome||'').toLowerCase().trim()===n; }) ||
+    D.insumos.find(function(i){ return (i.apelidos||[]).some(function(a){ return (a||'').toLowerCase().trim()===n; }); });
   return ins ? (ins.categoria||'') : '';
 }
 
@@ -4027,7 +4057,7 @@ function gerarRanking() {
     return d.getMonth()+1===mes && d.getFullYear()===ano;
   }).forEach(function(nf){
     (nf.itens||[]).forEach(function(it){
-      var cat = getCategoriaPorNome(it.nome) || 'nao_classificado';
+      var cat = it.categoria || getCategoriaPorNome(it.nome) || 'nao_classificado';
       porCategoria[cat] = (porCategoria[cat]||0) + (it.qtd||0)*(it.valorUnit||0);
     });
   });

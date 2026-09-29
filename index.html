@@ -23,6 +23,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 #btn-login-google:focus-visible,#btn-sair:focus-visible{outline:3px solid #9fd3aa;outline-offset:2px}
 #login-erro{margin-top:14px;font-size:13px;color:var(--r);display:none;line-height:1.4}
 #btn-sair{margin-left:auto;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.35);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;display:none}
+#btn-backup{margin-left:10px;background:#fff;color:var(--g);border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;display:none}
+#btn-backup:focus-visible{outline:3px solid #9fd3aa;outline-offset:2px}
+@media(max-width:600px){#usuario-logado{display:none!important}}
+#btn-backup.atrasado{background:#f6c343;color:#1a1a1a}
 #usuario-logado{font-size:11px;opacity:.8;margin-left:auto;display:none;max-width:40vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* TOPBAR */
@@ -159,6 +163,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <p>Sistema de Gestão</p>
   </div>
   <span id="usuario-logado"></span>
+  <button id="btn-backup" type="button" onclick="fazerBackup()" title="Baixar uma cópia de todos os dados">⬇ Backup</button>
   <button id="btn-sair" type="button" onclick="sairDoSistema()">Sair</button>
 </div>
 
@@ -4672,6 +4677,52 @@ function entrarComGoogle() {
     mostrarErroLogin('Não foi possível entrar: ' + ((e && e.message) || e));
   });
 }
+// ===== BACKUP =====
+// Baixa um arquivo .json com TODOS os dados do banco, no mesmo formato do
+// "Exportar JSON" do Firebase. Para restaurar: Realtime Database > Dados > ⋮ > Importar JSON.
+var DIAS_LEMBRETE_BACKUP = 7;
+function atualizarBotaoBackup(info) {
+  var btn = document.getElementById('btn-backup');
+  if(!btn) return;
+  var dias = null;
+  if(info && info.data) dias = Math.floor((Date.now() - new Date(info.data).getTime()) / 86400000);
+  if(dias === null || dias >= DIAS_LEMBRETE_BACKUP) {
+    btn.classList.add('atrasado');
+    btn.title = dias === null ? 'Nenhum backup registrado ainda. Clique para baixar.' : 'Último backup há '+dias+' dias'+(info.por?' ('+info.por+')':'')+'. Clique para baixar um novo.';
+    btn.textContent = '⬇ Backup pendente';
+  } else {
+    btn.classList.remove('atrasado');
+    btn.title = 'Último backup há '+dias+' dia(s)'+(info.por?' ('+info.por+')':'')+'.';
+    btn.textContent = '⬇ Backup';
+  }
+}
+function fazerBackup() {
+  var btn = document.getElementById('btn-backup');
+  var textoAntes = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Gerando...';
+  db.ref().once('value').then(function(snap) {
+    var dados = snap.val() || {};
+    var json = JSON.stringify(dados, null, 2);
+    var agora = new Date();
+    var pad = function(n){ return (n<10?'0':'')+n; };
+    var nome = 'backup-lele-da-kuka-' + agora.getFullYear()+'-'+pad(agora.getMonth()+1)+'-'+pad(agora.getDate()) + '-' + pad(agora.getHours())+'h'+pad(agora.getMinutes()) + '.json';
+    var blob = new Blob([json], {type:'application/json'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = nome;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+    var user = auth.currentUser;
+    return db.ref('backupInfo').set({data: agora.toISOString(), por: user ? user.email : ''}).then(function(){
+      toast('Backup baixado: ' + nome);
+    });
+  }).catch(function(e) {
+    console.error('Erro no backup:', e);
+    toast('Erro ao gerar o backup. Verifique a internet e tente de novo.');
+    btn.textContent = textoAntes;
+  }).then(function(){ btn.disabled = false; });
+}
+
 function sairDoSistema() {
   auth.signOut().then(function(){ location.reload(); });
 }
@@ -4697,7 +4748,12 @@ auth.onAuthStateChanged(function(user) {
   lblUser.textContent = email; lblUser.style.display = 'inline';
   btnSair.style.display = 'inline-block';
   btnSair.style.marginLeft = '10px';
-  if(!sistemaCarregado) { sistemaCarregado = true; carregar(); }
+  document.getElementById('btn-backup').style.display = 'inline-block';
+  if(!sistemaCarregado) {
+    sistemaCarregado = true;
+    carregar();
+    db.ref('backupInfo').on('value', function(snap){ atualizarBotaoBackup(snap.val()); });
+  }
 });
 </script>
 </body>

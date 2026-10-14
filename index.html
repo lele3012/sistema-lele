@@ -1048,7 +1048,13 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <div class="field"><label>Nome fantasia</label><input type="text" class="inp" id="c-fantasia" placeholder="Opcional"></div>
     <div id="cli-dup-msg"></div>
     <div class="row2">
-      <div class="field"><label>Telefone</label><input type="text" class="inp" id="c-tel"></div>
+      <div class="field"><label>Status</label>
+        <select class="inp" id="c-status">
+          <option value="ativo">Ativo</option>
+          <option value="inativo">Inativo</option>
+          <option value="suspenso">Suspenso</option>
+        </select>
+      </div>
       <div class="field"><label>Pagamento</label>
         <select class="inp" id="c-pgto">
           <option value="prazo">A prazo (mensal)</option>
@@ -1061,17 +1067,48 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <div class="field"><label>Segmento</label>
       <select class="inp" id="c-seg">
         <option value="">Selecione...</option>
-        <option value="posto">Posto de combustivel</option>
-        <option value="escola">Escola</option>
+        <option value="academia">Academia</option>
+        <option value="aeroporto">Aeroporto</option>
+        <option value="cafeteria">Cafeteria</option>
+        <option value="escola">Cantina escolar</option>
+        <option value="conveniencia">Conveniencia</option>
+        <option value="posto">Conveniencia de posto</option>
+        <option value="hotel">Hotel</option>
+        <option value="mercado_autonomo">Mercado autonomo</option>
         <option value="mercadinho">Mercadinho</option>
         <option value="supermercado">Supermercado</option>
-        <option value="hotel">Hotel</option>
-        <option value="conveniencia">Conveniencia</option>
-        <option value="aeroporto">Aeroporto</option>
         <option value="outro">Outro</option>
       </select>
     </div>
-    <div class="field"><label>Endereco</label><input type="text" class="inp" id="c-end"></div>
+    <div class="field" id="c-seg-outro-wrap" style="display:none"><label>Qual segmento?</label><input type="text" class="inp" id="c-seg-outro" placeholder="Digite o segmento"></div>
+
+    <div class="div"></div>
+    <div class="stitle" style="margin-top:0">Contato</div>
+    <div class="field"><label>Responsavel do local</label><input type="text" class="inp" id="c-resp" placeholder="Nome de quem recebe / compra"></div>
+    <div class="row2">
+      <div class="field"><label>Telefone</label><input type="text" class="inp" id="c-tel"></div>
+      <div class="field"><label>WhatsApp</label><input type="tel" class="inp" id="c-whats" placeholder="(82) 90000-0000"></div>
+    </div>
+    <div class="field"><label>E-mail</label><input type="email" class="inp" id="c-email" placeholder="contato@empresa.com.br"></div>
+
+    <div class="div"></div>
+    <div class="stitle" style="margin-top:0">Endereco</div>
+    <div class="row2">
+      <div class="field"><label>CEP</label><input type="text" class="inp" id="c-cep" placeholder="57000-000" inputmode="numeric"></div>
+      <div class="field" style="flex:0 0 auto;display:flex;align-items:flex-end"><button class="btn btn-o btn-sm" id="btn-cep" type="button" style="width:auto">Buscar CEP</button></div>
+    </div>
+    <div id="cep-msg"></div>
+    <div class="field"><label>Rua / Logradouro</label><input type="text" class="inp" id="c-end"></div>
+    <div class="row2">
+      <div class="field" style="flex:0 0 32%"><label>Numero</label><input type="text" class="inp" id="c-num"></div>
+      <div class="field"><label>Complemento</label><input type="text" class="inp" id="c-comp" placeholder="Loja, sala, bloco..."></div>
+    </div>
+    <div class="field"><label>Bairro</label><input type="text" class="inp" id="c-bairro"></div>
+    <div class="row2">
+      <div class="field"><label>Cidade</label><input type="text" class="inp" id="c-cidade" placeholder="Maceio"></div>
+      <div class="field" style="flex:0 0 26%"><label>UF</label><input type="text" class="inp" id="c-uf" maxlength="2" placeholder="AL" style="text-transform:uppercase"></div>
+    </div>
+    <div class="field"><label>Ponto de referencia</label><input type="text" class="inp" id="c-ref" placeholder="Ex: em frente a farmacia"></div>
     <div class="field"><label>Observacoes</label><input type="text" class="inp" id="c-obs" placeholder="Ex: entregar na parte de tras"></div>
     <div class="div"></div>
     <div class="stitle" style="margin-top:0">Precos personalizados (opcional)</div>
@@ -1498,7 +1535,8 @@ function renderClis() {
     var ini = (c.fantasia||c.nome||'?').charAt(0).toUpperCase();
     var pgtos = {prazo:'A prazo', boleto7:'Boleto 7 dias', vista:'A vista', pix:'PIX'};
     var custom = c.precos && Object.values(c.precos).some(function(v){return v;}) ? ' | Preco personalizado' : '';
-    return '<div class="cli" data-idx="'+i+'"><div class="cli-av">'+ini+'</div><div class="cli-info"><div class="cli-nome">'+(c.fantasia||c.nome)+'</div><div class="cli-det">'+(pgtos[c.pgto]||'')+(c.cnpj?' | '+c.cnpj:'')+custom+'</div></div><div style="color:#888;font-size:18px">›</div></div>';
+    var stBadge = c.status==='inativo' ? ' <span class="badge badge-r">Inativo</span>' : (c.status==='suspenso' ? ' <span class="badge badge-y">Suspenso</span>' : '');
+    return '<div class="cli" data-idx="'+i+'"><div class="cli-av">'+ini+'</div><div class="cli-info"><div class="cli-nome">'+(c.fantasia||c.nome)+stBadge+'</div><div class="cli-det">'+(pgtos[c.pgto]||'')+(c.bairro?' | '+c.bairro:'')+(c.cnpj?' | '+c.cnpj:'')+custom+'</div></div><div style="color:#888;font-size:18px">›</div></div>';
   }).join('');
   document.querySelectorAll('.cli').forEach(function(el) {
     el.addEventListener('click', function() { abrirModal(parseInt(this.getAttribute('data-idx'))); });
@@ -1520,11 +1558,13 @@ function popSelCli() {
 function abrirModal(idx) {
   editIdx = idx !== undefined ? idx : null;
   document.getElementById('modal-cli-titulo').textContent = editIdx!==null ? 'Editar cliente' : 'Novo cliente';
-  var campos = ['c-cnpj','c-nome','c-fantasia','c-tel','c-end','c-obs','c-p-bola','c-p-integral','c-p-las250','c-p-las500','c-p-mini','c-p-suco','c-p-salada'];
+  var campos = ['c-cnpj','c-nome','c-fantasia','c-tel','c-end','c-obs','c-seg-outro','c-resp','c-whats','c-email','c-cep','c-num','c-comp','c-bairro','c-cidade','c-uf','c-ref','c-p-bola','c-p-integral','c-p-las250','c-p-las500','c-p-mini','c-p-suco','c-p-salada'];
   campos.forEach(function(id) { document.getElementById(id).value = ''; });
   document.getElementById('c-pgto').value = 'prazo';
   document.getElementById('c-seg').value = '';
+  document.getElementById('c-status').value = 'ativo';
   document.getElementById('cnpj-msg').innerHTML = '';
+  document.getElementById('cep-msg').innerHTML = '';
   document.getElementById('cli-dup-msg').innerHTML = '';
   if(editIdx !== null) {
     var c = D.clientes[editIdx];
@@ -1536,12 +1576,25 @@ function abrirModal(idx) {
     document.getElementById('c-seg').value = c.seg||'';
     document.getElementById('c-end').value = c.end||'';
     document.getElementById('c-obs').value = c.obs||'';
+    document.getElementById('c-status').value = c.status||'ativo';
+    document.getElementById('c-seg-outro').value = c.segOutro||'';
+    document.getElementById('c-resp').value = c.resp||'';
+    document.getElementById('c-whats').value = c.whats||'';
+    document.getElementById('c-email').value = c.email||'';
+    document.getElementById('c-cep').value = c.cep||'';
+    document.getElementById('c-num').value = c.num||'';
+    document.getElementById('c-comp').value = c.comp||'';
+    document.getElementById('c-bairro').value = c.bairro||'';
+    document.getElementById('c-cidade').value = c.cidade||'';
+    document.getElementById('c-uf').value = c.uf||'';
+    document.getElementById('c-ref').value = c.ref||'';
     if(c.precos) {
       ['bola','integral','las250','las500','mini','suco','salada'].forEach(function(k) {
         if(c.precos[k]) document.getElementById('c-p-'+k).value = c.precos[k];
       });
     }
   }
+  toggleSegOutro();
   document.getElementById('btn-excluir-cli').style.display = editIdx!==null ? '' : 'none';
   document.getElementById('modal-cli').classList.add('on');
 }
@@ -1595,6 +1648,11 @@ function checarDuplicidadeCliente() {
 document.getElementById('btn-salvar-cli').addEventListener('click', function() {
   var nome = document.getElementById('c-nome').value.trim();
   if(!nome) { toast('Preencha o nome do cliente'); return; }
+  var segSel = document.getElementById('c-seg').value;
+  var segOutro = segSel==='outro' ? document.getElementById('c-seg-outro').value.trim() : '';
+  if(segSel==='outro' && !segOutro) { toast('Digite qual e o segmento'); document.getElementById('c-seg-outro').focus(); return; }
+  var email = document.getElementById('c-email').value.trim();
+  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast('E-mail parece invalido. Confira.'); document.getElementById('c-email').focus(); return; }
   var duplicados = checarDuplicidadeCliente();
   if(duplicados.length) {
     var nomesDup = duplicados.map(function(c){return c.fantasia||c.nome;}).join(', ');
@@ -1615,6 +1673,18 @@ document.getElementById('btn-salvar-cli').addEventListener('click', function() {
     seg: document.getElementById('c-seg').value,
     end: document.getElementById('c-end').value.trim(),
     obs: document.getElementById('c-obs').value.trim(),
+    status: document.getElementById('c-status').value || 'ativo',
+    segOutro: segOutro,
+    resp: document.getElementById('c-resp').value.trim(),
+    whats: document.getElementById('c-whats').value.trim(),
+    email: email,
+    cep: document.getElementById('c-cep').value.trim(),
+    num: document.getElementById('c-num').value.trim(),
+    comp: document.getElementById('c-comp').value.trim(),
+    bairro: document.getElementById('c-bairro').value.trim(),
+    cidade: document.getElementById('c-cidade').value.trim(),
+    uf: document.getElementById('c-uf').value.trim().toUpperCase(),
+    ref: document.getElementById('c-ref').value.trim(),
     precos: precos
   };
   var key = editIdx!==null ? D.clientes[editIdx]._key : null;
@@ -1644,13 +1714,70 @@ document.getElementById('btn-cnpj').addEventListener('click', async function() {
     document.getElementById('c-nome').value = j.razao_social||'';
     document.getElementById('c-fantasia').value = j.nome_fantasia||'';
     document.getElementById('c-tel').value = j.ddd_telefone_1||'';
-    document.getElementById('c-end').value = [j.descricao_tipo_logradouro,j.logradouro,j.numero,j.bairro].filter(Boolean).join(' ');
+    document.getElementById('c-end').value = [j.descricao_tipo_logradouro,j.logradouro].filter(Boolean).join(' ');
+    document.getElementById('c-num').value = j.numero||'';
+    document.getElementById('c-comp').value = j.complemento||'';
+    document.getElementById('c-bairro').value = j.bairro||'';
+    document.getElementById('c-cidade').value = j.municipio||'';
+    document.getElementById('c-uf').value = j.uf||'';
+    document.getElementById('c-cep').value = formatarCep(j.cep||'');
+    if(j.email && !document.getElementById('c-email').value) document.getElementById('c-email').value = String(j.email).toLowerCase();
     msg.innerHTML='<div class="alert alert-g">Dados encontrados!</div>';
   } catch(e) {
     msg.innerHTML='<div class="alert alert-r">Nao encontrado. Preencha manualmente.</div>';
   }
   this.textContent='Buscar'; this.disabled=false;
 });
+
+// Segmento "Outro" -> mostra campo de texto
+function toggleSegOutro() {
+  var outro = document.getElementById('c-seg').value==='outro';
+  document.getElementById('c-seg-outro-wrap').style.display = outro ? '' : 'none';
+}
+document.getElementById('c-seg').addEventListener('change', function() {
+  toggleSegOutro();
+  if(this.value==='outro') document.getElementById('c-seg-outro').focus();
+});
+
+// Mascaras de CEP e telefone/WhatsApp
+function formatarCep(v) {
+  v = String(v||'').replace(/\D/g,'').slice(0,8);
+  return v.length>5 ? v.slice(0,5)+'-'+v.slice(5) : v;
+}
+function formatarFone(v) {
+  v = String(v||'').replace(/\D/g,'').slice(0,11);
+  if(v.length<=2) return v.length ? '('+v : '';
+  if(v.length<=6) return '('+v.slice(0,2)+') '+v.slice(2);
+  if(v.length<=10) return '('+v.slice(0,2)+') '+v.slice(2,6)+'-'+v.slice(6);
+  return '('+v.slice(0,2)+') '+v.slice(2,7)+'-'+v.slice(7);
+}
+document.getElementById('c-cep').addEventListener('input', function() { this.value = formatarCep(this.value); });
+document.getElementById('c-whats').addEventListener('input', function() { this.value = formatarFone(this.value); });
+
+// Busca CEP (BrasilAPI)
+async function buscarCep() {
+  var cep = document.getElementById('c-cep').value.replace(/\D/g,'');
+  var msg = document.getElementById('cep-msg');
+  var btn = document.getElementById('btn-cep');
+  if(cep.length!==8) { msg.innerHTML='<div class="alert alert-r">CEP invalido.</div>'; return; }
+  btn.textContent='...'; btn.disabled=true;
+  msg.innerHTML='<div class="alert alert-i">Buscando CEP...</div>';
+  try {
+    var r = await fetch('https://brasilapi.com.br/api/cep/v1/'+cep);
+    if(!r.ok) throw new Error();
+    var j = await r.json();
+    if(j.street) document.getElementById('c-end').value = j.street;
+    if(j.neighborhood) document.getElementById('c-bairro').value = j.neighborhood;
+    if(j.city) document.getElementById('c-cidade').value = j.city;
+    if(j.state) document.getElementById('c-uf').value = j.state;
+    msg.innerHTML='<div class="alert alert-g">Endereco preenchido! Complete o numero.</div>';
+    document.getElementById('c-num').focus();
+  } catch(e) {
+    msg.innerHTML='<div class="alert alert-r">CEP nao encontrado. Preencha manualmente.</div>';
+  }
+  btn.textContent='Buscar CEP'; btn.disabled=false;
+}
+document.getElementById('btn-cep').addEventListener('click', buscarCep);
 
 // ===== ENTREGA =====
 document.querySelectorAll('.qbtn').forEach(function(btn) {

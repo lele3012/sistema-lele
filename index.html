@@ -182,7 +182,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 <!-- CLIENTES -->
 <div class="pnl on" id="pnl-clientes">
  <div class="stitle" style="margin-top:0">Clientes cadastrados</div>
-<input type="text" class="inp" id="busca-cliente" placeholder="Buscar cliente..." style="margin-bottom:10px" oninput="renderClis()">
+<input type="text" class="inp" id="busca-cliente" placeholder="Buscar cliente..." style="margin-bottom:8px" oninput="renderClis()">
+<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px">
+  <span id="cli-contagem" style="font-size:12px;color:#888"></span>
+  <button class="btn btn-o btn-sm" id="btn-ver-todos-cli" type="button" style="width:auto" onclick="toggleVerTodosCli()">📋 Ver todos</button>
+</div>
 <div id="lista-clientes"><div class="empty"><div class="ico">🔍</div><p>Digite o nome ou CNPJ pra buscar um cliente.</p></div></div>
   <button class="btn btn-g" id="btn-novo">+ Novo cliente</button>
 </div>
@@ -1518,17 +1522,30 @@ function filtraBoletosLista() {
 }
 
 // ===== CLIENTES =====
+var verTodosCli = false;
+function toggleVerTodosCli() {
+  verTodosCli = !verTodosCli;
+  if(verTodosCli) { var b=document.getElementById('busca-cliente'); if(b) b.value=''; }
+  renderClis();
+}
 function renderClis() {
   var el = document.getElementById('lista-clientes');
   if(!D.clientes.length) { el.innerHTML='<div class="empty"><div class="ico">👥</div><p>Nenhum cliente ainda.<br>Adicione abaixo.</p></div>'; return; }
   var buscaEl = document.getElementById('busca-cliente');
   var termo = buscaEl ? buscaEl.value.toLowerCase().trim() : '';
-  if(!termo) { el.innerHTML='<div class="empty"><div class="ico">🔍</div><p>Digite o nome ou CNPJ pra buscar um cliente.</p></div>'; return; }
+  var btnTodos = document.getElementById('btn-ver-todos-cli');
+  var contEl = document.getElementById('cli-contagem');
+  if(btnTodos) btnTodos.textContent = verTodosCli ? '✕ Ocultar lista' : '📋 Ver todos ('+D.clientes.length+')';
+  if(!termo && !verTodosCli) { if(contEl) contEl.textContent=''; el.innerHTML='<div class="empty"><div class="ico">🔍</div><p>Digite o nome ou CNPJ pra buscar um cliente.</p></div>'; return; }
   var filtrados = D.clientes.map(function(c,i){ return {c:c, i:i}; }).filter(function(o) {
+    if(!termo) return true;
     var nome = (o.c.fantasia||o.c.nome||'').toLowerCase();
+    var razao = (o.c.nome||'').toLowerCase();
     var cnpj = (o.c.cnpj||'').toLowerCase();
-    return nome.indexOf(termo)!==-1 || cnpj.indexOf(termo)!==-1;
+    return nome.indexOf(termo)!==-1 || razao.indexOf(termo)!==-1 || cnpj.indexOf(termo)!==-1;
   });
+  filtrados.sort(function(a,b){ return (a.c.fantasia||a.c.nome||'').localeCompare(b.c.fantasia||b.c.nome||'','pt-BR',{sensitivity:'base'}); });
+  if(contEl) contEl.textContent = filtrados.length + (filtrados.length===1 ? ' cliente' : ' clientes') + (termo ? ' encontrado'+(filtrados.length===1?'':'s') : '');
   if(!filtrados.length) { el.innerHTML='<div class="empty"><div class="ico">🔍</div><p>Nenhum cliente encontrado.</p></div>'; return; }
   el.innerHTML = filtrados.map(function(o) {
     var c = o.c, i = o.i;

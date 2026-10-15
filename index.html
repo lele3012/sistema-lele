@@ -4120,6 +4120,7 @@ document.getElementById('dre-ano').addEventListener('input', function(){ ultimaD
 var ultimaDRE = null;
 document.getElementById('btn-xls-dre').addEventListener('click', function() {
   if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  
   if(!ultimaDRE) { toast('Gere a DRE primeiro.'); return; }
   var d = ultimaDRE;
   var linhas = [

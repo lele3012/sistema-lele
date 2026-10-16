@@ -178,6 +178,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   <div class="tab" data-tab="dashboard"><span>📈</span>Dashboard</div>
   <div class="tab" data-tab="financeiro"><span>💰</span>Financeiro</div>
 </div>
+<div id="rec-alerta" style="display:none"></div>
 
 <!-- CLIENTES -->
 <div class="pnl on" id="pnl-clientes">
@@ -756,13 +757,31 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   </div>
 
   <div class="fin-sub" id="fs-frecor" style="display:none">
-    <div class="stitle">Nova conta recorrente</div>
-    <div class="card">
-      <div class="field"><label>Nome da conta</label><input type="text" class="inp" id="rc-nome" placeholder="Ex: Aluguel"></div>
+    <div id="rc-resumo"></div>
+    <div class="stitle" id="rc-form-titulo">Nova conta recorrente</div>
+    <div class="card" id="rc-form-card">
+      <div class="field"><label>Nome da conta</label><input type="text" class="inp" id="rc-nome" placeholder="Ex: Aluguel, Energia, Contador"></div>
       <div class="row2">
         <div class="field"><label>Valor de referência</label><input type="number" step="0.01" class="inp" id="rc-valor"></div>
         <div class="field"><label>Dia do vencimento</label><input type="number" min="1" max="31" class="inp" id="rc-dia"></div>
       </div>
+      <div class="row2">
+        <div class="field"><label>Avisar quantos dias antes</label>
+          <select class="inp" id="rc-aviso">
+            <option value="1">1 dia antes</option><option value="2">2 dias antes</option><option value="3" selected>3 dias antes</option>
+            <option value="5">5 dias antes</option><option value="7">7 dias antes</option><option value="10">10 dias antes</option>
+          </select></div>
+        <div class="field"><label>Como é pago</label>
+          <select class="inp" id="rc-forma">
+            <option value="Boleto">Boleto</option><option value="PIX">PIX</option><option value="Débito automático">Débito automático</option>
+            <option value="Cartão">Cartão</option><option value="Transferência">Transferência</option>
+          </select></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Termina em (opcional)</label><input type="month" class="inp" id="rc-fim"></div>
+        <div class="field"><label>Observação (opcional)</label><input type="text" class="inp" id="rc-obs" placeholder="Ex: parcela 12 de 60"></div>
+      </div>
+      <div style="font-size:11px;color:#888;margin:-4px 0 10px">"Termina em" serve para financiamentos e parcelamentos: depois desse mês a conta para de aparecer e de gerar lembrete.</div>
       <div class="field"><label style="display:flex;align-items:center;gap:6px;font-weight:600"><input type="checkbox" id="rc-variavel" style="width:auto"> Valor varia todo mês (ex: luz, água, cartão)</label></div>
       <button class="btn btn-g" id="btn-salvar-rc">✅ Salvar conta recorrente</button>
       <button class="btn btn-o" id="btn-cancelar-rc" style="display:none">Cancelar edição</button>
@@ -1383,13 +1402,15 @@ function carregar() {
     db.ref('boletos').on('value', function(snap) {
       D.boletos = snapToArray(snap.val());
       var t = document.querySelector('.tab.on');
-      if(t && t.getAttribute('data-tab')==='financeiro') { renderBoletos(); renderFinDash(); renderFluxo(); }
+      if(t && t.getAttribute('data-tab')==='financeiro') { renderBoletos(); renderFinDash(); renderFluxo(); renderRecorrentes(); }
+      atualizarAlertaRec();
       pronto();
     }, erroLeitura('boletos'));
     db.ref('recorrentes').on('value', function(snap) {
       D.recorrentes = snapToArray(snap.val());
       var t = document.querySelector('.tab.on');
       if(t && t.getAttribute('data-tab')==='financeiro') { renderRecorrentes(); renderFinDash(); }
+      atualizarAlertaRec();
       pronto();
     }, erroLeitura('recorrentes'));
     db.ref('despesasGerais').on('value', function(snap) {
@@ -3641,6 +3662,9 @@ document.getElementById('btn-salvar-bp').addEventListener('click', function() {
       if(existente.dataPagamento) obj.dataPagamento = existente.dataPagamento;
       if(existente.contaPagamento) obj.contaPagamento = existente.contaPagamento;
       if(existente.id) obj.id = existente.id;
+      if(existente.recorrenteId) obj.recorrenteId = existente.recorrenteId;
+      if(existente.recorrenteKey) obj.recorrenteKey = existente.recorrenteKey;
+      if(existente.forma) obj.forma = existente.forma;
     }
   } else {
     obj.id = Date.now();
@@ -3760,82 +3784,353 @@ document.getElementById('btn-pagbol-confirmar').addEventListener('click', functi
   });
 });
 
-// --- CONTAS RECORRENTES ---
-document.getElementById('btn-salvar-rc').addEventListener('click', function() {
-  var nome = document.getElementById('rc-nome').value.trim();
-  var dia = parseInt(document.getElementById('rc-dia').value)||1;
-  if(!nome) { toast('Informe o nome da conta'); return; }
-  var obj = { nome:nome, valor:parseFloat(document.getElementById('rc-valor').value)||0, dia:dia, variavel:document.getElementById('rc-variavel').checked };
-  if(!editRecorrenteKey) obj.id = Date.now();
-  salvarRegistro('recorrentes', obj, editRecorrenteKey).then(function(){
-    toast('Conta recorrente salva!');
-    document.getElementById('rc-nome').value=''; document.getElementById('rc-valor').value=''; document.getElementById('rc-dia').value=''; document.getElementById('rc-variavel').checked=false;
-    editRecorrenteKey=null; document.getElementById('btn-cancelar-rc').style.display='none';
+// --- CONTAS RECORRENTES (com lembretes) ---
+var lancarRecMes = null;
+var REC_MESES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function recPad(n){ return String(n).padStart(2,'0'); }
+// Data de hoje no fuso local (evita virar o dia às 21h por causa do UTC)
+function recHojeStr(){ var d=new Date(); return d.getFullYear()+'-'+recPad(d.getMonth()+1)+'-'+recPad(d.getDate()); }
+function recMesStr(d){ return d.getFullYear()+'-'+recPad(d.getMonth()+1); }
+function recSomaMes(ym, n){ var p=ym.split('-'); return recMesStr(new Date(+p[0], +p[1]-1+n, 1)); }
+function recUltimoDia(ano, mes){ return new Date(ano, mes, 0).getDate(); }
+function recNomeMes(ym){ var p=ym.split('-'); return REC_MESES[+p[1]-1]+'/'+p[0].slice(2); }
+// Dia 31 em fevereiro vira dia 28/29 (antes gerava uma data inválida)
+function recVencDoMes(r, ym){ var p=ym.split('-'); var dia=Math.min(Math.max(parseInt(r.dia)||1,1), recUltimoDia(+p[0], +p[1])); return ym+'-'+recPad(dia); }
+function recDiasAte(dataStr){ return Math.round((new Date(dataStr+'T12:00:00') - new Date(recHojeStr()+'T12:00:00'))/86400000); }
+function recAtivaNoMes(r, ym){ if(r.pausada) return false; if(r.fim && ym>r.fim) return false; return true; }
+function recBoletoDoMes(r, ym){
+  return D.boletos.find(function(b){
+    if(b.origem!=='recorrente' || !b.venc || b.venc.slice(0,7)!==ym) return false;
+    if(b.recorrenteKey) return b.recorrenteKey===r._key;
+    if(b.recorrenteId && r.id) return String(b.recorrenteId)===String(r.id);
+    return b.fornecedor===r.nome;
   });
+}
+function recOcorrencia(r, ym){
+  if(!recAtivaNoMes(r, ym)) return null;
+  var venc = recVencDoMes(r, ym), b = recBoletoDoMes(r, ym), dias = recDiasAte(venc), aviso = parseInt(r.aviso)||3;
+  var estado;
+  if(b && b.status==='pago') estado = 'paga';
+  else if(dias<0) estado = b ? 'atrasada' : 'atrasada-nl';
+  else if(dias<=aviso) estado = b ? 'proxima' : 'proxima-nl';
+  else estado = b ? 'lancada' : 'futura';
+  return {r:r, ym:ym, venc:venc, boleto:b, dias:dias, estado:estado, valor:(b ? b.valor : r.valor)||0};
+}
+function recPrecisaAtencao(o){ return !!o && (o.estado==='atrasada'||o.estado==='atrasada-nl'||o.estado==='proxima'||o.estado==='proxima-nl'); }
+// Lista de tudo que precisa de atenção: este mês e o começo do próximo (ex: conta do dia 2 avisada no fim do mês)
+function recLembretes(){
+  var ymA = recMesStr(new Date()), ymP = recSomaMes(ymA, 1), out = [];
+  D.recorrentes.forEach(function(r){
+    [ymA, ymP].forEach(function(ym){ var o = recOcorrencia(r, ym); if(recPrecisaAtencao(o)) out.push(o); });
+  });
+  return out.sort(function(a,b){ return a.dias-b.dias; });
+}
+function recQuando(dias){
+  if(dias<0) return 'venceu há '+(-dias)+' dia'+(dias===-1?'':'s');
+  if(dias===0) return 'vence HOJE';
+  if(dias===1) return 'vence amanhã';
+  return 'vence em '+dias+' dias';
+}
+function recBadge(o){
+  if(!o) return '';
+  var st = {
+    'paga':        ['badge-g', '✅ Paga'+(o.boleto && o.boleto.dataPagamento ? ' em '+fdata(o.boleto.dataPagamento).slice(0,5) : '')],
+    'atrasada':    ['badge-r', '⚠️ Atrasada — '+recQuando(o.dias)+', falta pagar'],
+    'atrasada-nl': ['badge-r', '⚠️ '+recQuando(o.dias).replace(/^./, function(c){return c.toUpperCase();})+' e não foi lançada'],
+    'proxima':     ['badge-y', '🔔 '+recQuando(o.dias).replace(/^./, function(c){return c.toUpperCase();})+' — lançada, falta pagar'],
+    'proxima-nl':  ['badge-y', '🔔 '+recQuando(o.dias).replace(/^./, function(c){return c.toUpperCase();})+' — falta lançar'],
+    'lancada':     ['', 'Lançada · aguardando vencimento'],
+    'futura':      ['', 'Ainda não lançada']
+  }[o.estado];
+  if(!st[0]) return '<span style="font-size:11px;color:#888">'+st[1]+'</span>';
+  return '<span class="badge '+st[0]+'">'+st[1]+'</span>';
+}
+function recHistorico(r, n){
+  return D.boletos.filter(function(b){
+    if(b.origem!=='recorrente' || !b.venc) return false;
+    if(b.recorrenteKey) return b.recorrenteKey===r._key;
+    if(b.recorrenteId && r.id) return String(b.recorrenteId)===String(r.id);
+    return b.fornecedor===r.nome;
+  }).sort(function(a,b){ return a.venc<b.venc?1:-1; }).slice(0, n||3);
+}
+function recLancar(r, ym, valor){
+  try {
+    if(recBoletoDoMes(r, ym)) { toast(r.nome+' já foi lançada em '+recNomeMes(ym)); return Promise.resolve(false); }
+    var obj = {id:Date.now()+Math.floor(Math.random()*1000), fornecedor:r.nome, desc:'Conta recorrente', valor:valor||0, venc:recVencDoMes(r, ym), status:'pendente', origem:'recorrente', recorrenteKey:r._key};
+    if(r.id) obj.recorrenteId = r.id;
+    if(r.forma) obj.forma = r.forma;
+    return Promise.resolve(salvarRegistro('boletos', obj)).then(function(){ return true; });
+  } catch(e) {
+    console.error('Erro ao lançar recorrente:', e); toast('Erro ao lançar '+(r&&r.nome||'conta')+'. Tente de novo.', 4000);
+    return Promise.resolve(false);
+  }
+}
+function recLimparForm(){
+  ['rc-nome','rc-valor','rc-dia','rc-fim','rc-obs'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('rc-aviso').value='3'; document.getElementById('rc-forma').value='Boleto';
+  document.getElementById('rc-variavel').checked=false;
+  document.getElementById('rc-form-titulo').textContent='Nova conta recorrente';
+  editRecorrenteKey=null; document.getElementById('btn-cancelar-rc').style.display='none';
+}
+document.getElementById('btn-salvar-rc').addEventListener('click', function() {
+  try {
+    var nome = document.getElementById('rc-nome').value.trim();
+    var dia = parseInt(document.getElementById('rc-dia').value);
+    if(!nome) { toast('Informe o nome da conta'); return; }
+    if(!dia || dia<1 || dia>31) { toast('Informe um dia de vencimento entre 1 e 31'); return; }
+    var obj = {
+      nome:nome, valor:parseFloat(document.getElementById('rc-valor').value)||0, dia:dia,
+      variavel:document.getElementById('rc-variavel').checked,
+      aviso:parseInt(document.getElementById('rc-aviso').value)||3,
+      forma:document.getElementById('rc-forma').value
+    };
+    var fim = document.getElementById('rc-fim').value, obs = document.getElementById('rc-obs').value.trim();
+    if(fim) obj.fim = fim;
+    if(obs) obj.obs = obs;
+    // Ao editar, PRESERVA o id interno (sem ele o "Lançar" falhava em silêncio)
+    var existente = editRecorrenteKey ? D.recorrentes.find(function(x){ return x._key===editRecorrenteKey; }) : null;
+    obj.id = (existente && existente.id) ? existente.id : Date.now();
+    if(existente && existente.pausada) obj.pausada = true;
+    salvarRegistro('recorrentes', obj, editRecorrenteKey).then(function(){
+      toast('Conta recorrente salva!');
+      recLimparForm();
+    });
+  } catch(e) { console.error('Erro ao salvar recorrente:', e); toast('Erro ao salvar a conta. Tente de novo.', 4000); }
 });
-document.getElementById('btn-cancelar-rc').addEventListener('click', function(){
-  editRecorrenteKey=null; this.style.display='none';
-  document.getElementById('rc-nome').value=''; document.getElementById('rc-valor').value=''; document.getElementById('rc-dia').value=''; document.getElementById('rc-variavel').checked=false;
-});
+document.getElementById('btn-cancelar-rc').addEventListener('click', recLimparForm);
+
 function renderRecorrentes() {
   var el = document.getElementById('lista-recorrentes'); if(!el) return;
+  renderResumoRec();
   if(!D.recorrentes.length) { el.innerHTML='<div class="empty"><div class="ico">🔁</div><p>Nenhuma conta recorrente.</p></div>'; return; }
-  var agora = new Date(); var mesAtual = agora.getMonth()+1, anoAtual = agora.getFullYear();
-  el.innerHTML = D.recorrentes.slice().sort(function(a,b){return a.dia-b.dia;}).map(function(r) {
-    var vencMes = anoAtual+'-'+String(mesAtual).padStart(2,'0')+'-'+String(r.dia).padStart(2,'0');
-    var jaLancado = D.boletos.some(function(b){ return b.origem==='recorrente' && b.recorrenteId===r.id && b.venc===vencMes; });
-    return '<div class="card" style="padding:12px 16px">'+
-      '<div style="display:flex;justify-content:space-between"><b>'+r.nome+'</b><span style="font-weight:800">'+fmt(r.valor)+'</span></div>'+
-      '<div style="font-size:12px;color:#888;margin-top:4px">Vence todo dia '+r.dia+(r.variavel?' <span class="badge badge-y" style="margin-left:4px">Valor variável</span>':'')+'</div>'+
-      '<div style="display:flex;gap:6px;margin-top:8px">'+
-      (jaLancado ? '<span class="badge badge-g" style="padding:8px 12px">Já lançado este mês</span>' : '<button class="btn btn-sm btn-g" data-lancar="'+r._key+'">Lançar este mês</button>')+
+  var ymA = recMesStr(new Date()), ymP = recSomaMes(ymA, 1);
+  var itens = D.recorrentes.map(function(r){
+    var oA = recOcorrencia(r, ymA), oP = recOcorrencia(r, ymP);
+    // Foco: o que precisa de atenção primeiro; se este mês já está pago e o próximo já está perto, mostra o próximo
+    var foco = recPrecisaAtencao(oA) ? oA : (recPrecisaAtencao(oP) ? oP : (oA || oP));
+    var inativa = r.pausada ? 'Pausada' : (r.fim && r.fim<ymA ? 'Encerrada' : '');
+    var ordem = inativa ? 9000 : (recPrecisaAtencao(foco) ? foco.dias : 1000 + (parseInt(r.dia)||0));
+    return {r:r, oA:oA, foco:foco, inativa:inativa, ordem:ordem};
+  }).sort(function(a,b){ return a.ordem-b.ordem; });
+
+  el.innerHTML = itens.map(function(it) {
+    var r = it.r, o = it.foco;
+    var borda = it.inativa ? 'opacity:.6' : (o && (o.estado==='atrasada'||o.estado==='atrasada-nl') ? 'border:1.5px solid var(--r)' : (recPrecisaAtencao(o) ? 'border:1.5px solid #e0b100' : ''));
+    var linhaVenc = '';
+    if(it.inativa) linhaVenc = '<span class="badge badge-y">'+it.inativa+'</span>';
+    else if(o) {
+      linhaVenc = recBadge(o)+'<div style="font-size:12px;color:#888;margin-top:4px">'+recNomeMes(o.ym)+' · vence '+fdata(o.venc)+(o.boleto && o.boleto.valor!==r.valor ? ' · lançada com '+fmt(o.boleto.valor) : '')+'</div>';
+      if(o!==it.oA && it.oA && it.oA.estado==='paga') linhaVenc += '<div style="font-size:11px;color:var(--g);margin-top:2px">'+recNomeMes(it.oA.ym)+' já está paga ✅</div>';
+    }
+    var hist = '';
+    if(r.variavel) {
+      var h = recHistorico(r, 3);
+      if(h.length) hist = '<div style="font-size:11px;color:#888;margin-top:4px">Últimos: '+h.map(function(b){ return recNomeMes(b.venc.slice(0,7))+' '+fmt(b.valor); }).join(' · ')+'</div>';
+    }
+    var acao = '';
+    if(!it.inativa && o) {
+      if(!o.boleto) acao = '<button class="btn btn-sm btn-g" data-lancar="'+r._key+'" data-ym="'+o.ym+'">➕ Lançar '+recNomeMes(o.ym)+'</button>';
+      else if(o.boleto.status!=='pago') acao = '<button class="btn btn-sm btn-g" data-pagrc="'+o.boleto._key+'">💸 Marcar como paga</button>';
+    }
+    return '<div class="card" style="padding:12px 16px;'+borda+'">'+
+      '<div style="display:flex;justify-content:space-between;gap:8px"><b>'+r.nome+'</b><span style="font-weight:800;white-space:nowrap">'+fmt(o ? o.valor : r.valor)+'</span></div>'+
+      '<div style="font-size:12px;color:#888;margin-top:2px">Todo dia '+r.dia+' · '+(r.forma||'Boleto')+' · avisa '+(parseInt(r.aviso)||3)+' dia(s) antes'+
+        (r.variavel?' <span class="badge badge-y" style="margin-left:4px">Valor variável</span>':'')+'</div>'+
+      (r.obs||r.fim ? '<div style="font-size:11px;color:#888;margin-top:2px">'+(r.obs||'')+(r.obs&&r.fim?' · ':'')+(r.fim?'até '+recNomeMes(r.fim):'')+'</div>' : '')+
+      '<div style="margin-top:8px">'+linhaVenc+'</div>'+hist+
+      '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">'+acao+
       '<button class="btn btn-sm btn-o" data-editrc="'+r._key+'">Editar</button>'+
+      '<button class="btn btn-sm btn-o" data-pausarc="'+r._key+'">'+(r.pausada?'▶️ Retomar':'⏸ Pausar')+'</button>'+
       '<button class="btn btn-sm btn-r" data-delrc="'+r._key+'">Excluir</button>'+
       '</div></div>';
   }).join('');
+
   el.querySelectorAll('[data-lancar]').forEach(function(btn){ btn.addEventListener('click', function(){
     var r = D.recorrentes.find(function(x){return x._key===btn.getAttribute('data-lancar');});
-    if(r.variavel) { abrirLancarRec(r._key); return; }
-    var vencMes = anoAtual+'-'+String(mesAtual).padStart(2,'0')+'-'+String(r.dia).padStart(2,'0');
-    salvarRegistro('boletos', {id:Date.now(), fornecedor:r.nome, desc:'Conta recorrente', valor:r.valor, venc:vencMes, status:'pendente', origem:'recorrente', recorrenteId:r.id}).then(function(){
-      toast('Conta lançada em Boletos a Pagar!');
-    });
+    if(!r) { toast('Conta não encontrada. Atualize a página.'); return; }
+    var ym = btn.getAttribute('data-ym');
+    if(r.variavel) { abrirLancarRec(r._key, ym); return; }
+    btn.disabled = true;
+    recLancar(r, ym, r.valor).then(function(ok){ if(ok) toast(r.nome+' lançada em Boletos a Pagar!'); else btn.disabled=false; });
   });});
+  el.querySelectorAll('[data-pagrc]').forEach(function(btn){ btn.addEventListener('click', function(){ abrirPagBol(btn.getAttribute('data-pagrc')); });});
   el.querySelectorAll('[data-editrc]').forEach(function(btn){ btn.addEventListener('click', function(){
     var r = D.recorrentes.find(function(x){return x._key===btn.getAttribute('data-editrc');});
+    if(!r) return;
     editRecorrenteKey = r._key;
-    document.getElementById('rc-nome').value=r.nome; document.getElementById('rc-valor').value=r.valor; document.getElementById('rc-dia').value=r.dia;
+    document.getElementById('rc-nome').value=r.nome||''; document.getElementById('rc-valor').value=r.valor||''; document.getElementById('rc-dia').value=r.dia||'';
     document.getElementById('rc-variavel').checked = !!r.variavel;
+    document.getElementById('rc-aviso').value = String(parseInt(r.aviso)||3);
+    document.getElementById('rc-forma').value = r.forma||'Boleto';
+    document.getElementById('rc-fim').value = r.fim||''; document.getElementById('rc-obs').value = r.obs||'';
+    document.getElementById('rc-form-titulo').textContent='Editando: '+r.nome;
     document.getElementById('btn-cancelar-rc').style.display='';
+    document.getElementById('rc-form-card').scrollIntoView({behavior:'smooth', block:'center'});
+  });});
+  el.querySelectorAll('[data-pausarc]').forEach(function(btn){ btn.addEventListener('click', function(){
+    var r = D.recorrentes.find(function(x){return x._key===btn.getAttribute('data-pausarc');});
+    if(!r) return;
+    atualizarRegistro('recorrentes', r._key, {pausada: !r.pausada}).then(function(){ toast(r.pausada ? r.nome+' retomada' : r.nome+' pausada — não gera mais lembrete'); });
   });});
   el.querySelectorAll('[data-delrc]').forEach(function(btn){ btn.addEventListener('click', function(){
-    if(confirm('Excluir esta conta recorrente?')) excluirRegistro('recorrentes', btn.getAttribute('data-delrc'));
+    if(confirm('Excluir esta conta recorrente? (Os boletos já lançados continuam em Boletos a Pagar.)\n\nSe for só uma pausa, use o botão Pausar.')) excluirRegistro('recorrentes', btn.getAttribute('data-delrc'));
   });});
 }
 
-function abrirLancarRec(key) {
+function renderResumoRec() {
+  var el = document.getElementById('rc-resumo'); if(!el) return;
+  if(!D.recorrentes.length) { el.innerHTML=''; return; }
+  var ymA = recMesStr(new Date());
+  var ocs = D.recorrentes.map(function(r){ return recOcorrencia(r, ymA); }).filter(Boolean);
+  var previsto = ocs.reduce(function(s,o){ return s+o.valor; },0);
+  var pagas = ocs.filter(function(o){ return o.estado==='paga'; });
+  var pago = pagas.reduce(function(s,o){ return s+o.valor; },0);
+  var pct = previsto>0 ? Math.round(pago/previsto*100) : 0;
+  var fixasPendentes = ocs.filter(function(o){ return !o.boleto && !o.r.variavel; });
+  var notifOk = ('Notification' in window) && Notification.permission==='granted';
+  el.innerHTML =
+    '<div class="card">'+
+      '<div style="font-size:11px;color:#888;font-weight:700">RECORRENTES DE '+recNomeMes(ymA).toUpperCase()+'</div>'+
+      '<div class="row2" style="margin-top:8px">'+
+        '<div><div style="font-size:11px;color:#888">Previsto</div><div style="font-size:18px;font-weight:800">'+fmt(previsto)+'</div></div>'+
+        '<div><div style="font-size:11px;color:#888">Falta pagar</div><div style="font-size:18px;font-weight:800;color:var(--r)">'+fmt(previsto-pago)+'</div></div>'+
+      '</div>'+
+      '<div style="background:#eee;border-radius:6px;height:8px;margin-top:10px;overflow:hidden"><div style="background:var(--g);height:100%;width:'+pct+'%"></div></div>'+
+      '<div style="font-size:11px;color:#888;margin-top:4px">'+pagas.length+' de '+ocs.length+' contas pagas · '+pct+'% do valor</div>'+
+      '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">'+
+        (fixasPendentes.length ? '<button class="btn btn-sm btn-g" id="btn-rc-lancar-todas">⚡ Lançar as '+fixasPendentes.length+' fixas do mês</button>' : '')+
+        '<button class="btn btn-sm btn-o" id="btn-rc-ics">📅 Lembretes na agenda do celular</button>'+
+        ('Notification' in window ? '<button class="btn btn-sm btn-o" id="btn-rc-notif">'+(notifOk?'🔔 Avisos do navegador ligados':'🔔 Ligar avisos do navegador')+'</button>' : '')+
+      '</div>'+
+    '</div>';
+  var bT = document.getElementById('btn-rc-lancar-todas');
+  if(bT) bT.addEventListener('click', function(){
+    var lista = fixasPendentes.map(function(o){ return o.r.nome+' — '+fmt(o.r.valor)+' (vence '+fdata(o.venc)+')'; }).join('\n');
+    if(!confirm('Lançar estas contas em Boletos a Pagar?\n\n'+lista+'\n\nAs de valor variável continuam para lançar uma a uma.')) return;
+    bT.disabled = true;
+    var n = 0, p = Promise.resolve();
+    fixasPendentes.forEach(function(o){ p = p.then(function(){ return recLancar(o.r, o.ym, o.r.valor).then(function(ok){ if(ok) n++; }); }); });
+    p.then(function(){ toast(n+' conta(s) lançada(s) em Boletos a Pagar!'); });
+  });
+  document.getElementById('btn-rc-ics').addEventListener('click', recBaixarICS);
+  var bN = document.getElementById('btn-rc-notif');
+  if(bN) bN.addEventListener('click', function(){
+    if(Notification.permission==='granted') { recNotificar(true); return; }
+    if(Notification.permission==='denied') { alert('Os avisos estão bloqueados neste navegador. Libere nas configurações do site (cadeado ao lado do endereço) e tente de novo.'); return; }
+    Notification.requestPermission().then(function(p){ renderResumoRec(); if(p==='granted') recNotificar(true); });
+  });
+}
+
+function abrirLancarRec(key, ym) {
   var r = D.recorrentes.find(function(x){return x._key===key;});
   if(!r) return;
-  lancarRecKey = key;
-  document.getElementById('lancarrec-info').innerHTML = '<div style="font-size:14px;font-weight:700">'+r.nome+'</div><div style="font-size:12px;color:#888;margin-top:2px">Valor do mês passado: '+fmt(r.valor)+'</div>';
-  document.getElementById('lancarrec-valor').value = r.valor;
+  lancarRecKey = key; lancarRecMes = ym || recMesStr(new Date());
+  var h = recHistorico(r, 3);
+  document.getElementById('lancarrec-info').innerHTML = '<div style="font-size:14px;font-weight:700">'+r.nome+' — '+recNomeMes(lancarRecMes)+'</div>'+
+    '<div style="font-size:12px;color:#888;margin-top:2px">Vencimento: '+fdata(recVencDoMes(r, lancarRecMes))+'</div>'+
+    '<div style="font-size:12px;color:#888;margin-top:2px">'+(h.length ? 'Últimos: '+h.map(function(b){ return recNomeMes(b.venc.slice(0,7))+' '+fmt(b.valor); }).join(' · ') : 'Valor de referência: '+fmt(r.valor))+'</div>';
+  document.getElementById('lancarrec-valor').value = r.valor||'';
   document.getElementById('modal-lancarrec').classList.add('on');
+  setTimeout(function(){ var i=document.getElementById('lancarrec-valor'); i.focus(); i.select(); }, 100);
 }
 document.getElementById('btn-lancarrec-close').addEventListener('click', function(){ document.getElementById('modal-lancarrec').classList.remove('on'); });
 document.getElementById('btn-lancarrec-cancelar').addEventListener('click', function(){ document.getElementById('modal-lancarrec').classList.remove('on'); });
 document.getElementById('btn-lancarrec-confirmar').addEventListener('click', function() {
   var r = D.recorrentes.find(function(x){return x._key===lancarRecKey;});
-  if(!r) return;
+  if(!r) { toast('Conta não encontrada. Atualize a página.'); return; }
   var valor = parseFloat(document.getElementById('lancarrec-valor').value)||0;
   if(valor<=0) { toast('Informe um valor válido'); return; }
-  var agora = new Date(); var mesAtual = agora.getMonth()+1, anoAtual = agora.getFullYear();
-  var vencMes = anoAtual+'-'+String(mesAtual).padStart(2,'0')+'-'+String(r.dia).padStart(2,'0');
   document.getElementById('modal-lancarrec').classList.remove('on');
-  salvarRegistro('boletos', {id:Date.now(), fornecedor:r.nome, desc:'Conta recorrente', valor:valor, venc:vencMes, status:'pendente', origem:'recorrente', recorrenteId:r.id}).then(function(){
+  recLancar(r, lancarRecMes || recMesStr(new Date()), valor).then(function(ok){
+    if(!ok) return;
     atualizarRegistro('recorrentes', r._key, {valor:valor});
-    toast('Conta lançada em Boletos a Pagar!');
+    toast(r.nome+' lançada em Boletos a Pagar!');
   });
 });
+
+// --- LEMBRETES: faixa no topo do sistema (qualquer aba) ---
+function recLSget(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+function recLSset(k,v){ try { localStorage.setItem(k,v); } catch(e){} }
+function recIrParaRecorrentes(){
+  var t = document.querySelector('.tab[data-tab="financeiro"]'); if(t) t.click();
+  var b = document.querySelector('.fin-tab-btn[data-fs="frecor"]'); if(b) b.click();
+}
+function recTextoLembrete(o){
+  var acao = (o.estado==='atrasada-nl'||o.estado==='proxima-nl') ? 'falta lançar' : (o.r.forma==='Débito automático' ? 'confira o débito e dê baixa' : 'falta pagar');
+  return o.r.nome+' — '+recQuando(o.dias)+' ('+fdata(o.venc).slice(0,5)+') · '+fmt(o.valor)+' · '+acao;
+}
+function atualizarAlertaRec(){
+  var el = document.getElementById('rec-alerta'); if(!el) return;
+  try {
+    var lst = recLembretes();
+    var assinatura = recHojeStr()+'|'+lst.map(function(o){ return o.r._key+o.ym+o.estado; }).join(',');
+    if(!lst.length || recLSget('lele_rec_alerta_fechado')===assinatura) { el.style.display='none'; el.innerHTML=''; return; }
+    var atras = lst.filter(function(o){ return o.dias<0; }).length;
+    var cor = atras ? 'var(--r)' : '#856404', fundo = atras ? 'var(--rl)' : '#fff3cd';
+    var titulo = (atras ? atras+' atrasada'+(atras>1?'s':'') : '') + (atras && lst.length-atras ? ' e ' : '') + (lst.length-atras ? (lst.length-atras)+' vencendo' : '');
+    el.style.cssText = 'display:block;background:'+fundo+';color:'+cor+';border-bottom:1px solid '+cor+';padding:10px 18px;font-size:13px';
+    el.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px">'+
+        '<b>🔔 Contas recorrentes: '+titulo+'</b>'+
+        '<span style="display:flex;gap:6px;flex-shrink:0">'+
+          '<button class="btn btn-sm btn-o" id="rec-alerta-ver" style="padding:4px 10px">Ver</button>'+
+          '<button class="btn btn-sm btn-o" id="rec-alerta-x" title="Esconder até mudar algo ou até amanhã" style="padding:4px 10px">✕</button>'+
+        '</span></div>'+
+      '<div style="margin-top:4px;line-height:1.5">'+lst.slice(0,4).map(function(o){ return '• '+recTextoLembrete(o); }).join('<br>')+
+        (lst.length>4 ? '<br>• e mais '+(lst.length-4)+'…' : '')+'</div>';
+    document.getElementById('rec-alerta-ver').addEventListener('click', recIrParaRecorrentes);
+    document.getElementById('rec-alerta-x').addEventListener('click', function(){ recLSset('lele_rec_alerta_fechado', assinatura); el.style.display='none'; });
+    recNotificar(false);
+  } catch(e) { console.error('Erro nos lembretes de recorrentes:', e); }
+}
+// Aviso do navegador: no máximo 1 por dia, só quando o sistema é aberto
+function recNotificar(forcar){
+  try {
+    if(!('Notification' in window) || Notification.permission!=='granted') return;
+    var lst = recLembretes();
+    if(!lst.length) { if(forcar) toast('Avisos ligados! Hoje não há contas recorrentes para avisar.', 3500); return; }
+    var hoje = recHojeStr();
+    if(!forcar && recLSget('lele_rec_notif_dia')===hoje) return;
+    recLSset('lele_rec_notif_dia', hoje);
+    var n = new Notification('Lelé da Kuka — contas a pagar', { body: lst.slice(0,4).map(recTextoLembrete).join('\n') + (lst.length>4?'\n+ '+(lst.length-4)+' outras':''), tag:'lele-recorrentes' });
+    n.onclick = function(){ window.focus(); recIrParaRecorrentes(); n.close(); };
+  } catch(e) { console.warn('Notificação não disponível:', e); }
+}
+
+// --- Exportar para a agenda (iPhone / Google Agenda): lembra mesmo com o sistema fechado ---
+function recBaixarICS(){
+  try {
+    var ymA = recMesStr(new Date());
+    var ativas = D.recorrentes.filter(function(r){ return !r.pausada && !(r.fim && r.fim<ymA); });
+    if(!ativas.length) { toast('Nenhuma conta ativa para exportar'); return; }
+    var esc = function(s){ return String(s||'').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n'); };
+    var dobra = function(l){ var out=[]; while(l.length>70){ out.push(l.slice(0,70)); l=' '+l.slice(70); } out.push(l); return out.join('\r\n'); };
+    var ymd = function(s){ return s.replace(/-/g,''); };
+    var stamp = new Date().toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
+    var L = ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Lele da Kuka//Sistema//PT-BR','CALSCALE:GREGORIAN','METHOD:PUBLISH','X-WR-CALNAME:Contas Lelé da Kuka'];
+    ativas.forEach(function(r){
+      var dia = Math.min(Math.max(parseInt(r.dia)||1,1),31), aviso = parseInt(r.aviso)||3;
+      var ini = recVencDoMes(r, ymA), d2 = new Date(ini+'T12:00:00'); d2.setDate(d2.getDate()+1);
+      var fimEv = d2.getFullYear()+recPad(d2.getMonth()+1)+recPad(d2.getDate());
+      var dias = []; for(var k=28;k<=dia;k++) dias.push(k);
+      var rrule = 'RRULE:FREQ=MONTHLY;'+(dia>28 ? 'BYMONTHDAY='+dias.join(',')+';BYSETPOS=-1' : 'BYMONTHDAY='+dia);
+      if(r.fim){ var p=r.fim.split('-'); rrule += ';UNTIL='+p[0]+p[1]+recPad(recUltimoDia(+p[0],+p[1])); }
+      var resumo = '💰 Pagar '+r.nome+' — '+(r.variavel?'aprox. ':'')+fmt(r.valor);
+      var desc = (r.forma||'Boleto')+(r.obs?' · '+r.obs:'')+'\nLembrete do Sistema Lelé. Depois de pagar, dê baixa no sistema (Financeiro > Recorrentes).';
+      var antes = aviso-1>0 ? '-P'+(aviso-1)+'DT15H' : '-PT15H'; // = X dias antes, às 9h
+      L.push('BEGIN:VEVENT','UID:rec-'+r._key+'@lele-da-kuka','DTSTAMP:'+stamp,'DTSTART;VALUE=DATE:'+ymd(ini),'DTEND;VALUE=DATE:'+fimEv, rrule,
+        dobra('SUMMARY:'+esc(resumo)), dobra('DESCRIPTION:'+esc(desc)), 'TRANSP:TRANSPARENT',
+        'BEGIN:VALARM','ACTION:DISPLAY','TRIGGER:'+antes, dobra('DESCRIPTION:'+esc(r.nome+' vence em '+aviso+' dia(s)')),'END:VALARM',
+        'BEGIN:VALARM','ACTION:DISPLAY','TRIGGER:PT9H', dobra('DESCRIPTION:'+esc(r.nome+' vence HOJE')),'END:VALARM',
+        'END:VEVENT');
+    });
+    L.push('END:VCALENDAR');
+    var blob = new Blob([L.join('\r\n')+'\r\n'], {type:'text/calendar;charset=utf-8'});
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'contas-lele-da-kuka.ics';
+    document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    alert('Arquivo de agenda baixado com '+ativas.length+' conta(s).\n\nNo iPhone: abra o arquivo e toque em "Adicionar tudo".\nNo Google Agenda (computador): Configurações > Importar.\n\nCada conta vira um evento todo mês, com um aviso antes (na antecedência configurada em cada conta) e outro no dia, sempre às 9h.\n\nSe mudar contas aqui, apague o calendário antigo antes de importar de novo, para não duplicar.');
+  } catch(e) { console.error('Erro ao gerar agenda:', e); toast('Erro ao gerar o arquivo de agenda.', 4000); }
+}
 
 // --- DESPESAS GERAIS (ex: combustivel do entregador, manutencao, etc) ---
 document.getElementById('btn-salvar-dg').addEventListener('click', function() {

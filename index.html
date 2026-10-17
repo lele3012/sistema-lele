@@ -73,6 +73,34 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 .qbtn{width:34px;height:34px;border:1.5px solid var(--b);border-radius:8px;background:#fff;font-size:18px;cursor:pointer;color:var(--g);font-weight:700;display:flex;align-items:center;justify-content:center}
 .qinp{width:60px;border:1.5px solid var(--b);border-radius:8px;padding:7px 4px;font-size:16px;text-align:center;font-family:inherit;outline:none}
 .qinp:focus{border-color:var(--g)}
+/* ===== Produção em grade (igual à folha de papel) ===== */
+.pg-wrap{background:#fff;border:1.5px solid #333;border-radius:10px;overflow:hidden;margin-bottom:12px}
+.pg-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;border-bottom:1.5px solid #333;background:#faf8f4}
+.pg-head h3{font-size:13px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;margin:0}
+.pg-data{display:flex;align-items:center;gap:8px;font-weight:800;font-size:13px}
+.pg-data input{border:1.5px solid #333;border-radius:8px;padding:7px 10px;font-size:15px;font-family:inherit;font-weight:700}
+.pg-dia{font-size:12px;color:#666;font-weight:600}
+.pg-tab{width:100%;border-collapse:collapse;table-layout:fixed}
+.pg-tab th,.pg-tab td{border:1px solid #9a958c;padding:0;height:44px}
+.pg-tab tr>*:first-child{border-left:none}.pg-tab tr>*:last-child{border-right:none}
+.pg-tab thead th{background:#f0ede8;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;height:34px}
+.pg-tab .pg-sabor{text-align:left;padding:0 12px;font-size:14px;font-weight:600;color:#222;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pg-tab .pg-col{width:26%}
+.pg-tab td.pg-na{background:repeating-linear-gradient(135deg,#eceae6 0 6px,#e2dfda 6px 12px)}
+.pg-tab input.pg-inp{width:100%;height:100%;border:none;background:transparent;text-align:center;font-size:19px;font-weight:700;font-family:inherit;color:#1f2a7a;outline:none;padding:0;-moz-appearance:textfield}
+.pg-tab input.pg-inp::-webkit-outer-spin-button,.pg-tab input.pg-inp::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.pg-tab td.pg-cell:focus-within{box-shadow:inset 0 0 0 2.5px var(--g);background:#fff}
+.pg-tab td.pg-cell.pg-ok{background:#f4ff9e}
+.pg-tab tr.pg-sep th{background:#f0ede8;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;height:28px;color:#555}
+.pg-tab tr.pg-tot td{background:#faf8f4;font-weight:800;text-align:center;font-size:15px;color:var(--g)}
+.pg-tab tr.pg-tot td.pg-sabor{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#333}
+.pg-tab tr.pg-geral td{background:var(--g);color:#fff;font-size:17px;font-weight:900;text-align:center;border-color:var(--g)}
+.pg-tab tr.pg-geral td.pg-sabor{color:#fff;font-size:13px;text-transform:uppercase;letter-spacing:.06em}
+.pg-dica{font-size:11px;color:#888;padding:8px 12px;border-top:1px solid #ddd;background:#faf8f4}
+.pg-aviso{margin:0 0 12px}
+.pg-btns{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.pg-btns .btn{flex:1;min-width:140px;margin-top:0}
+@media (max-width:420px){.pg-tab .pg-sabor{font-size:13px;padding:0 8px}.pg-tab .pg-col{width:24%}.pg-tab input.pg-inp{font-size:17px}}
 
 /* CLIENTE CARDS */
 .cli{background:#fff;border:1.5px solid var(--b);border-radius:12px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;cursor:pointer}
@@ -332,47 +360,44 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 <!-- PRODUCAO -->
 <div class="pnl" id="pnl-producao">
   <div class="stitle" style="margin-top:0">Lançar produção do dia</div>
-  <div class="card"><div class="field"><label>Data</label><input type="date" class="inp" id="prod-data"></div></div>
-
-  <div class="stitle">⬜ Pão Bola</div>
-  <div class="card" id="card-prod-bola">
-    <div class="pline"><span class="pname">Frango com milho</span><div class="qctrl"><button class="qbtn" data-key="bola_frangomilho" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-bola_frangomilho" value="0" min="0"><button class="qbtn" data-key="bola_frangomilho" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Frango com peru</span><div class="qctrl"><button class="qbtn" data-key="bola_frangoperu" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-bola_frangoperu" value="0" min="0"><button class="qbtn" data-key="bola_frangoperu" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Frango com palha</span><div class="qctrl"><button class="qbtn" data-key="bola_frangopalha" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-bola_frangopalha" value="0" min="0"><button class="qbtn" data-key="bola_frangopalha" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Frango com azeitona</span><div class="qctrl"><button class="qbtn" data-key="bola_frangoazeitona" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-bola_frangoazeitona" value="0" min="0"><button class="qbtn" data-key="bola_frangoazeitona" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Peito de Peru</span><div class="qctrl"><button class="qbtn" data-key="bola_peru" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-bola_peru" value="0" min="0"><button class="qbtn" data-key="bola_peru" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Salpicão</span><div class="qctrl"><button class="qbtn" data-key="bola_salpicao" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-bola_salpicao" value="0" min="0"><button class="qbtn" data-key="bola_salpicao" data-op="+">+</button></div></div>
-    <div style="padding:8px 0 2px;display:flex;justify-content:space-between;font-size:12px;color:#888"><span>Total:</span><span id="tot-bola" style="font-weight:800;color:var(--g)">0 un</span></div>
+  <div class="pg-wrap">
+    <div class="pg-head">
+      <h3>🏭 Produção do dia</h3>
+      <div class="pg-data"><label for="prod-data">DATA:</label><input type="date" id="prod-data"><span class="pg-dia" id="prod-dia-semana"></span></div>
+    </div>
+    <table class="pg-tab">
+      <thead><tr><th style="text-align:left;padding:0 12px">Sabor</th><th class="pg-col">Bola</th><th class="pg-col">Integral</th></tr></thead>
+      <tbody>
+      <tr><td class="pg-sabor">Frango com Milho</td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-bola_frangomilho" data-ord="0" value="" placeholder="" aria-label="bola_frangomilho"></td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-int_frangomilho" data-ord="6" value="" placeholder="" aria-label="int_frangomilho"></td></tr>
+      <tr><td class="pg-sabor">Frango com Peru</td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-bola_frangoperu" data-ord="1" value="" placeholder="" aria-label="bola_frangoperu"></td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-int_frangoperu" data-ord="7" value="" placeholder="" aria-label="int_frangoperu"></td></tr>
+      <tr><td class="pg-sabor">Frango com Palha</td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-bola_frangopalha" data-ord="2" value="" placeholder="" aria-label="bola_frangopalha"></td><td class="pg-na" title="Não existe nesse pão"></td></tr>
+      <tr><td class="pg-sabor">Frango com Passas</td><td class="pg-na" title="Não existe nesse pão"></td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-int_frangopassas" data-ord="8" value="" placeholder="" aria-label="int_frangopassas"></td></tr>
+      <tr><td class="pg-sabor">Frango com Ricota</td><td class="pg-na" title="Não existe nesse pão"></td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-int_frangoricota" data-ord="9" value="" placeholder="" aria-label="int_frangoricota"></td></tr>
+      <tr><td class="pg-sabor">Frango com Azeitona</td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-bola_frangoazeitona" data-ord="3" value="" placeholder="" aria-label="bola_frangoazeitona"></td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-int_frangoazeitona" data-ord="10" value="" placeholder="" aria-label="int_frangoazeitona"></td></tr>
+      <tr><td class="pg-sabor">Peito de Peru</td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-bola_peru" data-ord="4" value="" placeholder="" aria-label="bola_peru"></td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-int_peru" data-ord="11" value="" placeholder="" aria-label="int_peru"></td></tr>
+      <tr><td class="pg-sabor">Atum</td><td class="pg-na" title="Não existe nesse pão"></td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-int_atum" data-ord="12" value="" placeholder="" aria-label="int_atum"></td></tr>
+      <tr><td class="pg-sabor">Salpicão</td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-bola_salpicao" data-ord="5" value="" placeholder="" aria-label="bola_salpicao"></td><td class="pg-cell"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-int_salpicao" data-ord="13" value="" placeholder="" aria-label="int_salpicao"></td></tr>
+      <tr class="pg-tot"><td class="pg-sabor">Total sanduíches</td><td id="tot-bola">0</td><td id="tot-integral">0</td></tr>
+      <tr class="pg-sep"><th style="text-align:left;padding:0 12px">Lasanhas e Mini</th><th colspan="2">Quantidade</th></tr>
+      <tr><td class="pg-sabor">Lasanha Carne 500g</td><td class="pg-cell" colspan="2"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-las500_carne" data-ord="14" value="" placeholder="" aria-label="las500_carne"></td></tr>
+      <tr><td class="pg-sabor">Lasanha Frango 500g</td><td class="pg-cell" colspan="2"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-las500_frango" data-ord="15" value="" placeholder="" aria-label="las500_frango"></td></tr>
+      <tr><td class="pg-sabor">Lasanha Carne 250g</td><td class="pg-cell" colspan="2"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-las250_carne" data-ord="16" value="" placeholder="" aria-label="las250_carne"></td></tr>
+      <tr><td class="pg-sabor">Lasanha Frango 250g</td><td class="pg-cell" colspan="2"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-las250_frango" data-ord="17" value="" placeholder="" aria-label="las250_frango"></td></tr>
+      <tr><td class="pg-sabor">Mini Sanduíche</td><td class="pg-cell" colspan="2"><input type="number" inputmode="numeric" min="0" step="1" class="qinp prod-inp pg-inp" id="p-mini_prod" data-ord="18" value="" placeholder="" aria-label="mini_prod"></td></tr>
+      <tr class="pg-tot"><td class="pg-sabor">Total lasanhas</td><td colspan="2" id="tot-las">0</td></tr>
+      <tr class="pg-geral"><td class="pg-sabor">Total geral</td><td colspan="2" id="tot-geral-prod">0 un</td></tr>
+      </tbody>
+    </table>
+    <div class="pg-dica">Dica: digite o número e aperte <b>Enter</b> para descer na coluna, na mesma ordem da folha. Casas riscadas = sabor que não existe nesse pão.</div>
+  </div>
+  <div id="prod-aviso-data" class="pg-aviso"></div>
+  <div class="pg-btns">
+    <button class="btn btn-g" id="btn-salvar-prod">✅ Salvar produção do dia</button>
+    <button class="btn btn-o" id="btn-limpar-prod">Limpar</button>
+    <button class="btn btn-o" id="btn-cancelar-prod" style="display:none">Cancelar edição</button>
   </div>
 
-  <div class="stitle">🟫 Pão Integral</div>
-  <div class="card">
-    <div class="pline"><span class="pname">Atum</span><div class="qctrl"><button class="qbtn" data-key="int_atum" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-int_atum" value="0" min="0"><button class="qbtn" data-key="int_atum" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Frango com milho</span><div class="qctrl"><button class="qbtn" data-key="int_frangomilho" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-int_frangomilho" value="0" min="0"><button class="qbtn" data-key="int_frangomilho" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Frango com peru</span><div class="qctrl"><button class="qbtn" data-key="int_frangoperu" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-int_frangoperu" value="0" min="0"><button class="qbtn" data-key="int_frangoperu" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Frango com passas</span><div class="qctrl"><button class="qbtn" data-key="int_frangopassas" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-int_frangopassas" value="0" min="0"><button class="qbtn" data-key="int_frangopassas" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Frango com azeitona</span><div class="qctrl"><button class="qbtn" data-key="int_frangoazeitona" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-int_frangoazeitona" value="0" min="0"><button class="qbtn" data-key="int_frangoazeitona" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Peito de Peru</span><div class="qctrl"><button class="qbtn" data-key="int_peru" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-int_peru" value="0" min="0"><button class="qbtn" data-key="int_peru" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Frango com ricota</span><div class="qctrl"><button class="qbtn" data-key="int_frangoricota" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-int_frangoricota" value="0" min="0"><button class="qbtn" data-key="int_frangoricota" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Salpicão</span><div class="qctrl"><button class="qbtn" data-key="int_salpicao" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-int_salpicao" value="0" min="0"><button class="qbtn" data-key="int_salpicao" data-op="+">+</button></div></div>
-    <div style="padding:8px 0 2px;display:flex;justify-content:space-between;font-size:12px;color:#888"><span>Total:</span><span id="tot-integral" style="font-weight:800;color:var(--g)">0 un</span></div>
-  </div>
-
-  <div class="stitle">🫕 Lasanhas</div>
-  <div class="card">
-    <div class="pline"><span class="pname">Lasanha 250g - Carne</span><div class="qctrl"><button class="qbtn" data-key="las250_carne" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-las250_carne" value="0" min="0"><button class="qbtn" data-key="las250_carne" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Lasanha 250g - Frango</span><div class="qctrl"><button class="qbtn" data-key="las250_frango" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-las250_frango" value="0" min="0"><button class="qbtn" data-key="las250_frango" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Lasanha 500g - Carne</span><div class="qctrl"><button class="qbtn" data-key="las500_carne" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-las500_carne" value="0" min="0"><button class="qbtn" data-key="las500_carne" data-op="+">+</button></div></div>
-    <div class="pline"><span class="pname">Lasanha 500g - Frango</span><div class="qctrl"><button class="qbtn" data-key="las500_frango" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-las500_frango" value="0" min="0"><button class="qbtn" data-key="las500_frango" data-op="+">+</button></div></div>
-    <div style="padding:8px 0 2px;display:flex;justify-content:space-between;font-size:12px;color:#888"><span>Total:</span><span id="tot-las" style="font-weight:800;color:var(--g)">0 un</span></div>
-  </div>
-
-  <div class="stitle">🥪 Mini Sanduiche</div>
-  <div class="card">
-    <div class="pline"><span class="pname">Mini (total)</span><div class="qctrl"><button class="qbtn" data-key="mini_prod" data-op="-">−</button><input type="number" class="qinp prod-inp" id="p-mini_prod" value="0" min="0"><button class="qbtn" data-key="mini_prod" data-op="+">+</button></div></div>
-  </div>
-
-  <div class="stitle">Historico</div>
+  <div class="stitle">Histórico de produção</div>
   <div class="card" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;padding:12px">
     <div class="field" style="flex:1;min-width:120px;margin-bottom:0"><label>Mês</label>
       <select class="inp" id="prod-filtro-mes">
@@ -391,9 +416,6 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <button class="btn btn-o btn-sm" id="btn-pdf-prod" style="height:44px">📄 Relatório PDF</button>
   </div>
   <div id="lista-prod"><div class="empty"><div class="ico">🏭</div><p>Nenhum lancamento ainda.</p></div></div>
-  <button class="btn btn-g" id="btn-salvar-prod">✅ Salvar producao do dia</button>
-  <button class="btn btn-o" id="btn-limpar-prod" style="margin-top:6px">Limpar</button>
-  <button class="btn btn-o" id="btn-cancelar-prod" style="margin-top:6px;display:none">Cancelar edição</button>
 </div>
 
 
@@ -2256,13 +2278,64 @@ var SINT=['int_atum','int_frangomilho','int_frangoperu','int_frangopassas','int_
 var SLAS=['las250_carne','las250_frango','las500_carne','las500_frango'];
 
 function calcTotsProd() {
-  var tb=SBOLA.reduce(function(s,k){return s+(parseInt(document.getElementById('p-'+k).value)||0);},0);
-  var ti=SINT.reduce(function(s,k){return s+(parseInt(document.getElementById('p-'+k).value)||0);},0);
-  var tl=SLAS.reduce(function(s,k){return s+(parseInt(document.getElementById('p-'+k).value)||0);},0);
-  document.getElementById('tot-bola').textContent=tb+' un';
-  document.getElementById('tot-integral').textContent=ti+' un';
-  document.getElementById('tot-las').textContent=tl+' un';
+  var soma = function(arr){ return arr.reduce(function(s,k){ var el=document.getElementById('p-'+k); return s+(el?(parseInt(el.value)||0):0); },0); };
+  var tb=soma(SBOLA), ti=soma(SINT), tl=soma(SLAS), tm=soma(['mini_prod']);
+  document.getElementById('tot-bola').textContent=tb;
+  document.getElementById('tot-integral').textContent=ti;
+  document.getElementById('tot-las').textContent=tl;
+  var g=document.getElementById('tot-geral-prod'); if(g) g.textContent=(tb+ti+tl+tm)+' un';
+  // "marca-texto" amarelo nas casas preenchidas, como na folha
+  document.querySelectorAll('.pg-inp').forEach(function(inp){
+    var td=inp.parentNode; if(td) td.classList.toggle('pg-ok', (parseInt(inp.value)||0)>0);
+  });
 }
+var DIAS_SEMANA_PROD=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+function atualizarInfoDataProd() {
+  var inp=document.getElementById('prod-data'), lbl=document.getElementById('prod-dia-semana'), av=document.getElementById('prod-aviso-data');
+  if(!inp || !lbl || !av) return;
+  var v=inp.value;
+  lbl.textContent = v ? DIAS_SEMANA_PROD[new Date(v+'T12:00:00').getDay()] : '';
+  var ex = v ? D.producao.find(function(p){ return p.data===v && p._key!==editProducaoKey; }) : null;
+  if(!ex) { av.innerHTML=''; return; }
+  var tot = Object.values(ex.produtos||{}).reduce(function(s,n){return s+(n||0);},0);
+  av.innerHTML='<div class="alert alert-r" style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">'+
+    '<span>⚠️ Já existe produção lançada em '+fdata(v)+' ('+tot+' un). Se salvar, ela será substituída.</span>'+
+    '<button class="btn btn-sm btn-o" id="btn-prod-carregar" style="width:auto;margin:0">Abrir para editar</button></div>';
+  document.getElementById('btn-prod-carregar').addEventListener('click', function(){ editarProducao(ex._key); });
+}
+function preencherGradeProd(produtos) {
+  SBOLA.concat(SINT).concat(SLAS).concat(['mini_prod']).forEach(function(k){
+    var el=document.getElementById('p-'+k); if(!el) return;
+    var q=(produtos && produtos[k]) || 0;
+    el.value = q>0 ? q : '';
+  });
+  calcTotsProd();
+}
+function editarProducao(key) {
+  var p = D.producao.find(function(x){return x._key===key;});
+  if(!p) return;
+  editProducaoKey = key;
+  document.getElementById('prod-data').value = p.data;
+  preencherGradeProd(p.produtos);
+  atualizarInfoDataProd();
+  document.getElementById('btn-cancelar-prod').style.display='';
+  document.getElementById('prod-data').scrollIntoView({behavior:'smooth', block:'center'});
+  toast('Editando produção de '+fdata(p.data)+' — ajuste e salve');
+}
+(function(){
+  var dt=document.getElementById('prod-data');
+  if(dt) { dt.addEventListener('change', atualizarInfoDataProd); dt.addEventListener('input', atualizarInfoDataProd); }
+  var inps=[].slice.call(document.querySelectorAll('.pg-inp')).sort(function(a,b){ return a.getAttribute('data-ord')-b.getAttribute('data-ord'); });
+  inps.forEach(function(inp, i){
+    inp.addEventListener('focus', function(){ var me=this; setTimeout(function(){ try{ me.select(); }catch(e){} },0); });
+    inp.addEventListener('keydown', function(e){
+      if(e.key==='Enter' || e.key==='ArrowDown') { e.preventDefault(); var nx=inps[i+1]; if(nx) nx.focus(); else document.getElementById('btn-salvar-prod').focus(); }
+      else if(e.key==='ArrowUp') { e.preventDefault(); var pv=inps[i-1]; if(pv) pv.focus(); }
+      else if(e.key==='-' || e.key==='e' || e.key==='E' || e.key===',' || e.key==='.') e.preventDefault();
+    });
+    inp.addEventListener('wheel', function(){ this.blur(); }, {passive:true});
+  });
+})();
 
 var editProducaoKey = null;
 var mostrarTodosProd = false;
@@ -2270,6 +2343,7 @@ var ultimaListaProd = [];
 
 function renderProd() {
   var el=document.getElementById('lista-prod');
+  try { atualizarInfoDataProd(); calcTotsProd(); } catch(e) {}
   var mes = parseInt(document.getElementById('prod-filtro-mes').value)||0;
   var ano = parseInt(document.getElementById('prod-filtro-ano').value)||0;
   var dataDe = document.getElementById('prod-filtro-data-de').value;
@@ -2302,29 +2376,22 @@ function renderProd() {
   if(!lista.length){el.innerHTML='<div class="empty"><div class="ico">🔎</div><p>Nenhum lancamento encontrado para esse filtro.</p></div>';ultimaListaProd=[];return;}
   ultimaListaProd = lista;
   el.innerHTML=lista.slice().sort(function(a,b){return b.data.localeCompare(a.data);}).map(function(p){
-    var tot=Object.values(p.produtos).reduce(function(s,v){return s+v;},0);
-    var det=Object.keys(p.produtos).map(function(k){return k+': '+p.produtos[k];}).join(', ');
-    return '<div class="hitem"><div class="hhead"><span class="hdata">'+fdata(p.data)+'</span><span class="hval">'+tot+' un</span></div><div class="hprod">'+det+'</div>'+
+    var pr=p.produtos||{};
+    var tot=Object.values(pr).reduce(function(s,v){return s+v;},0);
+    var grp={bola:0,integral:0,las:0,mini:0};
+    Object.keys(pr).forEach(function(k){ if(k.indexOf('bola_')===0) grp.bola+=pr[k]; else if(k.indexOf('int_')===0) grp.integral+=pr[k]; else if(k.indexOf('las')===0) grp.las+=pr[k]; else grp.mini+=pr[k]; });
+    var resumo=[['Bola',grp.bola],['Integral',grp.integral],['Lasanhas',grp.las],['Mini',grp.mini]].filter(function(x){return x[1]>0;})
+      .map(function(x){return '<span class="badge badge-g" style="margin:0 4px 4px 0;display:inline-block">'+x[0]+': '+x[1]+'</span>';}).join('');
+    var det=Object.keys(pr).map(function(k){return (typeof NOME_PROD!=='undefined' && NOME_PROD[k] || k)+': <b>'+pr[k]+'</b>';}).join(' · ');
+    var dsem=DIAS_SEMANA_PROD[new Date(p.data+'T12:00:00').getDay()];
+    return '<div class="hitem"><div class="hhead"><span class="hdata">'+fdata(p.data)+' <span style="font-weight:600;color:#888;font-size:12px">'+dsem+'</span></span><span class="hval">'+tot+' un</span></div><div style="margin-bottom:4px">'+resumo+'</div><div class="hprod" style="font-size:12px">'+det+'</div>'+
       '<div style="display:flex;gap:6px;margin-top:8px">'+
       '<button class="btn btn-sm btn-o" data-editprod="'+p._key+'">✏️ Editar</button>'+
       '<button class="btn btn-sm btn-r" data-delprod="'+p._key+'">🗑️ Excluir</button>'+
       '</div></div>';
   }).join('');
   el.querySelectorAll('[data-editprod]').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var key = btn.getAttribute('data-editprod');
-      var p = D.producao.find(function(x){return x._key===key;});
-      if(!p) return;
-      editProducaoKey = key;
-      document.getElementById('prod-data').value = p.data;
-      SBOLA.concat(SINT).concat(SLAS).concat(['mini_prod']).forEach(function(k){
-        document.getElementById('p-'+k).value = (p.produtos && p.produtos[k]) || 0;
-      });
-      calcTotsProd();
-      document.getElementById('btn-cancelar-prod').style.display='';
-      document.getElementById('prod-data').scrollIntoView({behavior:'smooth', block:'center'});
-      toast('Editando produção de '+fdata(p.data)+' — ajuste os campos e salve');
-    });
+    btn.addEventListener('click', function(){ editarProducao(btn.getAttribute('data-editprod')); });
   });
   el.querySelectorAll('[data-delprod]').forEach(function(btn){
     btn.addEventListener('click', function(){
@@ -2484,18 +2551,24 @@ document.getElementById('btn-salvar-prod').addEventListener('click', function() 
     D.producao.push(prod);
     salvarRegistro('producao',prod);
   }
-  renderProd();limparProd();toast('Producao salva!');
+  renderProd();limparProd();
+  // Próximo dia já preparado para continuar passando a folha
+  var dProx=new Date(data+'T12:00:00'); dProx.setDate(dProx.getDate()+1);
+  var proxStr=dProx.getFullYear()+'-'+String(dProx.getMonth()+1).padStart(2,'0')+'-'+String(dProx.getDate()).padStart(2,'0');
+  document.getElementById('prod-data').value=proxStr; atualizarInfoDataProd();
+  toast('Produção de '+fdata(data)+' salva! Data já avançou para '+fdata(proxStr)+' — confira antes de lançar o próximo.', 4500);
+  var pri=document.querySelector('.pg-inp[data-ord="0"]'); if(pri) pri.focus();
 });
 
 document.getElementById('btn-limpar-prod').addEventListener('click', limparProd);
 function limparProd() {
-  SBOLA.concat(SINT).concat(SLAS).concat(['mini_prod']).forEach(function(k){document.getElementById('p-'+k).value=0;});
-  calcTotsProd();
+  preencherGradeProd(null);
+  atualizarInfoDataProd();
 }
 document.getElementById('btn-cancelar-prod').addEventListener('click', function(){
   editProducaoKey = null;
+  document.getElementById('prod-data').value=recHojeStr();
   limparProd();
-  document.getElementById('prod-data').value='';
   this.style.display='none';
 });
 

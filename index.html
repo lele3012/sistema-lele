@@ -522,6 +522,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="franking">Rankings</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="frelat">Relatórios</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fboletos">Boletos a Pagar</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fsemana">📅 Contas da Semana</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="ffornecedores">Fornecedores</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="frecor">Recorrentes</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fdespesas">Despesas</button>
@@ -715,6 +716,21 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <div id="ticket-area"></div>
       <div id="btn-xls-ticket-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-ticket">📊 Exportar Excel</button></div>
     </div>
+  </div>
+
+  <div class="fin-sub" id="fs-fsemana" style="display:none">
+    <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px">
+      <button class="btn btn-sm btn-o" id="sem-ant">◀</button>
+      <div id="sem-label" style="text-align:center;font-size:14px;flex:1"></div>
+      <button class="btn btn-sm btn-o" id="sem-prox">▶</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-o" id="sem-hoje">Semana atual</button>
+      <button class="btn btn-sm btn-g" id="btn-sem-copiar" style="margin-left:auto">💬 Copiar p/ WhatsApp</button>
+      <button class="btn btn-sm btn-o" id="btn-sem-pdf">📄 PDF</button>
+      <button class="btn btn-sm btn-o" id="btn-sem-xls">📊 Excel</button>
+    </div>
+    <div id="semana-area"></div>
   </div>
 
   <div class="fin-sub" id="fs-fboletos" style="display:none">
@@ -1428,14 +1444,14 @@ function carregar() {
     db.ref('boletos').on('value', function(snap) {
       D.boletos = snapToArray(snap.val());
       var t = document.querySelector('.tab.on');
-      if(t && t.getAttribute('data-tab')==='financeiro') { renderBoletos(); renderFinDash(); renderFluxo(); renderRecorrentes(); }
+      if(t && t.getAttribute('data-tab')==='financeiro') { renderBoletos(); renderFinDash(); renderFluxo(); renderRecorrentes(); renderSemana(); }
       atualizarAlertaRec();
       pronto();
     }, erroLeitura('boletos'));
     db.ref('recorrentes').on('value', function(snap) {
       D.recorrentes = snapToArray(snap.val());
       var t = document.querySelector('.tab.on');
-      if(t && t.getAttribute('data-tab')==='financeiro') { renderRecorrentes(); renderFinDash(); }
+      if(t && t.getAttribute('data-tab')==='financeiro') { renderRecorrentes(); renderFinDash(); renderSemana(); }
       atualizarAlertaRec();
       pronto();
     }, erroLeitura('recorrentes'));
@@ -1456,7 +1472,7 @@ function carregar() {
       var id = abaAtiva ? abaAtiva.getAttribute('data-tab') : '';
       if(id==='cobrancas') renderCob();
       if(id==='historico') renderHist();
-      if(id==='financeiro') renderFluxo();
+      if(id==='financeiro') { renderFluxo(); renderSemana(); }
       pronto();
     }, erroLeitura('entregas'));
     db.ref('caixas').on('value', function(snap) {
@@ -1509,7 +1525,7 @@ document.querySelectorAll('.tab').forEach(function(t) {
     if(id==='dashboard') renderDash();
     if(id==='financeiro') {
       popDatalistInsumos(); popDatalistFornecedores();
-      renderBoletos(); renderRecorrentes(); renderNotas(); renderInsumos(); renderFichas(); renderFinDash(); renderFornecedores(); renderFluxo(); renderDespesasGerais();
+      renderBoletos(); renderRecorrentes(); renderNotas(); renderInsumos(); renderFichas(); renderFinDash(); renderFornecedores(); renderFluxo(); renderDespesasGerais(); renderSemana();
     }
   });
 });
@@ -1522,6 +1538,7 @@ document.querySelectorAll('.fin-tab-btn').forEach(function(b) {
     document.querySelectorAll('.fin-sub').forEach(function(x){ x.style.display='none'; });
     document.getElementById('fs-'+fs).style.display='';
     if(fs==='frelat') { gerarMaisProduzido(); gerarTrocas(); gerarInad(); }
+    if(fs==='fsemana') { semOffset=0; renderSemana(); }
   });
 });
 
@@ -5306,6 +5323,249 @@ auth.onAuthStateChanged(function(user) {
     db.ref('backupInfo').on('value', function(snap){ atualizarBotaoBackup(snap.val()); });
   }
 });
+
+// ===== CONTAS DA SEMANA (relatório semanal de pagamentos) =====
+var semOffset = 0; // 0 = semana atual, -1 = anterior, +1 = próxima
+var semDados = null;
+var SEM_DIAS = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+function semEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function semStr(d){ return d.getFullYear()+'-'+recPad(d.getMonth()+1)+'-'+recPad(d.getDate()); }
+function semSomaDias(str, n){ var d=new Date(str+'T12:00:00'); d.setDate(d.getDate()+n); return semStr(d); }
+function semInicio(offset){ // segunda-feira da semana
+  var d=new Date(recHojeStr()+'T12:00:00'); var dow=d.getDay(); d.setDate(d.getDate()-(dow===0?6:dow-1)+7*(offset||0)); return semStr(d);
+}
+function semDiaNome(str){ return SEM_DIAS[new Date(str+'T12:00:00').getDay()]; }
+
+function semCalcular(offset){
+  var ini = semInicio(offset), fim = semSomaDias(ini, 6), hoje = recHojeStr();
+  var itens = [], atrasadas = [];
+  // 1) Contas lançadas (boletos, NF parceladas, recorrentes já lançadas)
+  D.boletos.forEach(function(b){
+    if(!b.venc) return;
+    var base = {nome:b.fornecedor||'Conta', desc:b.desc||'', valor:b.valor||0, venc:b.venc, forma:b.forma||'', origem:b.origem||''};
+    if(b.venc>=ini && b.venc<=fim){
+      base.status = b.status==='pago' ? 'pago' : (b.venc<hoje ? 'atrasado' : 'pendente');
+      if(b.status==='pago') { base.dataPagamento=b.dataPagamento||''; base.conta=b.contaPagamento||''; }
+      itens.push(base);
+    } else if(b.status==='pendente' && b.venc<ini && b.venc<hoje){
+      base.status='atrasado'; atrasadas.push(base);
+    }
+  });
+  // 2) Recorrentes previstas que ainda NÃO foram lançadas
+  var meses = {}; meses[ini.slice(0,7)]=1; meses[fim.slice(0,7)]=1;
+  meses[hoje.slice(0,7)]=1; // mesma janela dos lembretes de Recorrentes (não puxa meses antigos)
+  (D.recorrentes||[]).forEach(function(r){
+    Object.keys(meses).forEach(function(ym){
+      if(!recAtivaNoMes(r, ym)) return;
+      var venc = recVencDoMes(r, ym);
+      if(recBoletoDoMes(r, ym)) return; // já lançada: aparece no item 1
+      var it = {nome:r.nome, desc:'Recorrente — ainda não lançada', valor:r.valor||0, venc:venc, forma:r.forma||'', origem:'recorrente', estimado:!!r.variavel, previsto:true};
+      if(venc>=ini && venc<=fim){ it.status = venc<hoje ? 'atrasado' : 'previsto'; itens.push(it); }
+      else if(venc<ini && venc<hoje){ it.status='atrasado'; atrasadas.push(it); }
+    });
+  });
+  // 3) A receber na semana (entregas a prazo / boleto 7 dias não pagas) — mesma regra do Fluxo de Caixa
+  var receber = [];
+  (D.entregas||[]).forEach(function(e){
+    if((e.pagamento!=='prazo' && e.pagamento!=='boleto7') || e.pago || !e.data) return;
+    var de = new Date(e.data+'T12:00:00'), v;
+    if(e.pagamento==='boleto7'){ v=new Date(de); v.setDate(v.getDate()+7); } else { v=new Date(de.getFullYear(), de.getMonth()+1, 5, 12); }
+    var vs = semStr(v);
+    if(vs<ini || vs>fim) return;
+    var c = D.clientes.find(function(x){return x.id===e.clienteId;});
+    receber.push({nome:c?(c.fantasia||c.nome):'Cliente', valor:e.valorTotal||0, venc:vs});
+  });
+  var ord = function(a,b){ return a.venc===b.venc ? (a.nome||'').localeCompare(b.nome||'','pt-BR') : (a.venc<b.venc?-1:1); };
+  itens.sort(ord); atrasadas.sort(ord); receber.sort(ord);
+  var soma = function(arr, f){ return arr.filter(f||function(){return true;}).reduce(function(s,x){return s+(x.valor||0);},0); };
+  var t = {
+    semana: soma(itens),
+    pago: soma(itens, function(x){return x.status==='pago';}),
+    aPagar: soma(itens, function(x){return x.status!=='pago';}),
+    naoLancado: soma(itens, function(x){return x.previsto;}),
+    atrasadoAnt: soma(atrasadas),
+    receber: soma(receber)
+  };
+  t.totalAPagar = t.aPagar + t.atrasadoAnt;
+  t.saldo = t.receber - t.totalAPagar;
+  return {ini:ini, fim:fim, hoje:hoje, itens:itens, atrasadas:atrasadas, receber:receber, t:t, offset:offset};
+}
+
+function semBadge(it){
+  if(it.status==='pago') return '<span class="badge badge-g">✅ Pago'+(it.dataPagamento?' '+fdata(it.dataPagamento).slice(0,5):'')+'</span>';
+  if(it.status==='atrasado') return '<span class="badge badge-r">⚠️ Atrasado'+(it.previsto?' · não lançado':'')+'</span>';
+  if(it.status==='previsto') return '<span class="badge badge-y">🔁 Previsto · não lançado</span>';
+  return '<span class="badge badge-y">Pendente</span>';
+}
+function semLinha(it){
+  var cls = it.status==='atrasado' ? 'vencido' : (it.status==='pago' ? 'ok' : (it.previsto ? 'aviso' : ''));
+  return '<div class="citem '+cls+'" style="padding:10px 14px'+(cls?'':';border:1px solid var(--b)')+'">'+
+    '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">'+
+      '<div><div style="font-size:13px;font-weight:700">'+semEsc(it.nome)+'</div>'+
+      '<div style="font-size:11px;color:#888;margin-top:2px">'+semEsc(it.desc)+(it.forma?' · '+semEsc(it.forma):'')+(it.conta?' · pago por '+semEsc(it.conta):'')+'</div></div>'+
+      '<div style="text-align:right;white-space:nowrap"><div style="font-size:14px;font-weight:800;'+(it.status==='pago'?'color:var(--g)':'color:var(--r)')+'">'+fmt(it.valor)+(it.estimado?'*':'')+'</div>'+
+      '<div style="margin-top:3px">'+semBadge(it)+'</div></div>'+
+    '</div></div>';
+}
+
+function renderSemana(){
+  var el = document.getElementById('semana-area'); if(!el) return;
+  var d = semDados = semCalcular(semOffset), t = d.t;
+  var lbl = document.getElementById('sem-label');
+  if(lbl) lbl.innerHTML = '<b>'+fdata(d.ini).slice(0,5)+' a '+fdata(d.fim)+'</b><div style="font-size:11px;color:#888">'+(semOffset===0?'Semana atual':(semOffset===1?'Próxima semana':(semOffset===-1?'Semana passada':(semOffset>0?'Daqui a '+semOffset+' semanas':'Há '+(-semOffset)+' semanas'))))+'</div>';
+
+  var html = '<div class="rg">'+
+    '<div class="rbox" style="background:var(--rl)"><label style="color:var(--r)">Falta pagar na semana</label><b style="color:var(--r)">'+fmt(t.aPagar)+'</b></div>'+
+    '<div class="rbox" style="background:var(--gl)"><label style="color:var(--g)">Já pago na semana</label><b style="color:var(--g)">'+fmt(t.pago)+'</b></div>'+
+    '<div class="rbox"><label>Atrasado de antes</label><b style="color:'+(t.atrasadoAnt?'var(--r)':'#1a1a1a')+'">'+fmt(t.atrasadoAnt)+'</b></div>'+
+    '<div class="rbox"><label>A receber na semana</label><b style="color:var(--g)">'+fmt(t.receber)+'</b></div>'+
+    '</div>'+
+    '<div class="rbox hl" style="padding:12px;text-align:center;border-radius:10px;margin-bottom:12px"><label>Saldo previsto da semana (receber − pagar − atrasados)</label><b>'+fmt(t.saldo)+'</b></div>';
+  if(t.naoLancado) html += '<div class="alert alert-y">🔁 '+fmt(t.naoLancado)+' desta semana são contas recorrentes que ainda não foram lançadas. Lance na aba Recorrentes para virar conta a pagar.</div>';
+
+  if(d.atrasadas.length){
+    html += '<div class="stitle" style="color:var(--r)">⚠️ Em atraso de semanas anteriores ('+d.atrasadas.length+')</div>';
+    d.atrasadas.forEach(function(it){ html += semLinha(Object.assign({}, it, {desc:'Venceu '+fdata(it.venc)+(it.desc?' · '+it.desc:'')})); });
+  }
+
+  html += '<div class="stitle">Contas da semana, dia a dia</div>';
+  for(var i=0;i<7;i++){
+    var dia = semSomaDias(d.ini, i);
+    var doDia = d.itens.filter(function(x){return x.venc===dia;});
+    var tot = doDia.reduce(function(s,x){return s+x.valor;},0);
+    var ehHoje = dia===d.hoje;
+    html += '<div class="card" style="padding:12px 14px'+(ehHoje?';border:1.5px solid var(--g)':'')+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:'+(doDia.length?'8px':'0')+'">'+
+        '<b style="font-size:13px">'+semDiaNome(dia)+', '+fdata(dia).slice(0,5)+(ehHoje?' <span class="badge badge-g">hoje</span>':'')+'</b>'+
+        (doDia.length ? '<b style="font-size:13px">'+fmt(tot)+'</b>' : '<span style="font-size:12px;color:#aaa">sem contas</span>')+
+      '</div>'+doDia.map(semLinha).join('')+'</div>';
+  }
+
+  if(d.receber.length){
+    html += '<div class="stitle">A receber de clientes na semana ('+d.receber.length+')</div><div class="card" style="padding:10px 14px">';
+    d.receber.forEach(function(r){ html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--b)"><span>'+fdata(r.venc).slice(0,5)+' · '+semEsc(r.nome)+'</span><b style="color:var(--g)">'+fmt(r.valor)+'</b></div>'; });
+    html += '<div style="font-size:11px;color:#888;margin-top:6px">Mesma regra do Fluxo de Caixa: "a prazo" vence dia 5 do mês seguinte; "boleto 7 dias" vence 7 dias após a entrega.</div></div>';
+  }
+  if(d.itens.some(function(x){return x.estimado;})) html += '<div style="font-size:11px;color:#888">* valor estimado (conta recorrente de valor variável)</div>';
+  el.innerHTML = html;
+}
+
+function semTextoWhats(){
+  var d = semDados || semCalcular(semOffset), t = d.t, L = [];
+  L.push('*Lelé da Kuka — Contas da semana*');
+  L.push(fdata(d.ini).slice(0,5)+' a '+fdata(d.fim));
+  L.push('');
+  if(d.atrasadas.length){
+    L.push('⚠️ *Em atraso (semanas anteriores)*');
+    d.atrasadas.forEach(function(x){ L.push('• '+fdata(x.venc).slice(0,5)+' — '+x.nome+': '+fmt(x.valor)+(x.previsto?' (não lançada)':'')); });
+    L.push('');
+  }
+  for(var i=0;i<7;i++){
+    var dia = semSomaDias(d.ini, i);
+    var doDia = d.itens.filter(function(x){return x.venc===dia;});
+    if(!doDia.length) continue;
+    L.push('*'+semDiaNome(dia)+' '+fdata(dia).slice(0,5)+'*');
+    doDia.forEach(function(x){
+      var st = x.status==='pago' ? '✅' : (x.status==='atrasado' ? '⚠️' : (x.previsto ? '🔁' : '⏳'));
+      L.push(st+' '+x.nome+': '+fmt(x.valor)+(x.estimado?' (estimado)':'')+(x.previsto?' (não lançada)':''));
+    });
+  }
+  if(!d.itens.length) L.push('Nenhuma conta com vencimento nesta semana.');
+  L.push('');
+  L.push('Falta pagar na semana: '+fmt(t.aPagar));
+  if(t.atrasadoAnt) L.push('Atrasado de antes: '+fmt(t.atrasadoAnt));
+  L.push('Já pago na semana: '+fmt(t.pago));
+  L.push('A receber na semana: '+fmt(t.receber));
+  L.push('*Saldo previsto: '+fmt(t.saldo)+'*');
+  L.push('');
+  L.push('✅ pago · ⏳ pendente · ⚠️ atrasado · 🔁 recorrente não lançada');
+  return L.join('\n');
+}
+function semCopiar(){
+  var txt = semTextoWhats();
+  function fallback(){
+    var ta=document.createElement('textarea'); ta.value=txt; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); toast('Resumo copiado! Cole no WhatsApp.'); }catch(e){ toast('Não consegui copiar. Tente de novo.'); }
+    document.body.removeChild(ta);
+  }
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(function(){ toast('Resumo copiado! Cole no WhatsApp.'); }, fallback);
+  else fallback();
+}
+function semExcel(){
+  var d = semDados || semCalcular(semOffset);
+  var stNome = {pago:'Pago', pendente:'Pendente', atrasado:'Atrasado', previsto:'Previsto (não lançado)'};
+  var rows = [['Lelé da Kuka — Contas da semana', fdata(d.ini)+' a '+fdata(d.fim)], [], ['Vencimento','Dia','Conta / Fornecedor','Descrição','Forma','Valor (R$)','Status','Pago em','Conta de pagamento']];
+  d.atrasadas.concat(d.itens).forEach(function(x){
+    rows.push([fdata(x.venc), semDiaNome(x.venc), x.nome, x.desc, x.forma, x.valor, stNome[x.status]+(x.estimado?' — valor estimado':''), x.dataPagamento?fdata(x.dataPagamento):'', x.conta||'']);
+  });
+  rows.push([]);
+  rows.push(['Falta pagar na semana','','','','',d.t.aPagar]);
+  rows.push(['Atrasado de semanas anteriores','','','','',d.t.atrasadoAnt]);
+  rows.push(['Já pago na semana','','','','',d.t.pago]);
+  rows.push(['A receber na semana','','','','',d.t.receber]);
+  rows.push(['Saldo previsto','','','','',d.t.saldo]);
+  var wb = XLSX.utils.book_new();
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:10},{wch:28},{wch:32},{wch:12},{wch:12},{wch:24},{wch:11},{wch:16}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Contas da semana');
+  if(d.receber.length){
+    var r2 = [['Vencimento','Cliente','Valor (R$)']];
+    d.receber.forEach(function(r){ r2.push([fdata(r.venc), r.nome, r.valor]); });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(r2), 'A receber');
+  }
+  XLSX.writeFile(wb, 'Lele_Contas_Semana_'+d.ini+'.xlsx');
+}
+function semPDF(){
+  if(typeof window.jspdf === 'undefined') { toast('PDF indisponivel. Tente recarregar a pagina.'); return; }
+  var d = semDados || semCalcular(semOffset), t = d.t;
+  var doc = new window.jspdf.jsPDF({unit:'mm', format:'a4'});
+  var m = 14, y = 20, W = 210 - 2*m;
+  function quebra(h){ if(y + (h||6) > 285){ doc.addPage(); y = 20; } }
+  function linha(c1, c2, c3, bold, cor){
+    quebra(6);
+    doc.setFont('helvetica', bold?'bold':'normal'); doc.setFontSize(9);
+    if(cor) doc.setTextColor(cor[0],cor[1],cor[2]); else doc.setTextColor(30,30,30);
+    doc.text(String(c1), m, y); doc.text(doc.splitTextToSize(String(c2), 110)[0], m+22, y); doc.text(String(c3), m+W, y, {align:'right'});
+    y += 5.5;
+  }
+  var stTxt = {pago:'pago', pendente:'pendente', atrasado:'ATRASADO', previsto:'não lançada'};
+  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.text('Lelé da Kuka — Contas da semana', m, y); y += 7;
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(fdata(d.ini)+' a '+fdata(d.fim)+'   ·   gerado em '+fdata(d.hoje), m, y); y += 9;
+  [['Falta pagar na semana', t.aPagar],['Atrasado de semanas anteriores', t.atrasadoAnt],['Já pago na semana', t.pago],['A receber na semana', t.receber],['Saldo previsto', t.saldo]].forEach(function(r,i){
+    linha('', r[0], fmt(r[1]), i===4);
+  });
+  y += 4;
+  if(d.atrasadas.length){
+    quebra(12); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(192,57,43); doc.text('Em atraso (semanas anteriores)', m, y); y += 6;
+    d.atrasadas.forEach(function(x){ linha(fdata(x.venc).slice(0,5), x.nome+(x.previsto?' (não lançada)':''), fmt(x.valor), false, [192,57,43]); });
+    y += 3;
+  }
+  for(var i=0;i<7;i++){
+    var dia = semSomaDias(d.ini, i);
+    var doDia = d.itens.filter(function(x){return x.venc===dia;});
+    if(!doDia.length) continue;
+    quebra(12);
+    doc.setDrawColor(220,215,205); doc.line(m, y-3.5, m+W, y-3.5);
+    var tot = doDia.reduce(function(s,x){return s+x.valor;},0);
+    linha(fdata(dia).slice(0,5), semDiaNome(dia), fmt(tot), true);
+    doDia.forEach(function(x){
+      linha('', x.nome+'  ['+stTxt[x.status]+(x.estimado?', estimado':'')+']', fmt(x.valor), false, x.status==='atrasado'?[192,57,43]:(x.status==='pago'?[42,122,59]:null));
+    });
+    y += 2;
+  }
+  if(!d.itens.length){ linha('', 'Nenhuma conta com vencimento nesta semana.', ''); }
+  if(d.receber.length){
+    y += 3; quebra(12); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(42,122,59); doc.text('A receber de clientes na semana', m, y); y += 6;
+    d.receber.forEach(function(r){ linha(fdata(r.venc).slice(0,5), r.nome, fmt(r.valor)); });
+  }
+  doc.save('Lele_Contas_Semana_'+d.ini+'.pdf');
+}
+document.getElementById('sem-ant').addEventListener('click', function(){ semOffset--; renderSemana(); });
+document.getElementById('sem-prox').addEventListener('click', function(){ semOffset++; renderSemana(); });
+document.getElementById('sem-hoje').addEventListener('click', function(){ semOffset=0; renderSemana(); });
+document.getElementById('btn-sem-copiar').addEventListener('click', semCopiar);
+document.getElementById('btn-sem-xls').addEventListener('click', semExcel);
+document.getElementById('btn-sem-pdf').addEventListener('click', semPDF);
 </script>
 </body>
 </html>

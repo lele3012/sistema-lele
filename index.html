@@ -522,7 +522,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="franking">Rankings</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="frelat">Relatórios</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fboletos">Boletos a Pagar</button>
-    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fsemana">📅 Contas da Semana</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fsemana">📅 Contas por Período</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="ffornecedores">Fornecedores</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="frecor">Recorrentes</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fdespesas">Despesas</button>
@@ -719,14 +719,21 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   </div>
 
   <div class="fin-sub" id="fs-fsemana" style="display:none">
-    <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px">
-      <button class="btn btn-sm btn-o" id="sem-ant">◀</button>
-      <div id="sem-label" style="text-align:center;font-size:14px;flex:1"></div>
-      <button class="btn btn-sm btn-o" id="sem-prox">▶</button>
+    <div class="card">
+      <div class="row2">
+        <div class="field"><label>Vencimento de</label><input type="date" class="inp" id="sem-de"></div>
+        <div class="field"><label>até</label><input type="date" class="inp" id="sem-ate"></div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-g sem-atalho" id="sem-at-esta">Esta semana</button>
+        <button class="btn btn-sm btn-o sem-atalho" id="sem-at-prox">Próxima semana</button>
+        <button class="btn btn-sm btn-o sem-atalho" id="sem-at-15">Próximos 15 dias</button>
+        <button class="btn btn-sm btn-o sem-atalho" id="sem-at-mes">Este mês</button>
+      </div>
+      <div id="sem-label" style="font-size:12px;color:#888;margin-top:8px"></div>
     </div>
     <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">
-      <button class="btn btn-sm btn-o" id="sem-hoje">Semana atual</button>
-      <button class="btn btn-sm btn-g" id="btn-sem-copiar" style="margin-left:auto">💬 Copiar p/ WhatsApp</button>
+      <button class="btn btn-sm btn-g" id="btn-sem-copiar">💬 Copiar p/ WhatsApp</button>
       <button class="btn btn-sm btn-o" id="btn-sem-pdf">📄 PDF</button>
       <button class="btn btn-sm btn-o" id="btn-sem-xls">📊 Excel</button>
     </div>
@@ -1538,7 +1545,7 @@ document.querySelectorAll('.fin-tab-btn').forEach(function(b) {
     document.querySelectorAll('.fin-sub').forEach(function(x){ x.style.display='none'; });
     document.getElementById('fs-'+fs).style.display='';
     if(fs==='frelat') { gerarMaisProduzido(); gerarTrocas(); gerarInad(); }
-    if(fs==='fsemana') { semOffset=0; renderSemana(); }
+    if(fs==='fsemana') { renderSemana(); }
   });
 });
 
@@ -5325,7 +5332,7 @@ auth.onAuthStateChanged(function(user) {
 });
 
 // ===== CONTAS DA SEMANA (relatório semanal de pagamentos) =====
-var semOffset = 0; // 0 = semana atual, -1 = anterior, +1 = próxima
+var semIni = '', semFim = ''; // período escolhido (padrão: semana atual)
 var semDados = null;
 var SEM_DIAS = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
 function semEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
@@ -5336,8 +5343,9 @@ function semInicio(offset){ // segunda-feira da semana
 }
 function semDiaNome(str){ return SEM_DIAS[new Date(str+'T12:00:00').getDay()]; }
 
-function semCalcular(offset){
-  var ini = semInicio(offset), fim = semSomaDias(ini, 6), hoje = recHojeStr();
+function semDiasEntre(a,b){ return Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/86400000); }
+function semCalcular(ini, fim){
+  var hoje = recHojeStr();
   var itens = [], atrasadas = [];
   // 1) Contas lançadas (boletos, NF parceladas, recorrentes já lançadas)
   D.boletos.forEach(function(b){
@@ -5352,7 +5360,7 @@ function semCalcular(offset){
     }
   });
   // 2) Recorrentes previstas que ainda NÃO foram lançadas
-  var meses = {}; meses[ini.slice(0,7)]=1; meses[fim.slice(0,7)]=1;
+  var meses = {}; for(var ym=ini.slice(0,7); ym<=fim.slice(0,7); ym=recSomaMes(ym,1)) meses[ym]=1;
   meses[hoje.slice(0,7)]=1; // mesma janela dos lembretes de Recorrentes (não puxa meses antigos)
   (D.recorrentes||[]).forEach(function(r){
     Object.keys(meses).forEach(function(ym){
@@ -5364,7 +5372,7 @@ function semCalcular(offset){
       else if(venc<ini && venc<hoje){ it.status='atrasado'; atrasadas.push(it); }
     });
   });
-  // 3) A receber na semana (entregas a prazo / boleto 7 dias não pagas) — mesma regra do Fluxo de Caixa
+  // 3) A receber no período (entregas a prazo / boleto 7 dias não pagas) — mesma regra do Fluxo de Caixa
   var receber = [];
   (D.entregas||[]).forEach(function(e){
     if((e.pagamento!=='prazo' && e.pagamento!=='boleto7') || e.pago || !e.data) return;
@@ -5388,7 +5396,7 @@ function semCalcular(offset){
   };
   t.totalAPagar = t.aPagar + t.atrasadoAnt;
   t.saldo = t.receber - t.totalAPagar;
-  return {ini:ini, fim:fim, hoje:hoje, itens:itens, atrasadas:atrasadas, receber:receber, t:t, offset:offset};
+  return {ini:ini, fim:fim, hoje:hoje, itens:itens, atrasadas:atrasadas, receber:receber, t:t, nDias:semDiasEntre(ini,fim)+1};
 }
 
 function semBadge(it){
@@ -5410,28 +5418,34 @@ function semLinha(it){
 
 function renderSemana(){
   var el = document.getElementById('semana-area'); if(!el) return;
-  var d = semDados = semCalcular(semOffset), t = d.t;
+  if(!semIni || !semFim) semDefinir(semInicio(0), semSomaDias(semInicio(0),6));
+  var deEl=document.getElementById('sem-de'), ateEl=document.getElementById('sem-ate');
+  if(deEl && deEl.value!==semIni) deEl.value=semIni;
+  if(ateEl && ateEl.value!==semFim) ateEl.value=semFim;
+  var d = semDados = semCalcular(semIni, semFim), t = d.t;
   var lbl = document.getElementById('sem-label');
-  if(lbl) lbl.innerHTML = '<b>'+fdata(d.ini).slice(0,5)+' a '+fdata(d.fim)+'</b><div style="font-size:11px;color:#888">'+(semOffset===0?'Semana atual':(semOffset===1?'Próxima semana':(semOffset===-1?'Semana passada':(semOffset>0?'Daqui a '+semOffset+' semanas':'Há '+(-semOffset)+' semanas'))))+'</div>';
+  if(lbl) lbl.textContent = fdata(d.ini)+' a '+fdata(d.fim)+' · '+d.nDias+' dia'+(d.nDias===1?'':'s');
 
   var html = '<div class="rg">'+
-    '<div class="rbox" style="background:var(--rl)"><label style="color:var(--r)">Falta pagar na semana</label><b style="color:var(--r)">'+fmt(t.aPagar)+'</b></div>'+
-    '<div class="rbox" style="background:var(--gl)"><label style="color:var(--g)">Já pago na semana</label><b style="color:var(--g)">'+fmt(t.pago)+'</b></div>'+
+    '<div class="rbox" style="background:var(--rl)"><label style="color:var(--r)">Falta pagar no período</label><b style="color:var(--r)">'+fmt(t.aPagar)+'</b></div>'+
+    '<div class="rbox" style="background:var(--gl)"><label style="color:var(--g)">Já pago no período</label><b style="color:var(--g)">'+fmt(t.pago)+'</b></div>'+
     '<div class="rbox"><label>Atrasado de antes</label><b style="color:'+(t.atrasadoAnt?'var(--r)':'#1a1a1a')+'">'+fmt(t.atrasadoAnt)+'</b></div>'+
-    '<div class="rbox"><label>A receber na semana</label><b style="color:var(--g)">'+fmt(t.receber)+'</b></div>'+
+    '<div class="rbox"><label>A receber no período</label><b style="color:var(--g)">'+fmt(t.receber)+'</b></div>'+
     '</div>'+
-    '<div class="rbox hl" style="padding:12px;text-align:center;border-radius:10px;margin-bottom:12px"><label>Saldo previsto da semana (receber − pagar − atrasados)</label><b>'+fmt(t.saldo)+'</b></div>';
-  if(t.naoLancado) html += '<div class="alert alert-y">🔁 '+fmt(t.naoLancado)+' desta semana são contas recorrentes que ainda não foram lançadas. Lance na aba Recorrentes para virar conta a pagar.</div>';
+    '<div class="rbox hl" style="padding:12px;text-align:center;border-radius:10px;margin-bottom:12px"><label>Saldo previsto do período (receber − pagar − atrasados)</label><b>'+fmt(t.saldo)+'</b></div>';
+  if(t.naoLancado) html += '<div class="alert alert-y">🔁 '+fmt(t.naoLancado)+' deste período são contas recorrentes que ainda não foram lançadas. Lance na aba Recorrentes para virar conta a pagar.</div>';
 
   if(d.atrasadas.length){
-    html += '<div class="stitle" style="color:var(--r)">⚠️ Em atraso de semanas anteriores ('+d.atrasadas.length+')</div>';
+    html += '<div class="stitle" style="color:var(--r)">⚠️ Em atraso de antes do período ('+d.atrasadas.length+')</div>';
     d.atrasadas.forEach(function(it){ html += semLinha(Object.assign({}, it, {desc:'Venceu '+fdata(it.venc)+(it.desc?' · '+it.desc:'')})); });
   }
 
-  html += '<div class="stitle">Contas da semana, dia a dia</div>';
-  for(var i=0;i<7;i++){
+  html += '<div class="stitle">Contas do período, dia a dia</div>';
+  var mostraVazios = d.nDias<=14;
+  for(var i=0;i<d.nDias;i++){
     var dia = semSomaDias(d.ini, i);
     var doDia = d.itens.filter(function(x){return x.venc===dia;});
+    if(!doDia.length && !mostraVazios) continue;
     var tot = doDia.reduce(function(s,x){return s+x.valor;},0);
     var ehHoje = dia===d.hoje;
     html += '<div class="card" style="padding:12px 14px'+(ehHoje?';border:1.5px solid var(--g)':'')+'">'+
@@ -5440,9 +5454,10 @@ function renderSemana(){
         (doDia.length ? '<b style="font-size:13px">'+fmt(tot)+'</b>' : '<span style="font-size:12px;color:#aaa">sem contas</span>')+
       '</div>'+doDia.map(semLinha).join('')+'</div>';
   }
+  if(!d.itens.length && !mostraVazios) html += '<div class="empty"><div class="ico">📅</div><p>Nenhuma conta com vencimento nesse período.</p></div>';
 
   if(d.receber.length){
-    html += '<div class="stitle">A receber de clientes na semana ('+d.receber.length+')</div><div class="card" style="padding:10px 14px">';
+    html += '<div class="stitle">A receber de clientes no período ('+d.receber.length+')</div><div class="card" style="padding:10px 14px">';
     d.receber.forEach(function(r){ html += '<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px solid var(--b)"><span>'+fdata(r.venc).slice(0,5)+' · '+semEsc(r.nome)+'</span><b style="color:var(--g)">'+fmt(r.valor)+'</b></div>'; });
     html += '<div style="font-size:11px;color:#888;margin-top:6px">Mesma regra do Fluxo de Caixa: "a prazo" vence dia 5 do mês seguinte; "boleto 7 dias" vence 7 dias após a entrega.</div></div>';
   }
@@ -5451,16 +5466,16 @@ function renderSemana(){
 }
 
 function semTextoWhats(){
-  var d = semDados || semCalcular(semOffset), t = d.t, L = [];
-  L.push('*Lelé da Kuka — Contas da semana*');
-  L.push(fdata(d.ini).slice(0,5)+' a '+fdata(d.fim));
+  var d = semDados || semCalcular(semIni, semFim), t = d.t, L = [];
+  L.push('*Lelé da Kuka — Contas a pagar*');
+  L.push(fdata(d.ini)+' a '+fdata(d.fim));
   L.push('');
   if(d.atrasadas.length){
-    L.push('⚠️ *Em atraso (semanas anteriores)*');
+    L.push('⚠️ *Em atraso (antes do período)*');
     d.atrasadas.forEach(function(x){ L.push('• '+fdata(x.venc).slice(0,5)+' — '+x.nome+': '+fmt(x.valor)+(x.previsto?' (não lançada)':'')); });
     L.push('');
   }
-  for(var i=0;i<7;i++){
+  for(var i=0;i<d.nDias;i++){
     var dia = semSomaDias(d.ini, i);
     var doDia = d.itens.filter(function(x){return x.venc===dia;});
     if(!doDia.length) continue;
@@ -5470,12 +5485,12 @@ function semTextoWhats(){
       L.push(st+' '+x.nome+': '+fmt(x.valor)+(x.estimado?' (estimado)':'')+(x.previsto?' (não lançada)':''));
     });
   }
-  if(!d.itens.length) L.push('Nenhuma conta com vencimento nesta semana.');
+  if(!d.itens.length) L.push('Nenhuma conta com vencimento nesse período.');
   L.push('');
-  L.push('Falta pagar na semana: '+fmt(t.aPagar));
+  L.push('Falta pagar no período: '+fmt(t.aPagar));
   if(t.atrasadoAnt) L.push('Atrasado de antes: '+fmt(t.atrasadoAnt));
-  L.push('Já pago na semana: '+fmt(t.pago));
-  L.push('A receber na semana: '+fmt(t.receber));
+  L.push('Já pago no período: '+fmt(t.pago));
+  L.push('A receber no período: '+fmt(t.receber));
   L.push('*Saldo previsto: '+fmt(t.saldo)+'*');
   L.push('');
   L.push('✅ pago · ⏳ pendente · ⚠️ atrasado · 🔁 recorrente não lançada');
@@ -5492,32 +5507,32 @@ function semCopiar(){
   else fallback();
 }
 function semExcel(){
-  var d = semDados || semCalcular(semOffset);
+  var d = semDados || semCalcular(semIni, semFim);
   var stNome = {pago:'Pago', pendente:'Pendente', atrasado:'Atrasado', previsto:'Previsto (não lançado)'};
-  var rows = [['Lelé da Kuka — Contas da semana', fdata(d.ini)+' a '+fdata(d.fim)], [], ['Vencimento','Dia','Conta / Fornecedor','Descrição','Forma','Valor (R$)','Status','Pago em','Conta de pagamento']];
+  var rows = [['Lelé da Kuka — Contas a pagar', fdata(d.ini)+' a '+fdata(d.fim)], [], ['Vencimento','Dia','Conta / Fornecedor','Descrição','Forma','Valor (R$)','Status','Pago em','Conta de pagamento']];
   d.atrasadas.concat(d.itens).forEach(function(x){
     rows.push([fdata(x.venc), semDiaNome(x.venc), x.nome, x.desc, x.forma, x.valor, stNome[x.status]+(x.estimado?' — valor estimado':''), x.dataPagamento?fdata(x.dataPagamento):'', x.conta||'']);
   });
   rows.push([]);
-  rows.push(['Falta pagar na semana','','','','',d.t.aPagar]);
-  rows.push(['Atrasado de semanas anteriores','','','','',d.t.atrasadoAnt]);
-  rows.push(['Já pago na semana','','','','',d.t.pago]);
-  rows.push(['A receber na semana','','','','',d.t.receber]);
+  rows.push(['Falta pagar no período','','','','',d.t.aPagar]);
+  rows.push(['Atrasado de antes do período','','','','',d.t.atrasadoAnt]);
+  rows.push(['Já pago no período','','','','',d.t.pago]);
+  rows.push(['A receber no período','','','','',d.t.receber]);
   rows.push(['Saldo previsto','','','','',d.t.saldo]);
   var wb = XLSX.utils.book_new();
   var ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [{wch:12},{wch:10},{wch:28},{wch:32},{wch:12},{wch:12},{wch:24},{wch:11},{wch:16}];
-  XLSX.utils.book_append_sheet(wb, ws, 'Contas da semana');
+  XLSX.utils.book_append_sheet(wb, ws, 'Contas a pagar');
   if(d.receber.length){
     var r2 = [['Vencimento','Cliente','Valor (R$)']];
     d.receber.forEach(function(r){ r2.push([fdata(r.venc), r.nome, r.valor]); });
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(r2), 'A receber');
   }
-  XLSX.writeFile(wb, 'Lele_Contas_Semana_'+d.ini+'.xlsx');
+  XLSX.writeFile(wb, 'Lele_Contas_'+d.ini+'_a_'+d.fim+'.xlsx');
 }
 function semPDF(){
   if(typeof window.jspdf === 'undefined') { toast('PDF indisponivel. Tente recarregar a pagina.'); return; }
-  var d = semDados || semCalcular(semOffset), t = d.t;
+  var d = semDados || semCalcular(semIni, semFim), t = d.t;
   var doc = new window.jspdf.jsPDF({unit:'mm', format:'a4'});
   var m = 14, y = 20, W = 210 - 2*m;
   function quebra(h){ if(y + (h||6) > 285){ doc.addPage(); y = 20; } }
@@ -5529,18 +5544,18 @@ function semPDF(){
     y += 5.5;
   }
   var stTxt = {pago:'pago', pendente:'pendente', atrasado:'ATRASADO', previsto:'não lançada'};
-  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.text('Lelé da Kuka — Contas da semana', m, y); y += 7;
+  doc.setFont('helvetica','bold'); doc.setFontSize(15); doc.text('Lelé da Kuka — Contas a pagar', m, y); y += 7;
   doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.text(fdata(d.ini)+' a '+fdata(d.fim)+'   ·   gerado em '+fdata(d.hoje), m, y); y += 9;
-  [['Falta pagar na semana', t.aPagar],['Atrasado de semanas anteriores', t.atrasadoAnt],['Já pago na semana', t.pago],['A receber na semana', t.receber],['Saldo previsto', t.saldo]].forEach(function(r,i){
+  [['Falta pagar no período', t.aPagar],['Atrasado de antes do período', t.atrasadoAnt],['Já pago no período', t.pago],['A receber no período', t.receber],['Saldo previsto', t.saldo]].forEach(function(r,i){
     linha('', r[0], fmt(r[1]), i===4);
   });
   y += 4;
   if(d.atrasadas.length){
-    quebra(12); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(192,57,43); doc.text('Em atraso (semanas anteriores)', m, y); y += 6;
+    quebra(12); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(192,57,43); doc.text('Em atraso (antes do período)', m, y); y += 6;
     d.atrasadas.forEach(function(x){ linha(fdata(x.venc).slice(0,5), x.nome+(x.previsto?' (não lançada)':''), fmt(x.valor), false, [192,57,43]); });
     y += 3;
   }
-  for(var i=0;i<7;i++){
+  for(var i=0;i<d.nDias;i++){
     var dia = semSomaDias(d.ini, i);
     var doDia = d.itens.filter(function(x){return x.venc===dia;});
     if(!doDia.length) continue;
@@ -5553,16 +5568,28 @@ function semPDF(){
     });
     y += 2;
   }
-  if(!d.itens.length){ linha('', 'Nenhuma conta com vencimento nesta semana.', ''); }
+  if(!d.itens.length){ linha('', 'Nenhuma conta com vencimento nesse período.', ''); }
   if(d.receber.length){
-    y += 3; quebra(12); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(42,122,59); doc.text('A receber de clientes na semana', m, y); y += 6;
+    y += 3; quebra(12); doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(42,122,59); doc.text('A receber de clientes no período', m, y); y += 6;
     d.receber.forEach(function(r){ linha(fdata(r.venc).slice(0,5), r.nome, fmt(r.valor)); });
   }
-  doc.save('Lele_Contas_Semana_'+d.ini+'.pdf');
+  doc.save('Lele_Contas_'+d.ini+'_a_'+d.fim+'.pdf');
 }
-document.getElementById('sem-ant').addEventListener('click', function(){ semOffset--; renderSemana(); });
-document.getElementById('sem-prox').addEventListener('click', function(){ semOffset++; renderSemana(); });
-document.getElementById('sem-hoje').addEventListener('click', function(){ semOffset=0; renderSemana(); });
+function semDefinir(ini, fim){ semIni=ini; semFim=fim; }
+function semAplicarDatas(){
+  var de=document.getElementById('sem-de').value, ate=document.getElementById('sem-ate').value;
+  if(!de || !ate) return; // espera as duas datas
+  if(ate<de){ toast('A data final é antes da inicial'); return; }
+  if(semDiasEntre(de, ate)>366){ toast('Escolha um período de até 1 ano'); return; }
+  semDefinir(de, ate); renderSemana();
+}
+function semMarcarAtalho(id){ document.querySelectorAll('.sem-atalho').forEach(function(b){ b.classList.toggle('btn-g', b.id===id); b.classList.toggle('btn-o', b.id!==id); }); }
+document.getElementById('sem-de').addEventListener('change', function(){ semMarcarAtalho(''); semAplicarDatas(); });
+document.getElementById('sem-ate').addEventListener('change', function(){ semMarcarAtalho(''); semAplicarDatas(); });
+document.getElementById('sem-at-esta').addEventListener('click', function(){ var i=semInicio(0); semDefinir(i, semSomaDias(i,6)); semMarcarAtalho(this.id); renderSemana(); });
+document.getElementById('sem-at-prox').addEventListener('click', function(){ var i=semInicio(1); semDefinir(i, semSomaDias(i,6)); semMarcarAtalho(this.id); renderSemana(); });
+document.getElementById('sem-at-15').addEventListener('click', function(){ var h=recHojeStr(); semDefinir(h, semSomaDias(h,14)); semMarcarAtalho(this.id); renderSemana(); });
+document.getElementById('sem-at-mes').addEventListener('click', function(){ var h=recHojeStr(), p=h.split('-'); semDefinir(h.slice(0,7)+'-01', h.slice(0,7)+'-'+recPad(recUltimoDia(+p[0], +p[1]))); semMarcarAtalho(this.id); renderSemana(); });
 document.getElementById('btn-sem-copiar').addEventListener('click', semCopiar);
 document.getElementById('btn-sem-xls').addEventListener('click', semExcel);
 document.getElementById('btn-sem-pdf').addEventListener('click', semPDF);

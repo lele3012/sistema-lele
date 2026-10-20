@@ -587,6 +587,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rinad">💰 Inadimplência</button>
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rinativos">⚠️ Clientes inativos</button>
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rticket">📊 Ticket médio</button>
+      <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rmensal">📅 Vendas mês a mês</button>
     </div>
 
     <div class="relat-sub" id="rs-rprod">
@@ -715,6 +716,22 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       </div>
       <div id="ticket-area"></div>
       <div id="btn-xls-ticket-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-ticket">📊 Exportar Excel</button></div>
+    </div>
+
+    <div class="relat-sub" id="rs-rmensal" style="display:none">
+      <div class="card">
+        <div class="row2">
+          <div class="field"><label>Período</label>
+            <select class="inp" id="vm-periodo"><option value="ult12">Últimos 12 meses</option><option value="tudo">Todo o histórico</option></select>
+          </div>
+          <div class="field"><label>Cliente</label>
+            <select class="inp" id="vm-cliente"><option value="">Todos os clientes</option></select>
+          </div>
+        </div>
+        <button class="btn btn-g" id="btn-gerar-vm">Gerar relatório</button>
+      </div>
+      <div id="vm-area"></div>
+      <div id="btn-xls-vm-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-vm">📊 Exportar Excel</button></div>
     </div>
   </div>
 
@@ -1562,6 +1579,7 @@ document.querySelectorAll('.relat-sub-btn').forEach(function(b) {
     if(rs==='rabc') gerarCurvaABC();
     if(rs==='rinativos') gerarInativos();
     if(rs==='rticket') gerarTicket();
+    if(rs==='rmensal') { vmPopularFiltros(); gerarVendasMensal(); }
   });
 });
 
@@ -5136,6 +5154,194 @@ document.getElementById('btn-xls-ticket').addEventListener('click', function() {
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Ticket Medio');
   XLSX.writeFile(wb, 'Lele_Ticket_Medio_'+String(d.mes).padStart(2,'0')+'_'+d.ano+'.xlsx');
+  toast('Excel gerado!');
+});
+
+// --- VENDAS MES A MES ---
+var VM_MES_CURTO = ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+var VM_PRODS = ['bola','integral','mini','las250','las500','suco','salada'];
+function vmYm(ano, mes) { return ano+'-'+String(mes).padStart(2,'0'); }
+function vmLabel(ym) { var p=ym.split('-'); return VM_MES_CURTO[parseInt(p[1])]+'/'+p[0].slice(2); }
+function vmLabelLongo(ym) { var p=ym.split('-'); return MESES[parseInt(p[1])]+'/'+p[0]; }
+function vmAnterior(ym, n) { var p=ym.split('-'); var d=new Date(parseInt(p[0]), parseInt(p[1])-1-n, 1); return vmYm(d.getFullYear(), d.getMonth()+1); }
+
+function vmPopularFiltros() {
+  var selP = document.getElementById('vm-periodo'), selC = document.getElementById('vm-cliente');
+  if(!selP || !selC) return;
+  var valP = selP.value, valC = selC.value;
+  var anos = {};
+  (D.entregas||[]).forEach(function(e){ if(e.data) anos[e.data.slice(0,4)] = 1; });
+  var htmlP = '<option value="ult12">Últimos 12 meses</option><option value="tudo">Todo o histórico</option>';
+  Object.keys(anos).sort().reverse().forEach(function(a){ htmlP += '<option value="'+a+'">Ano '+a+'</option>'; });
+  selP.innerHTML = htmlP;
+  selP.value = valP && selP.querySelector('option[value="'+valP+'"]') ? valP : 'ult12';
+  var clis = (D.clientes||[]).slice().sort(function(a,b){ return (a.fantasia||a.nome||'').localeCompare(b.fantasia||b.nome||''); });
+  var htmlC = '<option value="">Todos os clientes</option>';
+  clis.forEach(function(c){ htmlC += '<option value="'+c.id+'">'+(c.fantasia||c.nome||'?')+'</option>'; });
+  selC.innerHTML = htmlC;
+  selC.value = valC && selC.querySelector('option[value="'+valC+'"]') ? valC : '';
+}
+
+function gerarVendasMensal() {
+  var area = document.getElementById('vm-area'); if(!area) return;
+  try {
+    var periodo = document.getElementById('vm-periodo').value || 'ult12';
+    var cliId = document.getElementById('vm-cliente').value || '';
+    var hoje = new Date();
+    var ymHoje = vmYm(hoje.getFullYear(), hoje.getMonth()+1);
+
+    var ents = (D.entregas||[]).filter(function(e){ return e.data && (!cliId || e.clienteId==cliId); });
+
+    // Agrupa todas as entregas por mes (inclusive fora do periodo, para comparar com ano anterior)
+    var porMes = {};
+    ents.forEach(function(e){
+      var ym = e.data.slice(0,7);
+      if(!porMes[ym]) porMes[ym] = {fat:0, troca:0, entregas:0, clientes:{}, un:0, prod:{}};
+      var m = porMes[ym];
+      m.fat += e.valorTotal||0;
+      m.troca += e.valorTroca||0;
+      m.entregas++;
+      m.clientes[e.clienteId] = 1;
+      Object.keys(e.produtos||{}).forEach(function(k){ var q=e.produtos[k]||0; m.un+=q; m.prod[k]=(m.prod[k]||0)+q; });
+    });
+
+    // Lista de meses do periodo
+    var meses = [];
+    if(periodo==='ult12') { for(var i=11;i>=0;i--) meses.push(vmAnterior(ymHoje, i)); }
+    else if(periodo==='tudo') {
+      var chaves = Object.keys(porMes).sort();
+      if(chaves.length) { var ym = chaves[0]; while(ym <= ymHoje) { meses.push(ym); ym = vmAnterior(ym, -1); } }
+    } else {
+      for(var mm=1;mm<=12;mm++) { var y=vmYm(periodo, mm); if(y<=ymHoje) meses.push(y); }
+    }
+
+    var vazio = {fat:0, troca:0, entregas:0, clientes:{}, un:0, prod:{}};
+    var linhas = meses.map(function(ym, idx){
+      var m = porMes[ym] || vazio;
+      var ant = porMes[vmAnterior(ym,1)] || vazio;
+      var anoAnt = porMes[vmAnterior(ym,12)];
+      var nCli = Object.keys(m.clientes).length;
+      return {
+        ym: ym, fat: m.fat, troca: m.troca, entregas: m.entregas, clientes: nCli, un: m.un, prod: m.prod,
+        ticket: m.entregas ? m.fat/m.entregas : 0,
+        varMes: ant.fat ? (m.fat-ant.fat)/ant.fat*100 : null,
+        varAno: anoAnt && anoAnt.fat ? (m.fat-anoAnt.fat)/anoAnt.fat*100 : null,
+        fatAnoAnt: anoAnt ? anoAnt.fat : null,
+        parcial: ym===ymHoje
+      };
+    });
+
+    var cliNome = '';
+    if(cliId) { var c = D.clientes.find(function(x){ return x.id==cliId; }); cliNome = c ? (c.fantasia||c.nome) : ''; }
+    var titPeriodo = periodo==='ult12' ? 'Últimos 12 meses' : periodo==='tudo' ? 'Todo o histórico' : 'Ano '+periodo;
+
+    var html = '<div class="stitle" style="margin-top:0">Vendas mês a mês — '+titPeriodo+(cliNome?' — '+cliNome:'')+'</div>';
+    var totalFat = linhas.reduce(function(s,l){ return s+l.fat; },0);
+    if(!linhas.length || !totalFat) {
+      area.innerHTML = html + '<div class="empty"><div class="ico">📅</div><p>Nenhuma venda no período.</p></div>';
+      document.getElementById('btn-xls-vm-area').style.display = 'none';
+      window._vmData = null;
+      return;
+    }
+
+    // Resumo
+    var completos = linhas.filter(function(l){ return !l.parcial; });
+    var baseMedia = completos.length ? completos : linhas;
+    var media = baseMedia.reduce(function(s,l){ return s+l.fat; },0) / baseMedia.length;
+    var melhor = linhas.reduce(function(a,b){ return b.fat>a.fat ? b : a; });
+    var totalEnt = linhas.reduce(function(s,l){ return s+l.entregas; },0);
+    var totalTroca = linhas.reduce(function(s,l){ return s+l.troca; },0);
+    html += '<div class="rg">'+
+      '<div class="rbox hl"><label>Faturamento no período</label><b>'+fmt(totalFat)+'</b></div>'+
+      '<div class="rbox"><label>Média por mês'+(completos.length<linhas.length?' (meses fechados)':'')+'</label><b>'+fmt(media)+'</b></div>'+
+      '<div class="rbox"><label>Melhor mês</label><b>'+vmLabelLongo(melhor.ym)+'</b><div style="font-size:11px;color:#888">'+fmt(melhor.fat)+'</div></div>'+
+      '<div class="rbox"><label>Entregas / Trocas</label><b>'+totalEnt+'</b><div style="font-size:11px;color:#888">trocas: '+fmt(totalTroca)+'</div></div>'+
+    '</div>';
+
+    // Grafico de barras
+    var maxFat = Math.max.apply(null, linhas.map(function(l){ return l.fat; })) || 1;
+    html += '<div class="card"><div style="font-size:12px;font-weight:700;margin-bottom:8px">Faturamento por mês</div>'+
+      '<div style="overflow-x:auto"><div style="display:flex;align-items:flex-end;gap:4px;height:170px;min-width:'+(linhas.length*34)+'px;padding-top:18px">';
+    linhas.forEach(function(l){
+      var h = Math.round(l.fat/maxFat*130);
+      var cor = l.parcial ? '#9cc7a6' : 'var(--g)';
+      var k = l.fat>=1000 ? (l.fat/1000).toFixed(l.fat>=10000?0:1).replace('.',',')+'k' : Math.round(l.fat);
+      html += '<div title="'+vmLabelLongo(l.ym)+': '+fmt(l.fat)+(l.parcial?' (mês em andamento)':'')+'" style="flex:1;min-width:28px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%">'+
+        '<div style="font-size:9px;color:#666;margin-bottom:2px;white-space:nowrap">'+(l.fat?k:'')+'</div>'+
+        '<div style="width:100%;max-width:34px;height:'+Math.max(h, l.fat?2:0)+'px;background:'+cor+';border-radius:4px 4px 0 0"></div>'+
+        '<div style="font-size:9px;color:#888;margin-top:4px;white-space:nowrap">'+vmLabel(l.ym)+'</div></div>';
+    });
+    html += '</div></div>'+(linhas.some(function(l){return l.parcial;})?'<div style="font-size:10px;color:#999;margin-top:6px">Barra clara = mês em andamento</div>':'')+'</div>';
+
+    // Tabela mensal
+    function varTxt(v) {
+      if(v===null) return '<span style="color:#bbb">—</span>';
+      var cor = v>=0 ? 'var(--g)' : 'var(--r)';
+      return '<span style="color:'+cor+';font-weight:700">'+(v>=0?'▲ ':'▼ ')+Math.abs(v).toFixed(0)+'%</span>';
+    }
+    var th = 'style="padding:6px 8px;text-align:right;font-size:10px;text-transform:uppercase;color:#888;white-space:nowrap;border-bottom:2px solid var(--b)"';
+    var td = 'style="padding:7px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--b)"';
+    html += '<div class="card" style="padding:10px"><div style="font-size:12px;font-weight:700;margin-bottom:8px">Detalhe por mês</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'+
+      '<thead><tr><th '+th.replace('right','left')+'>Mês</th><th '+th+'>Faturamento</th><th '+th+'>vs mês ant.</th><th '+th+'>vs ano ant.</th><th '+th+'>Entregas</th><th '+th+'>Clientes</th><th '+th+'>Unidades</th><th '+th+'>Trocas</th><th '+th+'>Ticket médio</th></tr></thead><tbody>';
+    linhas.slice().reverse().forEach(function(l){
+      html += '<tr><td '+td.replace('right','left')+'><b>'+vmLabelLongo(l.ym)+'</b>'+(l.parcial?' <span style="font-size:10px;color:#999">(parcial)</span>':'')+'</td>'+
+        '<td '+td+'><b>'+fmt(l.fat)+'</b></td><td '+td+'>'+varTxt(l.varMes)+'</td><td '+td+'>'+varTxt(l.varAno)+'</td>'+
+        '<td '+td+'>'+l.entregas+'</td><td '+td+'>'+l.clientes+'</td><td '+td+'>'+l.un+'</td>'+
+        '<td '+td+'>'+(l.troca?fmt(l.troca):'—')+'</td><td '+td+'>'+(l.entregas?fmt(l.ticket):'—')+'</td></tr>';
+    });
+    html += '<tr style="background:#f7f5f1"><td '+td.replace('right','left')+'><b>Total</b></td><td '+td+'><b>'+fmt(totalFat)+'</b></td><td '+td+'></td><td '+td+'></td>'+
+      '<td '+td+'><b>'+totalEnt+'</b></td><td '+td+'></td><td '+td+'><b>'+linhas.reduce(function(s,l){return s+l.un;},0)+'</b></td>'+
+      '<td '+td+'><b>'+fmt(totalTroca)+'</b></td><td '+td+'><b>'+(totalEnt?fmt(totalFat/totalEnt):'—')+'</b></td></tr>';
+    html += '</tbody></table></div><div style="font-size:10px;color:#999;margin-top:6px">Faturamento já descontadas as trocas. "vs ano ant." compara com o mesmo mês do ano anterior.</div></div>';
+
+    // Produtos por mes
+    var prodsUsados = VM_PRODS.filter(function(k){ return linhas.some(function(l){ return l.prod[k]; }); });
+    linhas.forEach(function(l){ Object.keys(l.prod).forEach(function(k){ if(prodsUsados.indexOf(k)<0 && l.prod[k]) prodsUsados.push(k); }); });
+    if(prodsUsados.length) {
+      html += '<div class="card" style="padding:10px"><div style="font-size:12px;font-weight:700;margin-bottom:8px">Unidades vendidas por produto</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">'+
+        '<thead><tr><th '+th.replace('right','left')+'>Mês</th>';
+      prodsUsados.forEach(function(k){ html += '<th '+th+'>'+(NOME[k]||k)+'</th>'; });
+      html += '</tr></thead><tbody>';
+      linhas.slice().reverse().forEach(function(l){
+        html += '<tr><td '+td.replace('right','left')+'><b>'+vmLabelLongo(l.ym)+'</b></td>';
+        prodsUsados.forEach(function(k){ html += '<td '+td+'>'+(l.prod[k]||'—')+'</td>'; });
+        html += '</tr>';
+      });
+      html += '<tr style="background:#f7f5f1"><td '+td.replace('right','left')+'><b>Total</b></td>';
+      prodsUsados.forEach(function(k){ html += '<td '+td+'><b>'+linhas.reduce(function(s,l){return s+(l.prod[k]||0);},0)+'</b></td>'; });
+      html += '</tr></tbody></table></div></div>';
+    }
+
+    area.innerHTML = html;
+    window._vmData = {linhas:linhas, prods:prodsUsados, titulo:titPeriodo, cliente:cliNome};
+    document.getElementById('btn-xls-vm-area').style.display = 'block';
+  } catch(err) {
+    console.error('Erro no relatório mês a mês:', err);
+    area.innerHTML = '<div class="alert alert-y">Não foi possível gerar o relatório. Recarregue a página e tente de novo.</div>';
+    document.getElementById('btn-xls-vm-area').style.display = 'none';
+  }
+}
+document.getElementById('btn-gerar-vm').addEventListener('click', gerarVendasMensal);
+document.getElementById('btn-xls-vm').addEventListener('click', function() {
+  if(!window._vmData) return;
+  if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
+  var d = window._vmData;
+  function pct(v){ return v===null ? '' : Math.round(v*10)/10; }
+  var rows = [['Mês','Faturamento (R$)','Var. vs mês anterior (%)','Var. vs mesmo mês ano anterior (%)','Entregas','Clientes atendidos','Unidades vendidas','Trocas (R$)','Ticket médio (R$)']];
+  d.linhas.forEach(function(l){
+    rows.push([vmLabelLongo(l.ym)+(l.parcial?' (parcial)':''), Math.round(l.fat*100)/100, pct(l.varMes), pct(l.varAno), l.entregas, l.clientes, l.un, Math.round(l.troca*100)/100, l.entregas?Math.round(l.ticket*100)/100:0]);
+  });
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:20},{wch:16},{wch:14},{wch:18},{wch:10},{wch:12},{wch:12},{wch:12},{wch:14}];
+  var rows2 = [['Mês'].concat(d.prods.map(function(k){ return NOME[k]||k; }))];
+  d.linhas.forEach(function(l){ rows2.push([vmLabelLongo(l.ym)].concat(d.prods.map(function(k){ return l.prod[k]||0; }))); });
+  var ws2 = XLSX.utils.aoa_to_sheet(rows2);
+  ws2['!cols'] = [{wch:20}].concat(d.prods.map(function(){ return {wch:16}; }));
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Vendas mes a mes');
+  XLSX.utils.book_append_sheet(wb, ws2, 'Produtos por mes');
+  var nome = 'Lele_Vendas_Mes_a_Mes_'+d.titulo.replace(/[^A-Za-z0-9]+/g,'_')+(d.cliente?'_'+d.cliente.replace(/[^A-Za-z0-9]+/g,'_'):'')+'.xlsx';
+  XLSX.writeFile(wb, nome);
   toast('Excel gerado!');
 });
 

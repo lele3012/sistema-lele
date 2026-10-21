@@ -1785,32 +1785,101 @@ document.getElementById('c-cnpj').addEventListener('input', function() {
   this.value = v;
 });
 
+// ===== CONSULTA DE CNPJ COM VÁRIOS SERVIÇOS (se um falhar, tenta o próximo) =====
+// Todos devolvem os dados no mesmo formato: {razao_social, nome_fantasia, tipo_logradouro, logradouro, numero,
+// complemento, bairro, municipio, uf, cep, telefone, email, situacao, fonte}
+function cnpjFetchTimeout(url, ms) {
+  var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+  var timer = setTimeout(function(){ if(ctrl) ctrl.abort(); }, ms);
+  return fetch(url, ctrl ? {signal: ctrl.signal} : {}).finally(function(){ clearTimeout(timer); });
+}
+function cnpjTel(ddd, num) {
+  var t = String(ddd||'').replace(/\D/g,'') + String(num||'').replace(/\D/g,'');
+  return t ? formatarFone(t) : '';
+}
+var CNPJ_FONTES = [
+  { nome:'BrasilAPI', url:function(c){ return 'https://brasilapi.com.br/api/cnpj/v1/'+c; },
+    ler:function(j){ return {razao_social:j.razao_social, nome_fantasia:j.nome_fantasia, tipo_logradouro:j.descricao_tipo_de_logradouro||j.descricao_tipo_logradouro,
+      logradouro:j.logradouro, numero:j.numero, complemento:j.complemento, bairro:j.bairro, municipio:j.municipio, uf:j.uf, cep:j.cep,
+      telefone:cnpjTel('', j.ddd_telefone_1), email:j.email, situacao:j.descricao_situacao_cadastral}; } },
+  { nome:'Minha Receita', url:function(c){ return 'https://minhareceita.org/'+c; },
+    ler:function(j){ return {razao_social:j.razao_social, nome_fantasia:j.nome_fantasia, tipo_logradouro:j.descricao_tipo_de_logradouro||j.descricao_tipo_logradouro,
+      logradouro:j.logradouro, numero:j.numero, complemento:j.complemento, bairro:j.bairro, municipio:j.municipio, uf:j.uf, cep:j.cep,
+      telefone:cnpjTel('', j.ddd_telefone_1), email:j.email, situacao:j.descricao_situacao_cadastral}; } },
+  { nome:'CNPJá', url:function(c){ return 'https://open.cnpja.com/office/'+c; },
+    ler:function(j){ var a=j.address||{}, f=(j.phones||[])[0]||{}, e=(j.emails||[])[0]||{};
+      return {razao_social:(j.company||{}).name, nome_fantasia:j.alias, tipo_logradouro:'', logradouro:a.street, numero:a.number, complemento:a.details,
+        bairro:a.district, municipio:a.city, uf:a.state, cep:a.zip, telefone:cnpjTel(f.area, f.number), email:e.address, situacao:(j.status||{}).text}; } },
+  { nome:'CNPJ.ws', url:function(c){ return 'https://publica.cnpj.ws/cnpj/'+c; },
+    ler:function(j){ var s=j.estabelecimento||{};
+      return {razao_social:j.razao_social, nome_fantasia:s.nome_fantasia, tipo_logradouro:s.tipo_logradouro, logradouro:s.logradouro, numero:s.numero,
+        complemento:s.complemento, bairro:s.bairro, municipio:(s.cidade||{}).nome, uf:(s.estado||{}).sigla, cep:s.cep,
+        telefone:cnpjTel(s.ddd1, s.telefone1), email:s.email, situacao:s.situacao_cadastral}; } }
+];
+// Valida os dígitos verificadores do CNPJ (pega erro de digitação antes de consultar)
+function cnpjValido(c) {
+  if(!/^\d{14}$/.test(c) || /^(\d)\1+$/.test(c)) return false;
+  function dv(base){ var pesos = base.length===12 ? [5,4,3,2,9,8,7,6,5,4,3,2] : [6,5,4,3,2,9,8,7,6,5,4,3,2];
+    var s = 0; for(var i=0;i<base.length;i++) s += parseInt(base[i])*pesos[i]; var r = s%11; return r<2 ? 0 : 11-r; }
+  return dv(c.slice(0,12))===parseInt(c[12]) && dv(c.slice(0,13))===parseInt(c[13]);
+}
+// Retorna {dados} quando acha, {naoExiste:true} quando os serviços dizem que o CNPJ não existe,
+// ou {falhou:true} quando nenhum serviço respondeu
+async function consultarCnpj(cnpj, aoTentar) {
+  var naoExiste = 0, erros = [];
+  for(var i=0;i<CNPJ_FONTES.length;i++) {
+    var f = CNPJ_FONTES[i];
+    if(aoTentar) aoTentar(f.nome, i);
+    try {
+      var r = await cnpjFetchTimeout(f.url(cnpj), 8000);
+      if(r.status===404) { naoExiste++; erros.push(f.nome+': 404'); continue; }
+      if(!r.ok) { erros.push(f.nome+': HTTP '+r.status); continue; }
+      var d = f.ler(await r.json());
+      if(!d || !d.razao_social) { erros.push(f.nome+': resposta vazia'); continue; }
+      d.fonte = f.nome;
+      return {dados:d};
+    } catch(e) { erros.push(f.nome+': '+(e && e.name==='AbortError' ? 'demorou demais' : (e && e.message || 'sem conexão'))); }
+  }
+  console.warn('Consulta CNPJ '+cnpj+' falhou em todos os serviços:', erros);
+  return naoExiste>=2 ? {naoExiste:true} : {falhou:true};
+}
+function cnpjMsgErro(res) {
+  if(res.naoExiste) return '<div class="alert alert-r">CNPJ não encontrado na Receita. Confira os números ou preencha manualmente.</div>';
+  return '<div class="alert alert-r">Os serviços de consulta de CNPJ não responderam agora (internet ou serviço fora do ar). Tente de novo em 1 minuto ou preencha manualmente.</div>';
+}
+function cnpjAvisoSituacao(d) {
+  var s = String(d.situacao||'').trim();
+  return s && s.toUpperCase()!=='ATIVA' ? '<div class="alert alert-y" style="margin-top:6px">Atenção: situação na Receita = <b>'+s+'</b></div>' : '';
+}
+
 document.getElementById('btn-cnpj').addEventListener('click', async function() {
+  var btn = this;
   var cnpj = document.getElementById('c-cnpj').value.replace(/\D/g,'');
   var msg = document.getElementById('cnpj-msg');
-  if(cnpj.length!==14) { msg.innerHTML='<div class="alert alert-r">CNPJ invalido.</div>'; return; }
-  this.textContent='...'; this.disabled=true;
-  msg.innerHTML='<div class="alert alert-i">Buscando...</div>';
+  if(cnpj.length!==14) { msg.innerHTML='<div class="alert alert-r">CNPJ precisa ter 14 números.</div>'; return; }
+  if(!cnpjValido(cnpj)) { msg.innerHTML='<div class="alert alert-r">CNPJ inválido — confira se algum número foi digitado errado.</div>'; return; }
+  btn.textContent='...'; btn.disabled=true;
   try {
-    var r = await fetch('https://brasilapi.com.br/api/cnpj/v1/'+cnpj);
-    if(!r.ok) throw new Error();
-    var j = await r.json();
-    document.getElementById('c-nome').value = j.razao_social||'';
-    document.getElementById('c-fantasia').value = j.nome_fantasia||'';
-    document.getElementById('c-tel').value = j.ddd_telefone_1||'';
-    document.getElementById('c-end').value = [j.descricao_tipo_logradouro,j.logradouro].filter(Boolean).join(' ');
-    document.getElementById('c-num').value = j.numero||'';
-    document.getElementById('c-comp').value = j.complemento||'';
-    document.getElementById('c-bairro').value = j.bairro||'';
-    document.getElementById('c-cidade').value = j.municipio||'';
-    document.getElementById('c-uf').value = j.uf||'';
-    document.getElementById('c-cep').value = formatarCep(j.cep||'');
+    var res = await consultarCnpj(cnpj, function(nome, i){ msg.innerHTML='<div class="alert alert-i">Buscando'+(i?' (tentando '+nome+')':'')+'...</div>'; });
+    if(!res.dados) { msg.innerHTML = cnpjMsgErro(res); return; }
+    var j = res.dados;
+    function put(id, v){ var el=document.getElementById(id); if(el) el.value = v||''; }
+    put('c-nome', j.razao_social);
+    put('c-fantasia', j.nome_fantasia);
+    put('c-tel', j.telefone);
+    put('c-end', [j.tipo_logradouro, j.logradouro].filter(Boolean).join(' '));
+    put('c-num', j.numero);
+    put('c-comp', j.complemento);
+    put('c-bairro', j.bairro);
+    put('c-cidade', j.municipio);
+    put('c-uf', j.uf);
+    put('c-cep', formatarCep(j.cep||''));
     if(j.email && !document.getElementById('c-email').value) document.getElementById('c-email').value = String(j.email).toLowerCase();
-    msg.innerHTML='<div class="alert alert-g">Dados encontrados!</div>';
+    msg.innerHTML='<div class="alert alert-g">Dados encontrados!</div>'+cnpjAvisoSituacao(j);
   } catch(e) {
-    msg.innerHTML='<div class="alert alert-r">Nao encontrado. Preencha manualmente.</div>';
-  }
-  this.textContent='Buscar'; this.disabled=false;
+    console.error('Erro na busca de CNPJ:', e);
+    msg.innerHTML='<div class="alert alert-r">Erro ao buscar o CNPJ. Preencha manualmente.</div>';
+  } finally { btn.textContent='Buscar'; btn.disabled=false; }
 });
 
 // Segmento "Outro" -> mostra campo de texto
@@ -3058,23 +3127,24 @@ function popDatalistFornecedores() {
   dl.innerHTML = D.fornecedores.map(function(f){ return '<option value="'+f.nome+'">'; }).join('');
 }
 document.getElementById('btn-fn-cnpj').addEventListener('click', async function() {
+  var btn = this;
   var cnpj = document.getElementById('fn-cnpj').value.replace(/\D/g,'');
   var msg = document.getElementById('fn-cnpj-msg');
-  if(cnpj.length!==14) { msg.innerHTML='<div class="alert alert-r">CNPJ inválido.</div>'; return; }
-  this.textContent='...'; this.disabled=true;
-  msg.innerHTML='<div class="alert alert-i">Buscando...</div>';
+  if(cnpj.length!==14) { msg.innerHTML='<div class="alert alert-r">CNPJ precisa ter 14 números.</div>'; return; }
+  if(!cnpjValido(cnpj)) { msg.innerHTML='<div class="alert alert-r">CNPJ inválido — confira se algum número foi digitado errado.</div>'; return; }
+  btn.textContent='...'; btn.disabled=true;
   try {
-    var r = await fetch('https://brasilapi.com.br/api/cnpj/v1/'+cnpj);
-    if(!r.ok) throw new Error();
-    var j = await r.json();
+    var res = await consultarCnpj(cnpj, function(nome, i){ msg.innerHTML='<div class="alert alert-i">Buscando'+(i?' (tentando '+nome+')':'')+'...</div>'; });
+    if(!res.dados) { msg.innerHTML = cnpjMsgErro(res); return; }
+    var j = res.dados;
     document.getElementById('fn-nome').value = j.razao_social||j.nome_fantasia||'';
-    document.getElementById('fn-tel').value = j.ddd_telefone_1||'';
-    document.getElementById('fn-end').value = [j.descricao_tipo_logradouro,j.logradouro,j.numero,j.bairro,j.municipio].filter(Boolean).join(' ');
-    msg.innerHTML='<div class="alert alert-g">Dados encontrados!</div>';
+    document.getElementById('fn-tel').value = j.telefone||'';
+    document.getElementById('fn-end').value = [j.tipo_logradouro,j.logradouro,j.numero,j.bairro,j.municipio].filter(Boolean).join(' ');
+    msg.innerHTML='<div class="alert alert-g">Dados encontrados!</div>'+cnpjAvisoSituacao(j);
   } catch(e) {
-    msg.innerHTML='<div class="alert alert-r">Não encontrado. Preencha manualmente.</div>';
-  }
-  this.textContent='Buscar'; this.disabled=false;
+    console.error('Erro na busca de CNPJ:', e);
+    msg.innerHTML='<div class="alert alert-r">Erro ao buscar o CNPJ. Preencha manualmente.</div>';
+  } finally { btn.textContent='Buscar'; btn.disabled=false; }
 });
 document.getElementById('btn-salvar-fn').addEventListener('click', function() {
   var nome = document.getElementById('fn-nome').value.trim();

@@ -589,6 +589,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rinativos">⚠️ Clientes / inativos</button>
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rticket">📊 Ticket médio</button>
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rmensal">📅 Vendas mês a mês</button>
+      <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rkcli">🏆 Ranking de clientes</button>
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rbairro">📍 Vendas por bairro</button>
     </div>
 
@@ -691,6 +692,19 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       </div>
       <div id="vm-area"></div>
       <div id="btn-xls-vm-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-vm">📊 Exportar Excel</button></div>
+    </div>
+
+    <div class="relat-sub" id="rs-rkcli" style="display:none">
+      <div class="card">
+        <div class="row2">
+          <div class="field"><label>Período</label><select class="inp" id="rc-periodo"><option value="ult12">Últimos 12 meses</option></select></div>
+          <div class="field"><label>Bairro</label><select class="inp" id="rc-bairro"><option value="">Todos os bairros</option></select></div>
+        </div>
+        <div class="field"><label>Ordenar por</label><select class="inp" id="rc-ordem"><option value="fat">Faturamento (R$)</option><option value="un">Unidades vendidas</option><option value="ent">Número de entregas</option></select></div>
+        <button class="btn btn-g" id="btn-gerar-rkcli">Gerar relatório</button>
+      </div>
+      <div id="rkcli-area"></div>
+      <div id="btn-xls-rkcli-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-rkcli">📊 Exportar Excel</button> <button class="btn btn-o" id="btn-pdf-rkcli">📄 Baixar PDF</button></div>
     </div>
 
     <div class="relat-sub" id="rs-rbairro" style="display:none">
@@ -1551,6 +1565,7 @@ document.querySelectorAll('.relat-sub-btn').forEach(function(b) {
     if(rs==='rinad') gerarInad();
     if(rs==='rmensal') { vmPopularFiltros(); gerarVendasMensal(); }
     if(rs==='rbairro') gerarBairros();
+    if(rs==='rkcli') gerarRankingClientes();
   });
 });
 
@@ -5867,6 +5882,253 @@ document.getElementById('btn-pdf-bairro').addEventListener('click', function() {
     doc.save(relArq('Vendas_por_Bairro', d.titulo).replace(/\.xlsx$/, '.pdf'));
     toast('PDF gerado!');
   } catch(err) { console.error('Erro no PDF por bairro:', err); toast('Erro ao gerar o PDF.'); }
+});
+
+// ===== RANKING DE CLIENTES (acompanhamento mensal) =====
+function rkPopularBairros() {
+  var sel = document.getElementById('rc-bairro'); if(!sel) return;
+  var atual = sel.value, mapa = bairrosDosClientes();
+  var chaves = Object.keys(mapa).sort(function(a,b){ return mapa[a].localeCompare(mapa[b],'pt-BR',{sensitivity:'base'}); });
+  var html = '<option value="">Todos os bairros</option>';
+  chaves.forEach(function(k){ html += '<option value="'+k.replace(/"/g,'&quot;')+'">'+mapa[k]+'</option>'; });
+  if(D.clientes.some(function(c){ return !bairroChave(c.bairro); })) html += '<option value="'+BAIRRO_SEM+'">Sem bairro informado</option>';
+  sel.innerHTML = html;
+  var ok = false; for(var i=0;i<sel.options.length;i++) if(sel.options[i].value===atual) ok = true;
+  sel.value = ok ? atual : '';
+}
+function gerarRankingClientes() {
+  var area = document.getElementById('rkcli-area'); if(!area) return;
+  var btnA = document.getElementById('btn-xls-rkcli-area');
+  try {
+    relPopularPeriodo('rc-periodo'); rkPopularBairros();
+    var periodo = relVal('rc-periodo') || 'ult12', bairroSel = relVal('rc-bairro'), ordem = relVal('rc-ordem') || 'fat';
+    var mapa = bairrosDosClientes();
+    var cliInfo = {};
+    D.clientes.forEach(function(c){ var k = bairroChave(c.bairro) || BAIRRO_SEM; cliInfo[c.id] = {bairroK:k, bairro:bairroNome(k, mapa)}; });
+    function noBairro(id){ if(!bairroSel) return true; var i = cliInfo[id]; return (i ? i.bairroK : BAIRRO_SEM) === bairroSel; }
+    var ents = D.entregas.filter(function(e){ return e.data && noBairro(e.clienteId); });
+    var meses = relMeses(periodo, ents.map(function(e){ return e.data; }));
+    var dentro = relNoPeriodo(meses);
+    var ymH = relYmHoje();
+
+    var porCli = {}, porMes = {}, total = 0;
+    ents.forEach(function(e){
+      if(!dentro(e.data)) return;
+      var id = e.clienteId, m = e.data.slice(0,7), v = e.valorTotal||0, un = 0;
+      Object.keys(e.produtos||{}).forEach(function(k){ un += e.produtos[k]||0; });
+      if(!porCli[id]) porCli[id] = {id:id, nome:relCli(id), bairro:(cliInfo[id]||{}).bairro||'Sem bairro informado', vals:{}, un:{}, ent:{}, total:0, tUn:0, tEnt:0};
+      var p = porCli[id];
+      p.vals[m]=(p.vals[m]||0)+v; p.un[m]=(p.un[m]||0)+un; p.ent[m]=(p.ent[m]||0)+1;
+      p.total+=v; p.tUn+=un; p.tEnt++;
+      porMes[m]=(porMes[m]||0)+v; total+=v;
+    });
+    var chaveOrdem = ordem==='un' ? 'tUn' : (ordem==='ent' ? 'tEnt' : 'total');
+    var linhas = Object.keys(porCli).map(function(id){ return porCli[id]; })
+      .sort(function(a,b){ return (b[chaveOrdem]-a[chaveOrdem]) || (b.total-a.total); });
+
+    // Posição de cada cliente em cada mês (pelo faturamento)
+    var posMes = {};
+    meses.forEach(function(m){
+      posMes[m] = {};
+      linhas.filter(function(l){ return l.vals[m]; }).sort(function(a,b){ return b.vals[m]-a.vals[m]; })
+        .forEach(function(l, i){ posMes[m][l.id] = i+1; });
+    });
+    // Comparação: último mês fechado x mês anterior a ele
+    var fechados = meses.filter(function(m){ return m!==ymH; });
+    var mUlt = fechados[fechados.length-1] || null, mPen = fechados[fechados.length-2] || null;
+
+    var acum = 0;
+    linhas.forEach(function(l, i){
+      l.pos = i+1;
+      l.pct = total ? l.total/total*100 : 0;
+      acum += l.pct; l.pctAcum = acum;
+      l.curva = (acum - l.pct) < 80 ? 'A' : ((acum - l.pct) < 95 ? 'B' : 'C');
+      l.ticket = l.tEnt ? l.total/l.tEnt : 0;
+      l.vUlt = mUlt ? (l.vals[mUlt]||0) : 0;
+      l.vPen = mPen ? (l.vals[mPen]||0) : 0;
+      l.varMes = (l.vPen && l.vUlt) ? (l.vUlt-l.vPen)/l.vPen*100 : null;
+      l.posUlt = mUlt ? (posMes[mUlt][l.id]||null) : null;
+      l.posPen = mPen ? (posMes[mPen][l.id]||null) : null;
+      l.sub = l.bairro;
+    });
+
+    var bNome = bairroSel ? bairroNome(bairroSel, mapa) : '';
+    var nomeOrdem = {fat:'faturamento', un:'unidades', ent:'nº de entregas'}[ordem];
+    var html = '<div class="stitle" style="margin-top:0">Ranking de clientes — '+relTitulo(periodo)+(bNome?' — '+bNome:'')+'</div>';
+    if(!total) { area.innerHTML = html+relVazio('🏆','Nenhuma venda no período.'); btnA.style.display='none'; window._rkData=null; return; }
+
+    var top5 = linhas.slice(0,5).reduce(function(s,l){ return s+l.pct; },0);
+    var nA = linhas.filter(function(l){ return l.curva==='A'; }).length;
+    html += relResumo([
+      ['Faturamento no período', fmt(total)],
+      ['Clientes que compraram', linhas.length],
+      ['Cliente nº 1', linhas[0].nome, relPct(linhas[0].pct)+' das vendas'],
+      ['Top 5 clientes', relPct(top5), nA+' cliente(s) fazem 80% das vendas']
+    ]);
+    if(ordem!=='fat') html += '<div class="alert alert-i" style="margin-top:0">Ordenado por '+nomeOrdem+'. As porcentagens e a curva continuam calculadas pelo faturamento.</div>';
+
+    // Pódio / ranking em barras
+    var maxV = Math.max.apply(null, linhas.map(function(l){ return l[chaveOrdem]; })) || 1;
+    var corCurva = {A:'var(--g)', B:'#d9a12b', C:'#bbb'};
+    html += '<div class="card"><div style="font-size:12px;font-weight:700;margin-bottom:2px">Clientes em ordem de '+nomeOrdem+'</div>'+
+      '<div style="font-size:11px;color:#999;margin-bottom:10px">'+(mUlt&&mPen ? 'Setas: '+relLabelLongo(mUlt)+' comparado com '+relLabelLongo(mPen) : '')+'</div>';
+    linhas.forEach(function(l){
+      var w = Math.max(2, Math.round(l[chaveOrdem]/maxV*100));
+      var valor = ordem==='un' ? relNum(l.tUn)+' un' : (ordem==='ent' ? l.tEnt+' entrega(s)' : fmt(l.total));
+      var seta = '';
+      if(l.varMes!==null) seta = '<span style="color:'+(l.varMes>=0?'var(--g)':'var(--r)')+';font-weight:700;font-size:11px">'+(l.varMes>=0?'▲':'▼')+' '+Math.abs(l.varMes).toFixed(0)+'%</span>';
+      else if(l.vUlt && !l.vPen && mPen) seta = '<span style="color:var(--g);font-size:11px;font-weight:700">novo</span>';
+      else if(!l.vUlt && l.vPen) seta = '<span style="color:var(--r);font-size:11px;font-weight:700">não comprou</span>';
+      html += '<div style="margin-bottom:11px"><div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:3px;align-items:baseline">'+
+        '<span><b>'+(medalhas[l.pos-1]||l.pos+'º')+' '+l.nome+'</b> <span style="color:#999;font-size:11px">· '+l.bairro+'</span></span>'+
+        '<span style="white-space:nowrap"><b>'+valor+'</b> <span style="color:#999">'+relPct(l.pct)+'</span></span></div>'+
+        '<div style="background:#f0ede8;border-radius:4px;height:9px"><div style="width:'+w+'%;height:9px;border-radius:4px;background:'+corCurva[l.curva]+'"></div></div>'+
+        '<div style="display:flex;justify-content:space-between;font-size:10px;color:#999;margin-top:2px"><span>Curva '+l.curva+' · acum. '+relPct(l.pctAcum)+' · ticket '+fmt(l.ticket)+' · '+l.tEnt+' entrega(s)</span>'+seta+'</div></div>';
+    });
+    html += '<div style="font-size:10px;color:#999">Cor da barra: verde = curva A (juntos fazem 80% das vendas), amarelo = B (até 95%), cinza = C</div></div>';
+
+    // Matriz mês a mês com a posição do cliente em cada mês
+    html += relMatriz({titulo:'Compras por cliente, mês a mês (R$) — e a posição no mês', colNome:'Cliente', meses:meses, linhas:linhas,
+      cell:function(v,l,m){ return relMoeda(v)+(l.id!==undefined && posMes[m][l.id] ? '<div style="font-size:9px;color:#999">'+posMes[m][l.id]+'º</div>' : ''); },
+      cellTotal:function(l){ return relMoeda(l.total)+(l.pos ? '<div style="font-size:9px;color:#999">'+l.pos+'º</div>' : ''); },
+      linhaTotal:{nome:'Total', vals:porMes, total:total},
+      nota:'Embaixo de cada valor: posição do cliente no ranking daquele mês'});
+    html += relGrafico(meses, porMes, {titulo:'Faturamento por mês'+(bNome?' ('+bNome+')':''), fmtTip:fmt});
+
+    area.innerHTML = html; relRolarFim(area);
+    window._rkData = {meses:meses, linhas:linhas, porMes:porMes, posMes:posMes, total:total, titulo:relTitulo(periodo), bairro:bNome, ordem:nomeOrdem, mUlt:mUlt, mPen:mPen, top5:top5, nA:nA};
+    btnA.style.display = 'block';
+  } catch(err) { relErro(area, btnA, err); }
+}
+document.getElementById('btn-gerar-rkcli').addEventListener('click', gerarRankingClientes);
+document.getElementById('btn-xls-rkcli').addEventListener('click', function() {
+  var d = window._rkData; if(!relXlsOk(d)) return;
+  var r2 = function(n){ return Math.round(n*100)/100; };
+  var rows = [['Posição','Cliente','Bairro','Faturamento (R$)','% das vendas','% acumulado','Curva','Unidades','Entregas','Ticket médio (R$)',
+    (d.mUlt?relLabelLongo(d.mUlt):'Último mês')+' (R$)', (d.mPen?relLabelLongo(d.mPen):'Mês anterior')+' (R$)','Variação (%)']];
+  d.linhas.forEach(function(l){ rows.push([l.pos, l.nome, l.bairro, r2(l.total), r2(l.pct), r2(l.pctAcum), l.curva, l.tUn, l.tEnt, r2(l.ticket), r2(l.vUlt), r2(l.vPen), l.varMes===null?'':r2(l.varMes)]); });
+  rows.push(['','TOTAL','',r2(d.total),100,'','','','','','','','']);
+  var ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:8},{wch:30},{wch:20},{wch:16},{wch:12},{wch:12},{wch:7},{wch:10},{wch:10},{wch:14},{wch:18},{wch:18},{wch:12}];
+  var linhasM = d.linhas.concat([{nome:'TOTAL', bairro:'', vals:d.porMes, total:d.total}]);
+  var wsM = relPlanilha(['Cliente','Bairro'], d.meses, linhasM, function(l){ return [l.nome, l.bairro]; }, function(l,m){ return r2(l.vals[m]||0); }, function(l){ return r2(l.total); });
+  var wsP = relPlanilha(['Cliente','Bairro'], d.meses, d.linhas, function(l){ return [l.nome, l.bairro]; }, function(l,m){ return d.posMes[m][l.id]||''; }, function(l){ return l.pos; });
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Ranking'); XLSX.utils.book_append_sheet(wb, wsM, 'Compras mes a mes R$'); XLSX.utils.book_append_sheet(wb, wsP, 'Posicao mes a mes');
+  XLSX.writeFile(wb, relArq('Ranking_Clientes', d.titulo, d.bairro)); toast('Excel gerado!');
+});
+document.getElementById('btn-pdf-rkcli').addEventListener('click', function() {
+  var d = window._rkData; if(!d) return;
+  if(typeof window.jspdf === 'undefined') { toast('PDF indisponivel. Tente recarregar a pagina.'); return; }
+  try {
+    var doc = new window.jspdf.jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+    var VERDE = [42,122,59], CINZA = [140,140,140], TXT = [30,30,30];
+    var m = 14, PW = 210, PH = 297, W = PW-2*m, y = 0;
+    var hoje = new Date(), hojeTxt = ('0'+hoje.getDate()).slice(-2)+'/'+('0'+(hoje.getMonth()+1)).slice(-2)+'/'+hoje.getFullYear();
+    var sub = d.titulo+(d.bairro?' · '+d.bairro:'');
+    function cor(c){ doc.setTextColor(c[0],c[1],c[2]); }
+    function fonte(estilo, tam){ doc.setFont('helvetica', estilo); doc.setFontSize(tam); }
+    function corta(t, larg){ return doc.splitTextToSize(String(t), larg)[0]; }
+    function cabecalho(){
+      doc.setFillColor(VERDE[0],VERDE[1],VERDE[2]); doc.rect(0,0,PW,4,'F');
+      fonte('bold',15); cor(TXT); doc.text('Lelé da Kuka — Ranking de clientes', m, 16);
+      fonte('normal',9.5); cor(CINZA); doc.text(sub+'   ·   gerado em '+hojeTxt, m, 22);
+      y = 30;
+    }
+    cabecalho();
+    // Resumo
+    var caixas = [
+      ['FATURAMENTO NO PERÍODO', fmt(d.total), ''],
+      ['CLIENTES QUE COMPRARAM', String(d.linhas.length), ''],
+      ['CLIENTE Nº 1', d.linhas[0].nome, relPct(d.linhas[0].pct)+' das vendas'],
+      ['TOP 5 CLIENTES', relPct(d.top5), d.nA+' cliente(s) fazem 80%']
+    ];
+    var cw = (W-4)/2, ch = 20;
+    caixas.forEach(function(b, i){
+      var x = m + (i%2)*(cw+4), yy = y + Math.floor(i/2)*(ch+4);
+      if(i===0) doc.setFillColor(VERDE[0],VERDE[1],VERDE[2]); else doc.setFillColor(245,243,239);
+      doc.roundedRect(x, yy, cw, ch, 2, 2, 'F');
+      fonte('bold',7); doc.setTextColor(i===0?220:140, i===0?235:140, i===0?222:140); doc.text(b[0], x+cw/2, yy+5.5, {align:'center'});
+      fonte('bold',12); if(i===0) doc.setTextColor(255,255,255); else cor(TXT); doc.text(corta(b[1], cw-6), x+cw/2, yy+12, {align:'center'});
+      if(b[2]){ fonte('normal',8); cor(CINZA); doc.text(b[2], x+cw/2, yy+17, {align:'center'}); }
+    });
+    y += 2*ch + 4 + 10;
+    // Tabela do ranking
+    fonte('bold',11); cor(VERDE); doc.text('Clientes em ordem de '+d.ordem, m, y); y += 5;
+    if(d.mUlt && d.mPen){ fonte('normal',7.5); cor(CINZA); doc.text('Variação: '+relLabelLongo(d.mUlt)+' comparado com '+relLabelLongo(d.mPen), m, y); y += 5; }
+    var col = {pos:m, nome:m+9, bairro:m+70, fat:m+128, pct:m+144, curva:m+152, varr:m+W};
+    function cabTab(){
+      fonte('bold',7); cor(CINZA);
+      doc.text('#', col.pos, y); doc.text('CLIENTE', col.nome, y); doc.text('BAIRRO', col.bairro, y);
+      doc.text('FATURAMENTO', col.fat, y, {align:'right'}); doc.text('%', col.pct, y, {align:'right'}); doc.text('CURVA', col.curva, y);
+      doc.text('VAR. MÊS', col.varr, y, {align:'right'});
+      doc.setDrawColor(224,219,211); doc.setLineWidth(0.5); doc.line(m, y+1.5, m+W, y+1.5); doc.setLineWidth(0.2);
+      y += 6;
+    }
+    cabTab();
+    d.linhas.forEach(function(l, i){
+      if(y > PH-16){ doc.addPage(); cabecalho(); cabTab(); }
+      if(i%2===0){ doc.setFillColor(250,249,246); doc.rect(m, y-3.8, W, 5.6, 'F'); }
+      fonte('bold',8.3); cor(TXT); doc.text(l.pos+'º', col.pos, y);
+      doc.text(corta(l.nome, 58), col.nome, y);
+      fonte('normal',7.5); cor(CINZA); doc.text(corta(l.bairro, 40), col.bairro, y);
+      fonte('bold',8.3); cor(TXT); doc.text(relMoeda(l.total), col.fat, y, {align:'right'});
+      fonte('normal',7.8); cor(TXT); doc.text(relPct(l.pct), col.pct, y, {align:'right'});
+      var cc = l.curva==='A' ? VERDE : (l.curva==='B' ? [190,130,20] : CINZA); fonte('bold',8); cor(cc); doc.text(l.curva, col.curva+3, y);
+      var vt = '', vc = CINZA;
+      if(l.varMes!==null){ vt = (l.varMes>=0?'+':'-')+Math.abs(l.varMes).toFixed(0)+'%'; vc = l.varMes>=0 ? VERDE : [192,57,43]; }
+      else if(l.vUlt && !l.vPen && d.mPen){ vt = 'novo'; vc = VERDE; }
+      else if(!l.vUlt && l.vPen){ vt = 'não comprou'; vc = [192,57,43]; }
+      fonte('bold',7.8); cor(vc); doc.text(vt, col.varr, y, {align:'right'});
+      y += 5.6;
+    });
+    // Matriz mês a mês (paisagem, até 12 meses por bloco)
+    var blocos = [];
+    for(var b=0; b<d.meses.length; b+=12) blocos.push(d.meses.slice(b, b+12));
+    blocos.forEach(function(ms, bi){
+      doc.addPage('a4','landscape');
+      var LW = 297, LH = 210, lm = 10, lw = LW-2*lm, ymH2 = relYmHoje();
+      doc.setFillColor(VERDE[0],VERDE[1],VERDE[2]); doc.rect(0,0,LW,4,'F');
+      fonte('bold',13); cor(TXT); doc.text('Compras por cliente, mês a mês (R$)'+(blocos.length>1?' — parte '+(bi+1)+' de '+blocos.length:''), lm, 14);
+      fonte('normal',8.5); cor(CINZA); doc.text('Lelé da Kuka · '+sub+' · embaixo de cada valor: posição do cliente no mês', lm, 19.5);
+      var colNome = 50, colW = (lw-colNome)/(ms.length+1), ty = 28;
+      function cabM(){
+        fonte('bold',7); cor(CINZA); doc.text('CLIENTE', lm, ty);
+        ms.forEach(function(mm, j){ doc.text(relLabel(mm)+(mm===ymH2?'*':''), lm+colNome+colW*(j+1)-1, ty, {align:'right'}); });
+        doc.setTextColor(60,60,60); doc.text(blocos.length===1?'TOTAL':'SOMA DO BLOCO', lm+lw-1, ty, {align:'right'});
+        doc.setDrawColor(224,219,211); doc.setLineWidth(0.5); doc.line(lm, ty+1.5, lm+lw, ty+1.5); doc.setLineWidth(0.2);
+        ty += 6;
+      }
+      cabM();
+      d.linhas.concat([{nome:'Total', vals:d.porMes, _total:true}]).forEach(function(l){
+        if(ty+9 > LH-10){ doc.addPage('a4','landscape'); ty = 14; cabM(); }
+        if(l._total){ doc.setFillColor(247,245,241); doc.rect(lm, ty-3.8, lw, 9, 'F'); }
+        fonte('bold',7.2); cor(TXT); doc.text((l._total?'':l.pos+'º ')+corta(l.nome, colNome-8), lm, ty);
+        var tot = 0;
+        ms.forEach(function(mm, j){
+          var v = l.vals[mm]||0; tot += v; var x = lm+colNome+colW*(j+1)-1;
+          if(v){
+            fonte(l._total?'bold':'normal',7); cor(TXT); doc.text(relMoeda(v), x, ty, {align:'right'});
+            if(!l._total){ fonte('normal',5.8); cor(CINZA); doc.text(d.posMes[mm][l.id]+'º', x, ty+3, {align:'right'}); }
+          } else { fonte('normal',7); doc.setTextColor(200,200,200); doc.text('—', x, ty, {align:'right'}); }
+        });
+        fonte('bold',7.2); cor(TXT); doc.text(relMoeda(blocos.length===1 ? (l._total ? d.total : l.total) : tot), lm+lw-1, ty, {align:'right'});
+        doc.setDrawColor(235,232,226); doc.line(lm, ty+5, lm+lw, ty+5);
+        ty += 8.5;
+      });
+      if(ms.indexOf(ymH2)>=0){ fonte('normal',7); cor(CINZA); doc.text('* mês em andamento', lm, ty+2); }
+    });
+    var n = doc.getNumberOfPages();
+    for(var p=1; p<=n; p++){
+      doc.setPage(p);
+      var ps = doc.internal.pageSize, pw = ps.getWidth(), ph = ps.getHeight();
+      fonte('normal',7.5); cor(CINZA);
+      doc.text('Lelé da Kuka · Ranking de clientes · '+sub, 10, ph-6);
+      doc.text('Página '+p+' de '+n, pw-10, ph-6, {align:'right'});
+    }
+    doc.save(relArq('Ranking_Clientes', d.titulo, d.bairro).replace(/\.xlsx$/, '.pdf'));
+    toast('PDF gerado!');
+  } catch(err) { console.error('Erro no PDF do ranking:', err); toast('Erro ao gerar o PDF.'); }
 });
 
 // --- FLUXO DE CAIXA (a pagar + a receber) ---

@@ -699,7 +699,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
         <button class="btn btn-g" id="btn-gerar-bairro">Gerar relatório</button>
       </div>
       <div id="bairro-area"></div>
-      <div id="btn-xls-bairro-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-bairro">📊 Exportar Excel</button></div>
+      <div id="btn-xls-bairro-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-bairro">📊 Exportar Excel</button> <button class="btn btn-o" id="btn-pdf-bairro">📄 Baixar PDF</button></div>
     </div>
   </div>
 
@@ -5704,6 +5704,169 @@ document.getElementById('btn-xls-bairro').addEventListener('click', function() {
   XLSX.utils.book_append_sheet(wb, ws, 'Resumo por bairro'); XLSX.utils.book_append_sheet(wb, wsC, 'Clientes por bairro');
   XLSX.utils.book_append_sheet(wb, wsM, 'Bairro mes a mes R$'); XLSX.utils.book_append_sheet(wb, wsP, 'Bairro mes a mes %');
   XLSX.writeFile(wb, relArq('Vendas_por_Bairro', d.titulo)); toast('Excel gerado!');
+});
+// PDF do relatorio de vendas por bairro
+document.getElementById('btn-pdf-bairro').addEventListener('click', function() {
+  var d = window._bairroData; if(!d) return;
+  if(typeof window.jspdf === 'undefined') { toast('PDF indisponivel. Tente recarregar a pagina.'); return; }
+  try {
+    var doc = new window.jspdf.jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+    var VERDE = [42,122,59], CINZA = [140,140,140], TXT = [30,30,30];
+    var m = 14, PW = 210, PH = 297, W = PW-2*m, y = 0;
+    var hoje = new Date(), hojeTxt = ('0'+hoje.getDate()).slice(-2)+'/'+('0'+(hoje.getMonth()+1)).slice(-2)+'/'+hoje.getFullYear();
+    var semCad = D.clientes.filter(function(c){ return !bairroChave(c.bairro); }).length;
+    var comB = d.linhas.filter(function(g){ return g.chave!==BAIRRO_SEM; });
+    var sem = d.linhas.filter(function(g){ return g.chave===BAIRRO_SEM; })[0];
+
+    function cor(c){ doc.setTextColor(c[0],c[1],c[2]); }
+    function fonte(estilo, tam){ doc.setFont('helvetica', estilo); doc.setFontSize(tam); }
+    function cabecalho(){
+      doc.setFillColor(VERDE[0],VERDE[1],VERDE[2]); doc.rect(0,0,PW,4,'F');
+      fonte('bold',15); cor(TXT); doc.text('Lelé da Kuka — Vendas por bairro', m, 16);
+      fonte('normal',9.5); cor(CINZA); doc.text(d.titulo+'   ·   gerado em '+hojeTxt, m, 22);
+      y = 30;
+    }
+    function quebra(h){ if(y+h > PH-14){ doc.addPage(); cabecalho(); return true; } return false; }
+    function secao(t){ quebra(14); fonte('bold',11); cor(VERDE); doc.text(t, m, y); y += 6; }
+    function corta(t, larg){ return doc.splitTextToSize(String(t), larg)[0]; }
+
+    cabecalho();
+
+    // Resumo (4 caixas)
+    var caixas = [
+      ['FATURAMENTO NO PERÍODO', fmt(d.total), ''],
+      ['BAIRROS COM VENDA', String(comB.length), ''],
+      ['BAIRRO Nº 1', comB.length ? comB[0].nome : '—', comB.length ? relPct(comB[0].pct)+' das vendas' : ''],
+      ['SEM BAIRRO NO CADASTRO', semCad+' cliente(s)', sem && sem.total ? relPct(sem.pct)+' das vendas' : '']
+    ];
+    var cw = (W-4)/2, ch = 20;
+    caixas.forEach(function(b, i){
+      var x = m + (i%2)*(cw+4), yy = y + Math.floor(i/2)*(ch+4);
+      if(i===0) doc.setFillColor(VERDE[0],VERDE[1],VERDE[2]); else doc.setFillColor(245,243,239);
+      doc.roundedRect(x, yy, cw, ch, 2, 2, 'F');
+      fonte('bold',7); doc.setTextColor(i===0?220:140, i===0?235:140, i===0?222:140); doc.text(b[0], x+cw/2, yy+5.5, {align:'center'});
+      fonte('bold',12); if(i===0) doc.setTextColor(255,255,255); else cor(TXT); doc.text(corta(b[1], cw-6), x+cw/2, yy+12, {align:'center'});
+      if(b[2]){ fonte('normal',8); cor(CINZA); doc.text(b[2], x+cw/2, yy+17, {align:'center'}); }
+    });
+    y += 2*ch + 4 + 8;
+
+    // % das vendas por bairro (barras)
+    secao('% das vendas por bairro');
+    var maxPct = Math.max.apply(null, d.linhas.map(function(g){ return g.pct; })) || 1;
+    d.linhas.forEach(function(g, i){
+      quebra(10);
+      var semB = g.chave===BAIRRO_SEM;
+      fonte('bold',8.5); cor(TXT);
+      var nome = (semB?'':(i+1)+'º ')+g.nome;
+      doc.text(corta(nome, 100), m, y);
+      var wNome = Math.min(doc.getTextWidth(nome), 100);
+      fonte('normal',8); cor(CINZA); doc.text('· '+g.nAtendidos+' cliente(s)', m+wNome+1.5, y);
+      fonte('normal',8); cor(CINZA); var vTxt = fmt(g.total); doc.text(vTxt, m+W, y, {align:'right'});
+      fonte('bold',8.5); cor(TXT); doc.text(relPct(g.pct), m+W-doc.getTextWidth(vTxt)-2, y, {align:'right'});
+      doc.setFillColor(240,237,232); doc.roundedRect(m, y+1.5, W, 2.6, 1, 1, 'F');
+      if(semB) doc.setFillColor(187,187,187); else doc.setFillColor(VERDE[0],VERDE[1],VERDE[2]);
+      doc.roundedRect(m, y+1.5, Math.max(1, W*g.pct/maxPct), 2.6, 1, 1, 'F');
+      y += 8.5;
+    });
+    if(semCad){
+      quebra(8); fonte('italic',8); cor([150,110,20]);
+      doc.text(semCad+' cliente(s) sem bairro no cadastro — preencha o bairro (ou CEP) em Clientes para entrarem no bairro certo.', m, y); y += 6;
+    }
+    y += 4;
+
+    // Faturamento por mês (gráfico simples)
+    if(d.meses.length){
+      var gh = 38; quebra(gh+16);
+      secao('Faturamento por mês (todos os bairros)');
+      var maxM = Math.max.apply(null, d.meses.map(function(mm){ return d.porMes[mm]||0; })) || 1;
+      var slot = W/d.meses.length, bw = Math.min(10, slot*0.7), base = y+gh, ymH = relYmHoje();
+      d.meses.forEach(function(mm, i){
+        var v = d.porMes[mm]||0, h = v/maxM*(gh-8), cx = m + slot*i + slot/2;
+        if(mm===ymH) doc.setFillColor(156,199,166); else doc.setFillColor(VERDE[0],VERDE[1],VERDE[2]);
+        if(v) doc.rect(cx-bw/2, base-h, bw, h, 'F');
+        if(v && slot>=9){ fonte('normal',6); cor([100,100,100]); doc.text(relCurto(v), cx, base-h-1.2, {align:'center'}); }
+        fonte('normal',6.5); cor(CINZA); doc.text(relLabel(mm), cx, base+4, {align:'center'});
+      });
+      doc.setDrawColor(224,219,211); doc.line(m, base, m+W, base);
+      y = base + 8;
+      if(d.meses.indexOf(ymH)>=0){ fonte('normal',7); cor(CINZA); doc.text('Barra clara = mês em andamento', m, y); y += 5; }
+      y += 4;
+    }
+
+    // Clientes de cada bairro
+    secao('Clientes de cada bairro');
+    d.linhas.forEach(function(g){
+      quebra(14);
+      doc.setFillColor(245,243,239); doc.rect(m, y-4, W, 6, 'F');
+      fonte('bold',9); cor(TXT); doc.text(corta(g.nome, 120), m+2, y);
+      doc.text(relPct(g.pct)+'  ·  '+fmt(g.total), m+W-2, y, {align:'right'});
+      y += 6;
+      g.listaClis.forEach(function(c){
+        if(quebra(6)){ fonte('bold',8); cor(CINZA); doc.text(g.nome+' (continuação)', m+2, y); y += 5; }
+        fonte('normal',8.5); cor(TXT); doc.text(corta(c.nome, 105), m+5, y);
+        fonte('normal',7.5); cor(CINZA); doc.text(c.entregas+' entrega(s)', m+115, y);
+        fonte('bold',8.5); cor(TXT); doc.text(fmt(c.total), m+W-24, y, {align:'right'});
+        fonte('normal',7.5); cor(CINZA); doc.text(relPct(c.pctBairro)+' do bairro', m+W-2, y, {align:'right'});
+        y += 4.8;
+      });
+      y += 2.5;
+    });
+
+    // Matriz mês a mês (página deitada, até 12 meses por bloco)
+    var blocos = [];
+    for(var b=0; b<d.meses.length; b+=12) blocos.push(d.meses.slice(b, b+12));
+    blocos.forEach(function(ms, bi){
+      doc.addPage('a4','landscape');
+      var LW = 297, LH = 210, lm = 10, lw = LW-2*lm;
+      doc.setFillColor(VERDE[0],VERDE[1],VERDE[2]); doc.rect(0,0,LW,4,'F');
+      fonte('bold',13); cor(TXT); doc.text('Faturamento por bairro, mês a mês (R$)'+(blocos.length>1?' — parte '+(bi+1)+' de '+blocos.length:''), lm, 14);
+      fonte('normal',8.5); cor(CINZA); doc.text('Lelé da Kuka · '+d.titulo+' · embaixo de cada valor: % do bairro nas vendas daquele mês', lm, 19.5);
+      var colNome = 46, colW = (lw-colNome)/(ms.length+1), ty = 28, ymH2 = relYmHoje();
+      var ultimoBloco = bi===blocos.length-1;
+      function cabTab(){
+        fonte('bold',7); cor(CINZA);
+        doc.text('BAIRRO', lm, ty);
+        ms.forEach(function(mm, j){ doc.text(relLabel(mm)+(mm===ymH2?'*':''), lm+colNome+colW*(j+1)-1, ty, {align:'right'}); });
+        doc.setTextColor(60,60,60); doc.text(blocos.length===1?'TOTAL':'SOMA DO BLOCO', lm+lw-1, ty, {align:'right'});
+        doc.setDrawColor(224,219,211); doc.setLineWidth(0.5); doc.line(lm, ty+1.5, lm+lw, ty+1.5); doc.setLineWidth(0.2);
+        ty += 6;
+      }
+      cabTab();
+      var linhasM = d.linhas.concat([{nome:'Total', vals:d.porMes, _total:true}]);
+      linhasM.forEach(function(l){
+        if(ty+9 > LH-10){ doc.addPage('a4','landscape'); ty = 14; cabTab(); }
+        if(l._total){ doc.setFillColor(247,245,241); doc.rect(lm, ty-3.8, lw, 9, 'F'); }
+        fonte('bold',7.2); cor(TXT); doc.text(doc.splitTextToSize(String(l.nome), colNome-3).slice(0,2), lm, ty, {lineHeightFactor:1.05});
+        var tot = 0;
+        ms.forEach(function(mm, j){
+          var v = l.vals[mm]||0; tot += v; var x = lm+colNome+colW*(j+1)-1;
+          if(v){
+            fonte(l._total?'bold':'normal',7); cor(TXT); doc.text(relMoeda(v), x, ty, {align:'right'});
+            fonte('normal',5.8); cor(CINZA); doc.text(relPct(d.porMes[mm] ? v/d.porMes[mm]*100 : 0), x, ty+3, {align:'right'});
+          } else { fonte('normal',7); doc.setTextColor(200,200,200); doc.text('—', x, ty, {align:'right'}); }
+        });
+        var tGeral = blocos.length===1 ? (l._total ? d.total : l.total) : tot;
+        fonte('bold',7.2); cor(TXT); doc.text(relMoeda(tGeral), lm+lw-1, ty, {align:'right'});
+        var tMes = ms.reduce(function(s,mm){ return s+(d.porMes[mm]||0); },0);
+        fonte('normal',5.8); cor(CINZA); doc.text(relPct(tMes ? tGeral/tMes*100 : 0), lm+lw-1, ty+3, {align:'right'});
+        doc.setDrawColor(235,232,226); doc.line(lm, ty+5, lm+lw, ty+5);
+        ty += 8.5;
+      });
+      if(ms.indexOf(ymH2)>=0){ fonte('normal',7); cor(CINZA); doc.text('* mês em andamento', lm, ty+2); }
+    });
+
+    // Rodapé com número de página
+    var n = doc.getNumberOfPages();
+    for(var p=1; p<=n; p++){
+      doc.setPage(p);
+      var ps = doc.internal.pageSize, pw = ps.getWidth(), ph = ps.getHeight();
+      fonte('normal',7.5); cor(CINZA);
+      doc.text('Lelé da Kuka · Vendas por bairro · '+d.titulo, 10, ph-6);
+      doc.text('Página '+p+' de '+n, pw-10, ph-6, {align:'right'});
+    }
+    doc.save(relArq('Vendas_por_Bairro', d.titulo).replace(/\.xlsx$/, '.pdf'));
+    toast('PDF gerado!');
+  } catch(err) { console.error('Erro no PDF por bairro:', err); toast('Erro ao gerar o PDF.'); }
 });
 
 // --- FLUXO DE CAIXA (a pagar + a receber) ---

@@ -649,7 +649,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
         <div style="font-size:11px;color:#999;margin-top:6px">Deixe o cliente em branco para ver todos. Na tabela, toque no nome de um cliente para abrir a ficha dele.</div>
       </div>
       <div id="trocas-area"></div>
-      <div id="btn-xls-trocas-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-trocas">📊 Exportar Excel</button></div>
+      <div id="btn-xls-trocas-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-trocas">📊 Exportar Excel</button> <button class="btn btn-o" id="btn-pdf-trocas">📄 Baixar PDF</button></div>
     </div>
 
     <div class="relat-sub" id="rs-rinad" style="display:none">
@@ -5197,7 +5197,7 @@ function gerarTrocasGeral() {
       linhaTotal:{nome:'Total', vals:(function(){ var o={}; meses.forEach(function(m){ if(mesTroca[m]) o[m]=1; }); return o; })(), total:1, troc:mesTroca, comp:mesComp, valor:mesValor, tTroc:tTroc, tComp:tComp, tValor:tValor},
       nota:'Em vermelho = acima de 20% (limite da política de troca). Embaixo: unidades trocadas · valor (R$)'});
     area.innerHTML = html; relRolarFim(area);
-    window._trocasData = {modo:'geral', meses:meses, linhas:linhas, titulo:relTitulo(periodo)};
+    window._trocasData = {modo:'geral', meses:meses, linhas:linhas, titulo:relTitulo(periodo), tComp:tComp, tTroc:tTroc, tValor:tValor, mesComp:mesComp, mesTroca:mesTroca, mesValor:mesValor};
     btnA.style.display = 'block';
   } catch(err) { relErro(area, btnA, err); }
 }
@@ -5381,7 +5381,7 @@ function gerarTrocasCliente(cliId) {
     area.innerHTML = html; relRolarFim(area);
     document.getElementById('btn-tc-voltar').onclick = tcVoltar;
     document.getElementById('tc-so-troca').onchange = function(){ window._tcSoTroca = this.checked; gerarTrocasCliente(cliId); };
-    window._trocasData = {modo:'cliente', cliente:nome, meses:meses, linhas:linhas, ents:ents, titulo:relTitulo(periodo), tComp:tComp, tTroc:tTroc, tBonif:tBonif, tValor:tValor, mComp:mComp, mTroc:mTroc};
+    window._trocasData = {modo:'cliente', cliente:nome, bairro:c.bairro||'', cnpj:c.cnpj||'', entComTroca:entComTroca, soTroca:soTroca, meses:meses, linhas:linhas, ents:ents, titulo:relTitulo(periodo), tComp:tComp, tTroc:tTroc, tBonif:tBonif, tValor:tValor, mComp:mComp, mTroc:mTroc};
     btnA.style.display = 'block';
   } catch(err) { relErro(area, btnA, err); }
 }
@@ -5413,6 +5413,216 @@ function tcExcelCliente(d) {
   XLSX.utils.book_append_sheet(wb, wsP, '% troca por mes'); XLSX.utils.book_append_sheet(wb, wsE, 'Entregas');
   XLSX.writeFile(wb, relArq('Trocas', d.titulo, d.cliente)); toast('Excel gerado!');
 }
+
+// ===== PDF DO RELATORIO DE TROCAS (geral ou ficha do cliente) =====
+function tcPdf() {
+  var d = window._trocasData; if(!d) return;
+  if(typeof window.jspdf === 'undefined') { toast('PDF indisponivel. Tente recarregar a pagina.'); return; }
+  try {
+    var doc = new window.jspdf.jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+    var VERDE = [42,122,59], LARANJA = [217,130,43], VERM = [192,57,43], CINZA = [140,140,140], TXT = [30,30,30];
+    var m = 14, PW = 210, PH = 297, W = PW-2*m, y = 0;
+    var hoje = new Date(), hojeTxt = ('0'+hoje.getDate()).slice(-2)+'/'+('0'+(hoje.getMonth()+1)).slice(-2)+'/'+hoje.getFullYear();
+    var ehCli = d.modo==='cliente';
+    var titulo = ehCli ? 'Trocas — '+d.cliente : 'Lelé da Kuka — Trocas por cliente';
+    var sub = (ehCli ? [d.bairro, d.cnpj].filter(Boolean).concat([d.titulo]).join(' · ') : d.titulo);
+    var ymH = relYmHoje();
+    function cor(c){ doc.setTextColor(c[0],c[1],c[2]); }
+    function fonte(estilo, tam){ doc.setFont('helvetica', estilo); doc.setFontSize(tam); }
+    function corta(t, larg){ return doc.splitTextToSize(String(t), larg)[0]; }
+    function cabecalho(){
+      doc.setFillColor(VERDE[0],VERDE[1],VERDE[2]); doc.rect(0,0,PW,4,'F');
+      fonte('bold',15); cor(TXT); doc.text(corta(titulo, W), m, 16);
+      fonte('normal',9.5); cor(CINZA); doc.text(corta(sub+'   ·   gerado em '+hojeTxt, W), m, 22);
+      y = 30;
+    }
+    function quebra(h){ if(y+h > PH-16){ doc.addPage('a4','portrait'); cabecalho(); return true; } return false; }
+    function secao(t){ quebra(16); fonte('bold',11); cor(VERDE); doc.text(t, m, y); y += 6; }
+    function caixas(lista){
+      var cw = (W-4)/2, ch = 20;
+      lista.forEach(function(b, i){
+        var x = m + (i%2)*(cw+4), yy = y + Math.floor(i/2)*(ch+4);
+        if(i===0) doc.setFillColor(VERDE[0],VERDE[1],VERDE[2]); else doc.setFillColor(245,243,239);
+        doc.roundedRect(x, yy, cw, ch, 2, 2, 'F');
+        fonte('bold',7); doc.setTextColor(i===0?220:140, i===0?235:140, i===0?222:140); doc.text(b[0], x+cw/2, yy+5.5, {align:'center'});
+        fonte('bold',12); if(i===0) doc.setTextColor(255,255,255); else cor(TXT); doc.text(corta(b[1], cw-6), x+cw/2, yy+12, {align:'center'});
+        if(b[2]){ fonte('normal',8); if(i===0) doc.setTextColor(225,240,228); else cor(CINZA); doc.text(corta(b[2], cw-6), x+cw/2, yy+17, {align:'center'}); }
+      });
+      y += 2*ch + 4 + 10;
+    }
+    function pctTxt(comp, troc){ return comp ? relPct(troc/comp*100) : (troc ? '100,0%' : '—'); }
+    // Gráfico de barras (1 ou 2 séries)
+    function grafico(t, v1, v2, n1, n2){
+      if(!d.meses.length) return;
+      var gh = 40; quebra(gh+20); secao(t);
+      if(v2){
+        fonte('normal',7.5);
+        doc.setFillColor(VERDE[0],VERDE[1],VERDE[2]); doc.rect(m+W-58, y-8.5, 3, 3, 'F'); cor(TXT); doc.text(n1, m+W-54, y-6);
+        doc.setFillColor(LARANJA[0],LARANJA[1],LARANJA[2]); doc.rect(m+W-30, y-8.5, 3, 3, 'F'); doc.text(n2, m+W-26, y-6);
+      }
+      var max = 0; d.meses.forEach(function(mm){ max = Math.max(max, v1[mm]||0, v2?(v2[mm]||0):0); }); if(!max) max = 1;
+      var slot = W/d.meses.length, base = y+gh, bw = Math.min(v2?6:10, slot*(v2?0.38:0.7));
+      d.meses.forEach(function(mm, i){
+        var cx = m + slot*i + slot/2, parc = mm===ymH;
+        function barra(v, c, x){ if(!v) return; var h = v/max*(gh-8); doc.setFillColor(parc?Math.min(255,c[0]+90):c[0], parc?Math.min(255,c[1]+70):c[1], parc?Math.min(255,c[2]+90):c[2]); doc.rect(x, base-h, bw, h, 'F');
+          if(slot>=9){ fonte('normal',5.8); cor([100,100,100]); doc.text(relCurto(v), x+bw/2, base-h-1.2, {align:'center'}); } }
+        if(v2){ barra(v1[mm]||0, VERDE, cx-bw-0.4); barra(v2[mm]||0, LARANJA, cx+0.4); }
+        else barra(v1[mm]||0, VERDE, cx-bw/2);
+        fonte('normal',6.5); cor(CINZA); doc.text(relLabel(mm), cx, base+4, {align:'center'});
+      });
+      doc.setDrawColor(224,219,211); doc.line(m, base, m+W, base);
+      y = base + 8;
+      if(d.meses.indexOf(ymH)>=0){ fonte('normal',7); cor(CINZA); doc.text('Barra clara = mês em andamento', m, y); y += 5; }
+      y += 4;
+    }
+    // Tabela mês a mês em página deitada (até 12 meses por bloco)
+    function matriz(t, nota, linhas, totalLinha, celula){
+      var blocos = []; for(var b=0; b<d.meses.length; b+=12) blocos.push(d.meses.slice(b, b+12));
+      blocos.forEach(function(ms, bi){
+        doc.addPage('a4','landscape');
+        var LW = 297, LH = 210, lm = 10, lw = LW-2*lm;
+        doc.setFillColor(VERDE[0],VERDE[1],VERDE[2]); doc.rect(0,0,LW,4,'F');
+        fonte('bold',13); cor(TXT); doc.text(t+(blocos.length>1?' — parte '+(bi+1)+' de '+blocos.length:''), lm, 14);
+        fonte('normal',8.5); cor(CINZA); doc.text(corta((ehCli?d.cliente+' · ':'Lelé da Kuka · ')+sub+' · '+nota, lw), lm, 19.5);
+        var colNome = 52, colW = (lw-colNome)/(ms.length+1), ty = 28;
+        function cab(){
+          fonte('bold',7); cor(CINZA); doc.text(ehCli?'PRODUTO':'CLIENTE', lm, ty);
+          ms.forEach(function(mm, j){ doc.text(relLabel(mm)+(mm===ymH?'*':''), lm+colNome+colW*(j+1)-1, ty, {align:'right'}); });
+          doc.setTextColor(60,60,60); doc.text(blocos.length===1?'PERÍODO':'BLOCO', lm+lw-1, ty, {align:'right'});
+          doc.setDrawColor(224,219,211); doc.setLineWidth(0.5); doc.line(lm, ty+1.5, lm+lw, ty+1.5); doc.setLineWidth(0.2);
+          ty += 6;
+        }
+        cab();
+        linhas.concat([totalLinha]).forEach(function(l){
+          if(ty+9 > LH-12){ doc.addPage('a4','landscape'); ty = 14; cab(); }
+          if(l._total){ doc.setFillColor(247,245,241); doc.rect(lm, ty-3.8, lw, 9, 'F'); }
+          else if(l._alto){ doc.setFillColor(253,236,234); doc.rect(lm, ty-3.8, lw, 9, 'F'); }
+          fonte('bold',7.2); cor(TXT); doc.text(doc.splitTextToSize(String(l._nome), colNome-3).slice(0,2), lm, ty, {lineHeightFactor:1.05});
+          var sc = 0, st = 0, sv = 0;
+          ms.forEach(function(mm, j){
+            var x = lm+colNome+colW*(j+1)-1, cp = l.comp[mm]||0, tr = l.troc[mm]||0, vl = (l.valor||{})[mm]||0;
+            sc += cp; st += tr; sv += vl;
+            if(!cp && !tr){ fonte('normal',7); doc.setTextColor(200,200,200); doc.text('—', x, ty, {align:'right'}); return; }
+            celula(x, ty, cp, tr, vl, l._total);
+          });
+          var x2 = lm+lw-1;
+          if(blocos.length===1) celula(x2, ty, l.tComp, l.tTroc, l.tValor||0, true); else celula(x2, ty, sc, st, sv, true);
+          doc.setDrawColor(235,232,226); doc.line(lm, ty+5, lm+lw, ty+5);
+          ty += 8.5;
+        });
+        fonte('normal',7); cor(CINZA); doc.text((ms.indexOf(ymH)>=0?'* mês em andamento · ':'')+'em vermelho = acima de 20% (limite da política de troca)', lm, ty+2);
+      });
+    }
+    function celPct(x, ty, cp, tr, vl, negrito, mostraValor){
+      var pct = cp ? tr/cp*100 : (tr ? 100 : 0), alto = pct>20;
+      fonte(negrito?'bold':'normal',7.2); cor(alto?VERM:(tr?TXT:CINZA)); doc.text(tr?relPct(pct):'0%', x, ty, {align:'right'});
+      fonte('normal',5.8); cor(CINZA); doc.text(mostraValor ? relNum(tr)+' un · '+relMoeda(vl) : relNum(cp)+' / '+relNum(tr), x, ty+3, {align:'right'});
+    }
+
+    cabecalho();
+    if(ehCli) {
+      var pctG = d.tComp ? d.tTroc/d.tComp*100 : 0;
+      caixas([
+        ['% TROCADO NO PERÍODO', relPct(pctG), pctG>20 ? 'acima do limite de 20%' : 'dentro do limite de 20%'],
+        ['UNIDADES COMPRADAS', relNum(d.tComp)+' un', d.tBonif ? '+ '+relNum(d.tBonif)+' un de bonificação' : ''],
+        ['UNIDADES TROCADAS', relNum(d.tTroc)+' un', fmt(d.tValor)+' em trocas'],
+        ['ENTREGAS COM TROCA', d.entComTroca+' de '+d.ents.length, d.ents.length ? relPct(d.entComTroca/d.ents.length*100)+' das entregas' : '']
+      ]);
+      // Por produto
+      secao('Comprou x trocou por produto (período todo)');
+      var cx = {nome:m, comp:m+100, bonif:m+125, troc:m+150, pct:m+W};
+      function cabP(){ fonte('bold',7); cor(CINZA); doc.text('PRODUTO', cx.nome, y); doc.text('COMPROU', cx.comp, y, {align:'right'});
+        doc.text('BONIF.', cx.bonif, y, {align:'right'}); doc.text('TROCOU', cx.troc, y, {align:'right'}); doc.text('% TROCA', cx.pct, y, {align:'right'});
+        doc.setDrawColor(224,219,211); doc.setLineWidth(0.5); doc.line(m, y+1.5, m+W, y+1.5); doc.setLineWidth(0.2); y += 6; }
+      cabP();
+      d.linhas.concat([{nome:'Total', tComp:d.tComp, tBonif:d.tBonif, tTroc:d.tTroc, _total:true}]).forEach(function(p){
+        if(quebra(7)) cabP();
+        var pct = p.tComp ? p.tTroc/p.tComp*100 : (p.tTroc ? 100 : 0), alto = pct>20;
+        if(p._total){ doc.setFillColor(247,245,241); doc.rect(m, y-3.8, W, 5.8, 'F'); }
+        else if(alto){ doc.setFillColor(253,236,234); doc.rect(m, y-3.8, W, 5.8, 'F'); }
+        fonte('bold',8.5); cor(TXT); doc.text(p.nome, cx.nome+1, y);
+        fonte(p._total?'bold':'normal',8.5);
+        doc.text(relNum(p.tComp), cx.comp, y, {align:'right'}); doc.text(p.tBonif?relNum(p.tBonif):'—', cx.bonif, y, {align:'right'});
+        doc.text(p.tTroc?relNum(p.tTroc):'—', cx.troc, y, {align:'right'});
+        fonte('bold',8.5); cor(alto?VERM:TXT); doc.text(p.tTroc?relPct(pct):'—', cx.pct, y, {align:'right'});
+        y += 5.8;
+      });
+      fonte('normal',7); cor(CINZA); doc.text('% troca = unidades trocadas ÷ unidades compradas', m, y+1); y += 9;
+      grafico('Comprou x trocou por mês (unidades)', d.mComp, d.mTroc, 'Comprou', 'Trocou');
+
+      // Entregas
+      var lista = d.soTroca ? d.ents.filter(function(e){ return Object.keys(e.trocas||{}).some(function(k){ return e.trocas[k]>0; }); }) : d.ents;
+      secao('Entregas'+(d.soTroca?' com troca':'')+' ('+lista.length+')');
+      if(!lista.length){ fonte('normal',8.5); cor(CINZA); doc.text('Nenhuma entrega com troca no período.', m, y); y += 6; }
+      function itens(o){ return Object.keys(o||{}).filter(function(k){ return o[k]>0; }).map(function(k){ return (NOME[k]||k)+' '+o[k]; }).join(' · '); }
+      lista.forEach(function(e, i){
+        var compStr = itens(e.produtos), trocStr = itens(e.trocas), bonStr = itens(e.bonificacao);
+        var lc = doc.splitTextToSize('Comprou: '+(compStr||'—'), W-62);
+        var h = 5 + lc.length*3.8 + (trocStr?3.8:0) + (bonStr?3.8:0);
+        quebra(h+2);
+        if(i%2===0){ doc.setFillColor(250,249,246); doc.rect(m, y-3.8, W, h, 'F'); }
+        fonte('bold',8.5); cor(TXT); doc.text(fdata(e.data), m+1, y);
+        fonte('bold',8.5); doc.text(fmt(e.valorTotal), m+W-1, y, {align:'right'});
+        if(e.valorTroca){ fonte('normal',7.5); cor(VERM); doc.text('troca: -'+fmt(e.valorTroca), m+W-1, y+3.8, {align:'right'}); }
+        var yy = y; fonte('normal',7.8); cor([80,80,80]); doc.text(lc, m+22, yy); yy += lc.length*3.8;
+        if(trocStr){ cor(VERM); doc.text(corta('Trocou: '+trocStr, W-62), m+22, yy); yy += 3.8; }
+        if(bonStr){ cor([43,108,176]); doc.text(corta('Bonificação: '+bonStr, W-62), m+22, yy); yy += 3.8; }
+        y += h;
+      });
+
+      // Mês a mês por produto
+      var linhasM = d.linhas.map(function(p){ var pct = p.tComp ? p.tTroc/p.tComp*100 : 0; return {_nome:p.nome, comp:p.comp, troc:p.troc, tComp:p.tComp, tTroc:p.tTroc, _alto:pct>20}; });
+      matriz('Mês a mês por produto', 'número grande = % trocado; embaixo = comprou / trocou (un)', linhasM,
+        {_nome:'Total', comp:d.mComp, troc:d.mTroc, tComp:d.tComp, tTroc:d.tTroc, _total:true},
+        function(x, ty, cp, tr, vl, neg){ celPct(x, ty, cp, tr, vl, neg, false); });
+    } else {
+      var acima = d.linhas.filter(function(l){ return l.pct>20; }).length;
+      caixas([
+        ['VALOR TROCADO NO PERÍODO', fmt(d.tValor), ''],
+        ['UNIDADES TROCADAS', relNum(d.tTroc)+' un', 'de '+relNum(d.tComp)+' compradas'],
+        ['% TROCADO GERAL', d.tComp ? relPct(d.tTroc/d.tComp*100) : '—', ''],
+        ['ACIMA DE 20%', acima+' cliente(s)', 'limite da política de troca']
+      ]);
+      secao('Clientes por % trocado');
+      var col = {pos:m, nome:m+8, comp:m+92, troc:m+112, pct:m+132, val:m+158, ent:m+W};
+      function cabG(){ fonte('bold',7); cor(CINZA); doc.text('#', col.pos, y); doc.text('CLIENTE', col.nome, y);
+        doc.text('COMPROU', col.comp, y, {align:'right'}); doc.text('TROCOU', col.troc, y, {align:'right'}); doc.text('% TROCA', col.pct, y, {align:'right'});
+        doc.text('VALOR TROCA', col.val, y, {align:'right'}); doc.text('ENTR. C/ TROCA', col.ent, y, {align:'right'});
+        doc.setDrawColor(224,219,211); doc.setLineWidth(0.5); doc.line(m, y+1.5, m+W, y+1.5); doc.setLineWidth(0.2); y += 6; }
+      cabG();
+      d.linhas.forEach(function(l, i){
+        var alto = l.pct>20, h = l.prodTop ? 8.6 : 5.8;
+        if(quebra(h)) cabG();
+        if(alto){ doc.setFillColor(253,236,234); doc.rect(m, y-3.8, W, h, 'F'); }
+        else if(i%2===0){ doc.setFillColor(250,249,246); doc.rect(m, y-3.8, W, h, 'F'); }
+        fonte('bold',8.3); cor(TXT); doc.text((i+1)+'º', col.pos, y); doc.text(corta(relCli(l.id), 82), col.nome, y);
+        fonte('normal',8.3); doc.text(relNum(l.tComp), col.comp, y, {align:'right'}); doc.text(relNum(l.tTroc), col.troc, y, {align:'right'});
+        fonte('bold',8.3); cor(alto?VERM:TXT); doc.text(relPct(l.pct), col.pct, y, {align:'right'});
+        fonte('normal',8.3); cor(TXT); doc.text(relMoeda(l.tValor), col.val, y, {align:'right'}); doc.text(String(l.entregasComTroca), col.ent, y, {align:'right'});
+        if(l.prodTop){ fonte('normal',6.8); cor(CINZA); doc.text(corta(l.prodTop, 120), col.nome, y+3.3); }
+        y += h;
+      });
+      fonte('normal',7); cor(CINZA); doc.text('Em vermelho = acima de 20% (limite da política de troca)', m, y+1); y += 9;
+      grafico('Valor das trocas por mês (R$)', d.mesValor||{}, null);
+      var linhasM = d.linhas.map(function(l){ return {_nome:relCli(l.id), comp:l.comp, troc:l.troc, valor:l.valor, tComp:l.tComp, tTroc:l.tTroc, tValor:l.tValor, _alto:l.pct>20}; });
+      matriz('% trocado por cliente, mês a mês', 'embaixo: unidades trocadas · valor (R$)', linhasM,
+        {_nome:'Total', comp:d.mesComp||{}, troc:d.mesTroca||{}, valor:d.mesValor||{}, tComp:d.tComp, tTroc:d.tTroc, tValor:d.tValor, _total:true},
+        function(x, ty, cp, tr, vl, neg){ celPct(x, ty, cp, tr, vl, neg, true); });
+    }
+    var n = doc.getNumberOfPages();
+    for(var p=1; p<=n; p++){
+      doc.setPage(p);
+      var ps = doc.internal.pageSize, pw = ps.getWidth(), ph = ps.getHeight();
+      fonte('normal',7.5); cor(CINZA);
+      doc.text(corta('Lelé da Kuka · '+(ehCli?'Trocas — '+d.cliente:'Trocas por cliente')+' · '+d.titulo, pw-50), 10, ph-6);
+      doc.text('Página '+p+' de '+n, pw-10, ph-6, {align:'right'});
+    }
+    doc.save(relArq('Trocas', d.titulo, ehCli ? d.cliente : '').replace(/\.xlsx$/, '.pdf'));
+    toast('PDF gerado!');
+  } catch(err) { console.error('Erro no PDF de trocas:', err); toast('Erro ao gerar o PDF.'); }
+}
+
+document.getElementById('btn-pdf-trocas').addEventListener('click', tcPdf);
 
 // ===== INADIMPLENCIA POR CLIENTE =====
 function gerarInad() {

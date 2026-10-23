@@ -643,8 +643,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <div class="card">
         <div class="row2">
           <div class="field"><label>Período</label><select class="inp" id="rt-periodo"><option value="ult12">Últimos 12 meses</option></select></div>
+          <div class="field"><label>Cliente</label><input type="text" class="inp" id="rt-cliente" list="rt-cli-lista" placeholder="Todos — digite para buscar" autocomplete="off"><datalist id="rt-cli-lista"></datalist></div>
         </div>
         <button class="btn btn-g" id="btn-gerar-trocas">Gerar relatório</button>
+        <div style="font-size:11px;color:#999;margin-top:6px">Deixe o cliente em branco para ver todos. Na tabela, toque no nome de um cliente para abrir a ficha dele.</div>
       </div>
       <div id="trocas-area"></div>
       <div id="btn-xls-trocas-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-trocas">📊 Exportar Excel</button></div>
@@ -5144,7 +5146,7 @@ document.getElementById('btn-xls-abc').addEventListener('click', function() {
 });
 
 // ===== TROCAS POR CLIENTE =====
-function gerarTrocas() {
+function gerarTrocasGeral() {
   var area = document.getElementById('trocas-area'); if(!area) return;
   var btnA = document.getElementById('btn-xls-trocas-area');
   try {
@@ -5165,7 +5167,7 @@ function gerarTrocas() {
     });
     var linhas = Object.keys(porCli).map(function(id){
       var p = porCli[id];
-      p.nome = relCli(id);
+      p.nome = '<a href="#" class="tc-link" data-id="'+String(id).replace(/"/g,'&quot;')+'" style="color:inherit;text-decoration:underline dotted">'+relCli(id)+'</a>';
       p.pct = p.tComp ? p.tTroc/p.tComp*100 : 0;
       meses.forEach(function(m){ if(p.troc[m]) p.vals[m] = 1; });
       p.total = 1;
@@ -5195,25 +5197,222 @@ function gerarTrocas() {
       linhaTotal:{nome:'Total', vals:(function(){ var o={}; meses.forEach(function(m){ if(mesTroca[m]) o[m]=1; }); return o; })(), total:1, troc:mesTroca, comp:mesComp, valor:mesValor, tTroc:tTroc, tComp:tComp, tValor:tValor},
       nota:'Em vermelho = acima de 20% (limite da política de troca). Embaixo: unidades trocadas · valor (R$)'});
     area.innerHTML = html; relRolarFim(area);
-    window._trocasData = {meses:meses, linhas:linhas, titulo:relTitulo(periodo)};
+    window._trocasData = {modo:'geral', meses:meses, linhas:linhas, titulo:relTitulo(periodo)};
     btnA.style.display = 'block';
   } catch(err) { relErro(area, btnA, err); }
 }
 document.getElementById('btn-gerar-trocas').addEventListener('click', gerarTrocas);
+document.getElementById('trocas-area').addEventListener('click', function(ev){
+  var a = ev.target.closest ? ev.target.closest('.tc-link') : null;
+  if(!a) return; ev.preventDefault(); tcAbrirCliente(a.getAttribute('data-id'));
+});
+document.getElementById('rt-cliente').addEventListener('focus', tcPopularBusca);
+document.getElementById('rt-cliente').addEventListener('change', function(){ var id = tcClienteDigitado(); if(id && id!=='nenhum' && id!=='varios') gerarTrocasCliente(id); else if(!this.value.trim()) gerarTrocasGeral(); });
+document.getElementById('rt-cliente').addEventListener('keydown', function(ev){ if(ev.key==='Enter'){ ev.preventDefault(); gerarTrocas(); } });
 document.getElementById('btn-xls-trocas').addEventListener('click', function() {
   var d = window._trocasData; if(!relXlsOk(d)) return;
+  if(d.modo==='cliente') { tcExcelCliente(d); return; }
   var r1 = function(n){ return Math.round(n*10)/10; };
   var rows = [['Cliente','Un. compradas','Un. trocadas','% trocado','Valor troca (R$)','Entregas com troca','Produtos mais trocados']];
-  d.linhas.forEach(function(l){ rows.push([l.nome, l.tComp, l.tTroc, r1(l.pct), Math.round(l.tValor*100)/100, l.entregasComTroca, l.prodTop]); });
+  d.linhas.forEach(function(l){ rows.push([relCli(l.id), l.tComp, l.tTroc, r1(l.pct), Math.round(l.tValor*100)/100, l.entregasComTroca, l.prodTop]); });
   var ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = [{wch:26},{wch:14},{wch:14},{wch:10},{wch:16},{wch:16},{wch:40}];
-  var wsP = relPlanilha(['Cliente'], d.meses, d.linhas, function(l){ return [l.nome]; }, function(l,m){ return l.comp[m] ? r1((l.troc[m]||0)/l.comp[m]*100) : ''; }, function(l){ return r1(l.pct); });
-  var wsV = relPlanilha(['Cliente'], d.meses, d.linhas, function(l){ return [l.nome]; }, function(l,m){ return Math.round((l.valor[m]||0)*100)/100; }, function(l){ return Math.round(l.tValor*100)/100; });
-  var wsU = relPlanilha(['Cliente'], d.meses, d.linhas, function(l){ return [l.nome]; }, function(l,m){ return l.troc[m]||0; }, function(l){ return l.tTroc; });
+  var wsP = relPlanilha(['Cliente'], d.meses, d.linhas, function(l){ return [relCli(l.id)]; }, function(l,m){ return l.comp[m] ? r1((l.troc[m]||0)/l.comp[m]*100) : ''; }, function(l){ return r1(l.pct); });
+  var wsV = relPlanilha(['Cliente'], d.meses, d.linhas, function(l){ return [relCli(l.id)]; }, function(l,m){ return Math.round((l.valor[m]||0)*100)/100; }, function(l){ return Math.round(l.tValor*100)/100; });
+  var wsU = relPlanilha(['Cliente'], d.meses, d.linhas, function(l){ return [relCli(l.id)]; }, function(l,m){ return l.troc[m]||0; }, function(l){ return l.tTroc; });
   var wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Resumo'); XLSX.utils.book_append_sheet(wb, wsP, '% trocado por mes');
   XLSX.utils.book_append_sheet(wb, wsV, 'Valor troca por mes'); XLSX.utils.book_append_sheet(wb, wsU, 'Un trocadas por mes');
   XLSX.writeFile(wb, relArq('Trocas', d.titulo)); toast('Excel gerado!');
 });
+
+// ===== TROCAS: FICHA DE UM CLIENTE (comprou x trocou ao longo do tempo) =====
+var TC_PRODS = ['bola','integral','mini','las250','las500','suco','salada'];
+// Lista de clientes para a busca (nome que aparece -> id)
+function tcMapaClientes() {
+  var mapa = {}, usados = {};
+  (D.clientes||[]).slice().sort(function(a,b){ return (a.fantasia||a.nome||'').localeCompare(b.fantasia||b.nome||'','pt-BR',{sensitivity:'base'}); })
+    .forEach(function(c){
+      var nome = String(c.fantasia||c.nome||'Cliente').trim();
+      var rot = nome;
+      if(usados[bairroChave(rot)]) rot = nome+' ('+(c.bairro||c.cnpj||c.id)+')';
+      usados[bairroChave(rot)] = 1;
+      mapa[rot] = c.id;
+    });
+  return mapa;
+}
+function tcPopularBusca() {
+  var dl = document.getElementById('rt-cli-lista'); if(!dl) return;
+  var mapa = tcMapaClientes();
+  dl.innerHTML = Object.keys(mapa).map(function(n){ return '<option value="'+n.replace(/"/g,'&quot;')+'"></option>'; }).join('');
+  window._tcMapa = mapa;
+}
+// Descobre o cliente digitado (aceita sem acento / maiúsculas / pedaço único do nome)
+function tcClienteDigitado() {
+  var inp = document.getElementById('rt-cliente'); if(!inp) return null;
+  var txt = bairroChave(inp.value); if(!txt) return null;
+  var mapa = window._tcMapa || tcMapaClientes();
+  var nomes = Object.keys(mapa), exato = nomes.filter(function(n){ return bairroChave(n)===txt; });
+  if(exato.length) return mapa[exato[0]];
+  var parcial = nomes.filter(function(n){ return bairroChave(n).indexOf(txt)>=0; });
+  if(parcial.length===1) { inp.value = parcial[0]; return mapa[parcial[0]]; }
+  return parcial.length ? 'varios' : 'nenhum';
+}
+
+function gerarTrocas() {
+  tcPopularBusca();
+  var id = tcClienteDigitado();
+  var area = document.getElementById('trocas-area');
+  if(id==='nenhum' || id==='varios') {
+    var inp = document.getElementById('rt-cliente');
+    area.innerHTML = '<div class="alert alert-y">'+(id==='nenhum' ? 'Nenhum cliente encontrado com "'+inp.value+'".' : 'Mais de um cliente tem "'+inp.value+'" no nome — escolha um na lista que aparece ao digitar.')+'</div>';
+    document.getElementById('btn-xls-trocas-area').style.display = 'none';
+    return;
+  }
+  if(id) gerarTrocasCliente(id); else gerarTrocasGeral();
+}
+function tcAbrirCliente(id) {
+  var mapa = window._tcMapa || tcMapaClientes(), inp = document.getElementById('rt-cliente');
+  var rot = Object.keys(mapa).filter(function(n){ return mapa[n]==id; })[0];
+  if(inp && rot) inp.value = rot;
+  gerarTrocasCliente(id);
+  var a = document.getElementById('rs-rtrocas'); if(a && a.scrollIntoView) a.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function gerarTrocasCliente(cliId) {
+  var area = document.getElementById('trocas-area'); if(!area) return;
+  var btnA = document.getElementById('btn-xls-trocas-area');
+  try {
+    relPopularPeriodo('rt-periodo');
+    var periodo = relVal('rt-periodo') || 'ult12';
+    var c = D.clientes.find(function(x){ return x.id==cliId; }) || {};
+    var nome = relCli(cliId);
+    var ents = D.entregas.filter(function(e){ return e.data && e.clienteId==cliId; });
+    var meses = relMeses(periodo, ents.map(function(e){ return e.data; }));
+    var dentro = relNoPeriodo(meses);
+    ents = ents.filter(function(e){ return dentro(e.data); }).sort(function(a,b){ return a.data<b.data ? 1 : -1; });
+
+    var prod = {}; // por produto: comp/troc/bonif por mês e totais
+    function P(k){ if(!prod[k]) prod[k] = {key:k, nome:NOME[k]||k, comp:{}, troc:{}, bonif:{}, tComp:0, tTroc:0, tBonif:0, vals:{}}; return prod[k]; }
+    var mComp = {}, mTroc = {}, mValor = {}, tValor = 0, entComTroca = 0;
+    ents.forEach(function(e){
+      var m = e.data.slice(0,7), teve = false;
+      Object.keys(e.produtos||{}).forEach(function(k){ var q=e.produtos[k]||0; if(!q) return; var p=P(k); p.comp[m]=(p.comp[m]||0)+q; p.tComp+=q; mComp[m]=(mComp[m]||0)+q; });
+      Object.keys(e.trocas||{}).forEach(function(k){ var q=e.trocas[k]||0; if(!q) return; var p=P(k); p.troc[m]=(p.troc[m]||0)+q; p.tTroc+=q; mTroc[m]=(mTroc[m]||0)+q; teve = true; });
+      Object.keys(e.bonificacao||{}).forEach(function(k){ var q=e.bonificacao[k]||0; if(!q) return; var p=P(k); p.bonif[m]=(p.bonif[m]||0)+q; p.tBonif+=q; });
+      mValor[m]=(mValor[m]||0)+(e.valorTroca||0); tValor += e.valorTroca||0;
+      if(teve) entComTroca++;
+    });
+    var linhas = TC_PRODS.concat(Object.keys(prod).filter(function(k){ return TC_PRODS.indexOf(k)<0; }))
+      .filter(function(k){ return prod[k]; }).map(function(k){
+        var p = prod[k];
+        p.pct = p.tComp ? p.tTroc/p.tComp*100 : (p.tTroc ? 100 : 0);
+        meses.forEach(function(m){ if(p.comp[m]||p.troc[m]) p.vals[m]=1; });
+        p.total = 1;
+        if(p.pct>20) p.bg = 'var(--rl)';
+        return p;
+      });
+    var tComp = linhas.reduce(function(s,p){ return s+p.tComp; },0), tTroc = linhas.reduce(function(s,p){ return s+p.tTroc; },0);
+    var tBonif = linhas.reduce(function(s,p){ return s+p.tBonif; },0);
+    var pctG = tComp ? tTroc/tComp*100 : 0;
+
+    var html = '<div class="card" style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:12px 14px">'+
+      '<div><div style="font-size:16px;font-weight:900">'+nome+'</div><div style="font-size:11px;color:#888;margin-top:2px">'+[c.bairro, c.cnpj].filter(Boolean).join(' · ')+(c.bairro||c.cnpj?' · ':'')+'Trocas — '+relTitulo(periodo)+'</div></div>'+
+      '<button class="btn btn-o btn-sm" id="btn-tc-voltar" style="width:auto;white-space:nowrap">← Todos</button></div>';
+    if(!ents.length) {
+      area.innerHTML = html+relVazio('🔄','Este cliente não teve entregas no período escolhido. Tente "Todo o histórico".');
+      document.getElementById('btn-tc-voltar').onclick = tcVoltar;
+      btnA.style.display='none'; window._trocasData=null; return;
+    }
+    html += relResumo([
+      ['% trocado no período', relPct(pctG), pctG>20 ? '⚠️ acima do limite de 20%' : 'dentro do limite de 20%'],
+      ['Unidades compradas', relNum(tComp)+' un', tBonif ? '+ '+relNum(tBonif)+' un de bonificação' : ''],
+      ['Unidades trocadas', relNum(tTroc)+' un', fmt(tValor)+' em trocas'],
+      ['Entregas com troca', entComTroca+' de '+ents.length, ents.length ? relPct(entComTroca/ents.length*100)+' das entregas' : '']
+    ]);
+
+    // Por produto no período
+    var th = 'padding:6px 8px;text-align:right;font-size:10px;text-transform:uppercase;color:#888;white-space:nowrap;border-bottom:2px solid var(--b)';
+    var td = 'padding:7px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--b)';
+    html += '<div class="card" style="padding:10px"><div style="font-size:12px;font-weight:700;margin-bottom:8px">Comprou x trocou por produto (período todo)</div><div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
+      '<th style="'+th+';text-align:left">Produto</th><th style="'+th+'">Comprou</th>'+(tBonif?'<th style="'+th+'">Bonif.</th>':'')+'<th style="'+th+'">Trocou</th><th style="'+th+'">% troca</th></tr></thead><tbody>';
+    linhas.forEach(function(p){
+      var alto = p.pct>20;
+      html += '<tr style="'+(alto?'background:var(--rl)':'')+'"><td style="'+td+';text-align:left"><b>'+p.nome+'</b></td><td style="'+td+'">'+relNum(p.tComp)+'</td>'+
+        (tBonif?'<td style="'+td+'">'+(p.tBonif?relNum(p.tBonif):'—')+'</td>':'')+
+        '<td style="'+td+'">'+(p.tTroc?relNum(p.tTroc):'—')+'</td><td style="'+td+'"><b style="color:'+(alto?'var(--r)':(p.tTroc?'#333':'#bbb'))+'">'+(p.tTroc?relPct(p.pct):'—')+'</b></td></tr>';
+    });
+    html += '<tr style="background:#f7f5f1"><td style="'+td+';text-align:left"><b>Total</b></td><td style="'+td+'"><b>'+relNum(tComp)+'</b></td>'+(tBonif?'<td style="'+td+'"><b>'+relNum(tBonif)+'</b></td>':'')+
+      '<td style="'+td+'"><b>'+relNum(tTroc)+'</b></td><td style="'+td+'"><b style="color:'+(pctG>20?'var(--r)':'#333')+'">'+relPct(pctG)+'</b></td></tr></tbody></table></div>'+
+      '<div style="font-size:10px;color:#999;margin-top:6px">% troca = unidades trocadas ÷ unidades compradas. Em vermelho = acima de 20%</div></div>';
+
+    html += relGrafico(meses, mComp, {titulo:'Comprou x trocou por mês (unidades)', vals2:mTroc, nome1:'Comprou', nome2:'Trocou', fmtTip:function(v){ return relNum(v)+' un'; }});
+
+    // Mês a mês por produto
+    function cel(comp, troc) {
+      comp = comp||0; troc = troc||0;
+      var pct = comp ? troc/comp*100 : (troc ? 100 : 0), alto = pct>20;
+      return '<b style="color:'+(alto?'var(--r)':(troc?'#333':'#999'))+'">'+(troc?relPct(pct):'0%')+'</b><div style="font-size:9px;color:#999">'+relNum(comp)+' / '+relNum(troc)+'</div>';
+    }
+    var tot = {nome:'Total', vals:{}, total:1, comp:mComp, troc:mTroc, tComp:tComp, tTroc:tTroc};
+    meses.forEach(function(m){ if(mComp[m]||mTroc[m]) tot.vals[m]=1; });
+    html += relMatriz({titulo:'Mês a mês por produto', colNome:'Produto', meses:meses, linhas:linhas,
+      cell:function(v,l,m){ return cel(l.comp[m], l.troc[m]); }, cellTotal:function(l){ return cel(l.tComp, l.tTroc); }, linhaTotal:tot,
+      nota:'Número grande = % trocado no mês; embaixo = comprou / trocou (unidades)'});
+
+    // Histórico de entregas
+    var soTroca = window._tcSoTroca !== false;
+    var lista = soTroca ? ents.filter(function(e){ return Object.keys(e.trocas||{}).some(function(k){ return e.trocas[k]>0; }); }) : ents;
+    html += '<div class="card" style="padding:10px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px">'+
+      '<div style="font-size:12px;font-weight:700">Entregas ('+lista.length+')</div>'+
+      '<label style="font-size:11px;color:#666;display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="tc-so-troca" style="width:auto"'+(soTroca?' checked':'')+'> só as que tiveram troca</label></div>';
+    if(!lista.length) html += '<div style="font-size:12px;color:#999;padding:8px 0">Nenhuma entrega com troca no período.</div>';
+    lista.forEach(function(e){
+      var compStr = Object.keys(e.produtos||{}).filter(function(k){ return e.produtos[k]>0; }).map(function(k){ return (NOME[k]||k)+' '+e.produtos[k]; }).join(' · ');
+      var trocStr = Object.keys(e.trocas||{}).filter(function(k){ return e.trocas[k]>0; }).map(function(k){ return (NOME[k]||k)+' '+e.trocas[k]; }).join(' · ');
+      var bonStr = Object.keys(e.bonificacao||{}).filter(function(k){ return e.bonificacao[k]>0; }).map(function(k){ return (NOME[k]||k)+' '+e.bonificacao[k]; }).join(' · ');
+      html += '<div style="padding:8px 0;border-top:1px solid var(--b);font-size:12px">'+
+        '<div style="display:flex;justify-content:space-between;gap:8px"><b>'+fdata(e.data)+'</b><span style="white-space:nowrap">'+fmt(e.valorTotal)+(e.valorTroca?' <span style="color:var(--r);font-size:11px">(−'+fmt(e.valorTroca)+' troca)</span>':'')+'</span></div>'+
+        '<div style="color:#555;margin-top:3px">🛒 '+(compStr||'—')+'</div>'+
+        (trocStr?'<div style="color:var(--r);margin-top:2px">🔄 '+trocStr+'</div>':'')+
+        (bonStr?'<div style="color:#2b6cb0;margin-top:2px">🎁 '+bonStr+'</div>':'')+'</div>';
+    });
+    html += '</div>';
+
+    area.innerHTML = html; relRolarFim(area);
+    document.getElementById('btn-tc-voltar').onclick = tcVoltar;
+    document.getElementById('tc-so-troca').onchange = function(){ window._tcSoTroca = this.checked; gerarTrocasCliente(cliId); };
+    window._trocasData = {modo:'cliente', cliente:nome, meses:meses, linhas:linhas, ents:ents, titulo:relTitulo(periodo), tComp:tComp, tTroc:tTroc, tBonif:tBonif, tValor:tValor, mComp:mComp, mTroc:mTroc};
+    btnA.style.display = 'block';
+  } catch(err) { relErro(area, btnA, err); }
+}
+function tcVoltar() { var inp = document.getElementById('rt-cliente'); if(inp) inp.value = ''; gerarTrocasGeral(); }
+
+function tcExcelCliente(d) {
+  var r1 = function(n){ return Math.round(n*10)/10; };
+  var rows = [['Produto','Comprou (un)','Bonificação (un)','Trocou (un)','% troca']];
+  d.linhas.forEach(function(p){ rows.push([p.nome, p.tComp, p.tBonif, p.tTroc, p.tComp ? r1(p.tTroc/p.tComp*100) : '']); });
+  rows.push(['TOTAL', d.tComp, d.tBonif, d.tTroc, d.tComp ? r1(d.tTroc/d.tComp*100) : '']);
+  var ws = XLSX.utils.aoa_to_sheet(rows); ws['!cols'] = [{wch:20},{wch:14},{wch:16},{wch:12},{wch:10}];
+  var rowsM = [['Mês','Produto','Comprou (un)','Bonificação (un)','Trocou (un)','% troca']];
+  d.meses.forEach(function(m){ d.linhas.forEach(function(p){ var cp=p.comp[m]||0, tr=p.troc[m]||0, bn=p.bonif[m]||0;
+    if(cp||tr||bn) rowsM.push([relLabelLongo(m), p.nome, cp, bn, tr, cp ? r1(tr/cp*100) : '']); }); });
+  var wsM = XLSX.utils.aoa_to_sheet(rowsM); wsM['!cols'] = [{wch:18},{wch:20},{wch:14},{wch:16},{wch:12},{wch:10}];
+  var wsP = relPlanilha(['Produto'], d.meses, d.linhas.concat([{nome:'TOTAL', comp:d.mComp, troc:d.mTroc, tComp:d.tComp, tTroc:d.tTroc}]), function(l){ return [l.nome]; },
+    function(l,m){ return l.comp[m] ? r1((l.troc[m]||0)/l.comp[m]*100) : ''; }, function(l){ return l.tComp ? r1(l.tTroc/l.tComp*100) : ''; });
+  var rowsE = [['Data','Produto','Comprou (un)','Trocou (un)','Bonificação (un)','Valor entrega (R$)','Valor troca (R$)']];
+  d.ents.slice().reverse().forEach(function(e){
+    var ks = {}; ['produtos','trocas','bonificacao'].forEach(function(f){ Object.keys(e[f]||{}).forEach(function(k){ if(e[f][k]>0) ks[k]=1; }); });
+    Object.keys(ks).forEach(function(k, i){
+      rowsE.push([fdata(e.data), NOME[k]||k, (e.produtos||{})[k]||0, (e.trocas||{})[k]||0, (e.bonificacao||{})[k]||0,
+        i===0 ? Math.round((e.valorTotal||0)*100)/100 : '', i===0 ? Math.round((e.valorTroca||0)*100)/100 : '']);
+    });
+  });
+  var wsE = XLSX.utils.aoa_to_sheet(rowsE); wsE['!cols'] = [{wch:12},{wch:20},{wch:13},{wch:12},{wch:16},{wch:17},{wch:15}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Resumo por produto'); XLSX.utils.book_append_sheet(wb, wsM, 'Mes a mes');
+  XLSX.utils.book_append_sheet(wb, wsP, '% troca por mes'); XLSX.utils.book_append_sheet(wb, wsE, 'Entregas');
+  XLSX.writeFile(wb, relArq('Trocas', d.titulo, d.cliente)); toast('Excel gerado!');
+}
 
 // ===== INADIMPLENCIA POR CLIENTE =====
 function gerarInad() {

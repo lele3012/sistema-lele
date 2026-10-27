@@ -306,7 +306,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
 
 <!-- COBRANCAS -->
 <div class="pnl" id="pnl-cobrancas">
-  <div class="stitle" style="margin-top:0">Boletos em aberto</div>
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+    <div class="stitle" style="margin-top:0">Boletos em aberto</div>
+    <button class="btn btn-sm btn-o" id="btn-cob-ir-receb" style="width:auto">📊 Relatório de recebimentos</button>
+  </div>
   <div id="resumo-cob"></div>
   <div class="field" style="max-width:320px"><label>Filtrar por cliente</label><input type="text" class="inp" id="cob-filtro-cliente" placeholder="Todos" list="dl-clientes-cob"></div>
   <datalist id="dl-clientes-cob"></datalist>
@@ -586,6 +589,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rabc">📈 Curva ABC</button>
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rtrocas">🔄 Trocas por cliente</button>
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rinad">💰 Inadimplência</button>
+      <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rreceb">💵 Recebimentos</button>
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rinativos">⚠️ Clientes / inativos</button>
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rticket">📊 Ticket médio</button>
       <button class="btn btn-sm btn-o relat-sub-btn" data-rs="rmensal">📅 Vendas mês a mês</button>
@@ -655,6 +659,29 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <div class="relat-sub" id="rs-rinad" style="display:none">
       <div id="inad-area"></div>
       <div id="btn-xls-inad-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-inad">📊 Exportar Excel</button></div>
+    </div>
+
+    <div class="relat-sub" id="rs-rreceb" style="display:none">
+      <div class="card">
+        <div class="row2">
+          <div class="field"><label>De</label><input type="date" class="inp" id="rc-de"></div>
+          <div class="field"><label>Até</label><input type="date" class="inp" id="rc-ate"></div>
+        </div>
+        <div class="row2">
+          <div class="field"><label>Tipo</label><select class="inp" id="rc-tipo"><option value="boleto7">Boleto 7 dias</option><option value="prazo">A prazo (mensal)</option><option value="ambos">Boleto 7 dias + A prazo</option></select></div>
+          <div class="field"><label>Cliente</label><input type="text" class="inp" id="rc-cliente" list="rc-cli-lista" placeholder="Todos — digite para buscar" autocomplete="off"><datalist id="rc-cli-lista"></datalist></div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn btn-sm btn-o rc-atalho" data-p="semana" style="width:auto">Esta semana</button>
+          <button class="btn btn-sm btn-o rc-atalho" data-p="mes" style="width:auto">Este mês</button>
+          <button class="btn btn-sm btn-o rc-atalho" data-p="mesant" style="width:auto">Mês passado</button>
+          <button class="btn btn-sm btn-o rc-atalho" data-p="prox30" style="width:auto">Próximos 30 dias</button>
+        </div>
+        <button class="btn btn-g" id="btn-gerar-receb">Gerar relatório</button>
+        <div style="font-size:11px;color:#999;margin-top:6px">Previsto = boletos que vencem no período (boleto 7 dias vence 7 dias após a entrega; a prazo vence dia 5 do mês seguinte). Recebido = baixas feitas com data de pagamento dentro do período.</div>
+      </div>
+      <div id="receb-area"></div>
+      <div id="btn-xls-receb-area" style="display:none;margin-top:10px"><button class="btn btn-o" id="btn-xls-receb">📊 Exportar Excel</button></div>
     </div>
 
     <div class="relat-sub" id="rs-rinativos" style="display:none">
@@ -1224,6 +1251,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <div class="mhead"><h2>Baixar pagamento</h2><button class="mclose" id="btn-baixa-close">x</button></div>
     <div id="baixa-info" class="card" style="margin-bottom:16px"></div>
     <div class="field"><label>Data do pagamento</label><input type="date" class="inp" id="baixa-data"></div>
+    <div class="field"><label>Valor recebido (R$)</label><input type="number" step="0.01" class="inp" id="baixa-valor"><div style="font-size:11px;color:#888;margin-top:4px">Já vem com o valor do boleto. Altere só se entrou com juros, desconto ou valor diferente.</div></div>
     <div class="field"><label>Observacao (opcional)</label><input type="text" class="inp" id="baixa-obs" placeholder="Ex: Pago via PIX"></div>
     <button class="btn btn-g" id="btn-baixa-confirmar">Confirmar pagamento</button>
     <button class="btn btn-o" id="btn-baixa-cancelar" style="margin-top:6px">Cancelar</button>
@@ -1496,6 +1524,8 @@ function carregar() {
   });
 }
 function fmt(n) { return 'R$ ' + (n||0).toFixed(2).replace('.',','); }
+function isoLocal(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function hojeLocalISO() { return isoLocal(new Date()); }
 function fdata(s) { var p=s.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; }
 function fdataObj(d) { return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); }
 function toast(msg, t) { var el=document.getElementById('toast'); el.textContent=msg; el.className='toast on'; setTimeout(function(){el.className='toast';}, t||2500); }
@@ -1565,6 +1595,7 @@ document.querySelectorAll('.relat-sub-btn').forEach(function(b) {
     if(rs==='rticket') gerarTicket();
     if(rs==='rtrocas') gerarTrocas();
     if(rs==='rinad') gerarInad();
+    if(rs==='rreceb') gerarReceb();
     if(rs==='rmensal') { vmPopularFiltros(); gerarVendasMensal(); }
     if(rs==='rbairro') gerarBairros();
     if(rs==='rkcli') gerarRankingClientes();
@@ -2166,7 +2197,7 @@ function renderCob() {
     if(e.pagamento==='boleto7') { venc=new Date(de); venc.setDate(venc.getDate()+7); }
     else { venc=new Date(de.getFullYear(),de.getMonth()+1,5); }
     var c = D.clientes.find(function(x){return x.id===e.clienteId;});
-    var item = {id:e.id, cliente:c?(c.fantasia||c.nome):'?', data:e.data, venc:venc, valor:e.valorTotal, boleto:e.boleto, tipo:e.pagamento==='boleto7'?'Boleto 7 dias':'Mensal', pago:e.pago, pgData:e.pgData, pgObs:e.pgObs};
+    var item = {id:e.id, cliente:c?(c.fantasia||c.nome):'?', data:e.data, venc:venc, valor:e.valorTotal, boleto:e.boleto, tipo:e.pagamento==='boleto7'?'Boleto 7 dias':'Mensal', pago:e.pago, pgData:e.pgData, pgObs:e.pgObs, pgValor:e.pgValor};
     if(e.pago) pagos.push(item); else aberto.push(item);
   });
 
@@ -2208,7 +2239,7 @@ function renderCob() {
   if(!pagos.length) { pEl.innerHTML='<div class="empty"><div class="ico">✅</div><p>'+(filtroCli?'Nenhum pagamento registrado para esse cliente.':'Nenhum pagamento registrado.')+'</p></div>'; }
   else {
     pEl.innerHTML = pagos.map(function(item) {
-      return '<div class="citem ok"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700">'+item.cliente+'</div><div style="font-size:11px;color:#888;margin-top:2px">'+item.tipo+' | Entrega '+fdata(item.data)+(item.pgData?' | Pago em '+fdata(item.pgData):'')+(item.pgObs?' | '+item.pgObs:'')+'</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:800;color:var(--g)">'+fmt(item.valor)+'</div><button class="btn-desfazer" data-id="'+item.id+'" style="background:none;border:none;font-size:11px;color:#888;cursor:pointer;text-decoration:underline">desfazer</button></div></div></div>';
+      return '<div class="citem ok"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:700">'+item.cliente+'</div><div style="font-size:11px;color:#888;margin-top:2px">'+item.tipo+' | Entrega '+fdata(item.data)+(item.pgData?' | Pago em '+fdata(item.pgData):'')+(item.pgObs?' | '+item.pgObs:'')+'</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:800;color:var(--g)">'+fmt(item.valor)+'</div>'+((item.pgValor!=null && Math.abs(item.pgValor-(item.valor||0))>=0.01)?'<div style="font-size:11px;color:#856404">Recebido: '+fmt(item.pgValor)+'</div>':'')+'<button class="btn-desfazer" data-id="'+item.id+'" style="background:none;border:none;font-size:11px;color:#888;cursor:pointer;text-decoration:underline">desfazer</button></div></div></div>';
     }).join('');
   }
 
@@ -2220,7 +2251,7 @@ function renderCob() {
     btn.addEventListener('click', function() {
       if(!confirm('Desfazer pagamento?')) return;
       var e = D.entregas.find(function(x){return x.id==this.getAttribute('data-id');},this);
-      if(e) { e.pago=false; e.pgData=null; e.pgObs=''; atualizarRegistro('entregas', e._key, {pago:false,pgData:null,pgObs:''}); renderCob(); toast('Desfeito'); }
+      if(e) { e.pago=false; e.pgData=null; e.pgObs=''; e.pgValor=null; atualizarRegistro('entregas', e._key, {pago:false,pgData:null,pgObs:'',pgValor:null}); renderCob(); toast('Desfeito'); }
     });
   });
   document.querySelectorAll('.cob-check').forEach(function(cb) {
@@ -2257,7 +2288,8 @@ function abrirBaixa(id) {
   if(!e) return;
   var c = D.clientes.find(function(x){return x.id===e.clienteId;});
   document.getElementById('baixa-info').innerHTML = '<div style="font-size:14px;font-weight:700">'+(c?c.fantasia||c.nome:'?')+'</div><div style="font-size:12px;color:#888;margin-top:4px">Entrega '+fdata(e.data)+'</div><div style="font-size:18px;font-weight:900;color:var(--g);margin-top:6px">'+fmt(e.valorTotal)+'</div>';
-  document.getElementById('baixa-data').value = new Date().toISOString().split('T')[0];
+  document.getElementById('baixa-data').value = hojeLocalISO();
+  document.getElementById('baixa-valor').value = (e.valorTotal||0).toFixed(2);
   document.getElementById('baixa-obs').value = '';
   document.getElementById('modal-baixa').classList.add('on');
 }
@@ -2271,8 +2303,11 @@ document.getElementById('btn-baixa-confirmar').addEventListener('click', functio
   var e = D.entregas.find(function(x){return x.id==baixaEntregaId;});
   if(e) {
     var obs = document.getElementById('baixa-obs').value.trim();
-    e.pago=true; e.pgData=data; e.pgObs=obs;
-    atualizarRegistro('entregas', e._key, {pago:true,pgData:data,pgObs:obs});
+    var vr = parseFloat(document.getElementById('baixa-valor').value);
+    if(isNaN(vr) || vr<0) vr = e.valorTotal||0;
+    vr = Math.round(vr*100)/100;
+    e.pago=true; e.pgData=data; e.pgObs=obs; e.pgValor=vr;
+    atualizarRegistro('entregas', e._key, {pago:true,pgData:data,pgObs:obs,pgValor:vr});
     renderCob(); toast('Pagamento registrado!');
   }
 });
@@ -2300,7 +2335,7 @@ document.getElementById('btn-cob-baixar-lote').addEventListener('click', functio
     if(cobSelecionados.has(cb.getAttribute('data-id'))) total += parseFloat(cb.getAttribute('data-valor'))||0;
   });
   document.getElementById('baixalote-info').innerHTML = '<div style="font-size:14px;font-weight:700">'+cobSelecionados.size+' boleto(s) selecionado(s)</div><div style="font-size:18px;font-weight:900;color:var(--g);margin-top:6px">'+fmt(total)+'</div>';
-  document.getElementById('baixalote-data').value = new Date().toISOString().split('T')[0];
+  document.getElementById('baixalote-data').value = hojeLocalISO();
   document.getElementById('baixalote-obs').value = '';
   document.getElementById('modal-baixa-lote').classList.add('on');
 });
@@ -2315,8 +2350,9 @@ document.getElementById('btn-baixalote-confirmar').addEventListener('click', fun
   Array.from(cobSelecionados).forEach(function(id) {
     var e = D.entregas.find(function(x){return x.id==id;});
     if(e && !e.pago) {
-      e.pago=true; e.pgData=data; e.pgObs=obs;
-      atualizarRegistro('entregas', e._key, {pago:true,pgData:data,pgObs:obs});
+      var vrL = Math.round((e.valorTotal||0)*100)/100;
+      e.pago=true; e.pgData=data; e.pgObs=obs; e.pgValor=vrL;
+      atualizarRegistro('entregas', e._key, {pago:true,pgData:data,pgObs:obs,pgValor:vrL});
       qtd++;
     }
   });
@@ -5682,6 +5718,158 @@ document.getElementById('btn-xls-inad').addEventListener('click', function() {
     function(l){ return [l.nome, l.itens, l.dias, l.faixa]; }, function(l,m){ return r2(l.vals[m]||0); }, function(l){ return r2(l.total); });
   var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Inadimplencia');
   XLSX.writeFile(wb, 'Lele_Inadimplencia_'+new Date().toISOString().split('T')[0]+'.xlsx'); toast('Excel gerado!');
+});
+
+// ===== RECEBIMENTOS (previsto x recebido por data) =====
+// Vencimento: boleto 7 dias = data da entrega + 7; a prazo = dia 5 do mês seguinte (mesma regra da aba Cobranças)
+function vencRecebivel(e) {
+  if(!e || !e.data) return null;
+  var de = new Date(e.data+'T00:00:00');
+  if(e.pagamento==='boleto7') { var v=new Date(de); v.setDate(v.getDate()+7); return v; }
+  if(e.pagamento==='prazo') return new Date(de.getFullYear(), de.getMonth()+1, 5);
+  return null;
+}
+function valorRecebido(e) {
+  if(!e.pago) return 0;
+  return (e.pgValor!=null && !isNaN(e.pgValor)) ? Number(e.pgValor) : (e.valorTotal||0);
+}
+function rcAplicarAtalho(p) {
+  var h = new Date(); h.setHours(0,0,0,0);
+  var de, ate;
+  if(p==='semana') { var dw=(h.getDay()+6)%7; de=new Date(h); de.setDate(h.getDate()-dw); ate=new Date(de); ate.setDate(de.getDate()+6); }
+  else if(p==='mesant') { de=new Date(h.getFullYear(), h.getMonth()-1, 1); ate=new Date(h.getFullYear(), h.getMonth(), 0); }
+  else if(p==='prox30') { de=new Date(h); ate=new Date(h); ate.setDate(h.getDate()+30); }
+  else { de=new Date(h.getFullYear(), h.getMonth(), 1); ate=new Date(h.getFullYear(), h.getMonth()+1, 0); }
+  document.getElementById('rc-de').value = isoLocal(de);
+  document.getElementById('rc-ate').value = isoLocal(ate);
+}
+function gerarReceb() {
+  var area = document.getElementById('receb-area'); if(!area) return;
+  var btnA = document.getElementById('btn-xls-receb-area');
+  try {
+    var dl = document.getElementById('rc-cli-lista');
+    if(dl && !dl.children.length) dl.innerHTML = D.clientes.map(function(c){ return '<option value="'+(c.fantasia||c.nome||'')+'">'; }).join('');
+    if(!relVal('rc-de') || !relVal('rc-ate')) rcAplicarAtalho('mes');
+    var de = relVal('rc-de'), ate = relVal('rc-ate');
+    if(de > ate) { var t=de; de=ate; ate=t; }
+    var tipo = relVal('rc-tipo') || 'boleto7';
+    var filtroCli = (relVal('rc-cliente')||'').trim().toLowerCase();
+    var hoje = new Date(); hoje.setHours(0,0,0,0);
+    var hojeISO = isoLocal(hoje);
+    var dentro = function(s){ return !!s && s>=de && s<=ate; };
+
+    var itens = [], porDia = {};
+    var tot = {prev:0, rec:0, prevPago:0, vencido:0, aVencer:0, qtdPrev:0, qtdAtraso:0, qtdRec:0, difRec:0};
+    D.entregas.forEach(function(e){
+      if(tipo==='ambos' ? (e.pagamento!=='boleto7' && e.pagamento!=='prazo') : e.pagamento!==tipo) return;
+      var venc = vencRecebivel(e); if(!venc) return;
+      var cli = relCli(e.clienteId);
+      if(filtroCli && cli.toLowerCase().indexOf(filtroCli)<0) return;
+      var vISO = isoLocal(venc);
+      var inPrev = dentro(vISO), inRec = !!e.pago && dentro(e.pgData);
+      if(!inPrev && !inRec) return;
+      var valor = e.valorTotal||0, rec = valorRecebido(e);
+      if(inPrev) {
+        tot.prev += valor; tot.qtdPrev++;
+        porDia[vISO] = porDia[vISO]||{prev:0, rec:0}; porDia[vISO].prev += valor;
+        if(e.pago) tot.prevPago += valor;
+        else if(vISO < hojeISO) tot.vencido += valor;
+        else tot.aVencer += valor;
+      }
+      if(inRec) {
+        tot.rec += rec; tot.qtdRec++; tot.difRec += rec - valor;
+        porDia[e.pgData] = porDia[e.pgData]||{prev:0, rec:0}; porDia[e.pgData].rec += rec;
+      }
+      var sit, cor;
+      if(e.pago) {
+        var atraso = e.pgData ? Math.round((new Date(e.pgData+'T00:00:00') - venc)/86400000) : 0;
+        if(atraso>0) { sit='Pago com '+atraso+' dia(s) de atraso'; cor='badge-y'; if(inRec) tot.qtdAtraso++; }
+        else if(atraso<0) { sit='Pago antecipado'; cor='badge-g'; }
+        else { sit='Pago no vencimento'; cor='badge-g'; }
+      } else if(vISO < hojeISO) {
+        sit='Vencido há '+Math.round((hoje-venc)/86400000)+' dia(s)'; cor='badge-r';
+      } else {
+        var falta = Math.round((venc-hoje)/86400000);
+        sit = falta===0 ? 'Vence hoje' : 'A vencer ('+falta+' dia(s))'; cor='badge-y';
+      }
+      itens.push({cliente:cli, entrega:e.data, venc:vISO, pgData:e.pago?(e.pgData||''):'', valor:valor, rec:e.pago?rec:0, tipo:e.pagamento==='boleto7'?'Boleto 7 dias':'A prazo', boleto:e.boleto||'', obs:e.pgObs||'', sit:sit, cor:cor, inPrev:inPrev, inRec:inRec});
+    });
+
+    var titulo = 'Recebimentos de '+fdata(de)+' a '+fdata(ate);
+    var html = '<div class="stitle" style="margin-top:0">'+titulo+'</div>';
+    if(!itens.length) { area.innerHTML = html+relVazio('💵','Nenhum boleto vencendo ou recebido nesse período.'); btnA.style.display='none'; window._recebData=null; return; }
+
+    var pctRec = tot.prev ? Math.round(tot.prevPago/tot.prev*100) : 0;
+    html += relResumo([
+      ['Recebido no período', fmt(tot.rec), tot.qtdRec+' baixa(s)'],
+      ['Previsto (vencimentos)', fmt(tot.prev), tot.qtdPrev+' boleto(s)'],
+      ['Dos previstos, já pagos', fmt(tot.prevPago), pctRec+'% do previsto'],
+      ['Vencidos sem baixa', fmt(tot.vencido)],
+      ['A vencer', fmt(tot.aVencer)],
+      ['Pagos com atraso', tot.qtdAtraso, Math.abs(tot.difRec)>=0.01 ? 'Juros/desc.: '+fmt(tot.difRec) : '']
+    ]);
+
+    var th = 'padding:6px 8px;text-align:right;font-size:10px;text-transform:uppercase;color:#888;white-space:nowrap;border-bottom:2px solid var(--b);background:#fff;';
+    var td = 'padding:7px 8px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--b);vertical-align:top;';
+    var dias = Object.keys(porDia).sort();
+    var diaSemana = ['dom','seg','ter','qua','qui','sex','sáb'];
+    html += '<div class="card" style="padding:10px"><div style="font-size:12px;font-weight:700;margin-bottom:8px">Por dia — previsto x recebido</div><div class="rel-scroll" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
+      '<th style="'+th+'text-align:left">Data</th><th style="'+th+'">Previsto</th><th style="'+th+'">Recebido</th><th style="'+th+'">Diferença</th></tr></thead><tbody>';
+    dias.forEach(function(d){
+      var x = porDia[d], dif = x.rec - x.prev;
+      var dow = diaSemana[new Date(d+'T00:00:00').getDay()];
+      html += '<tr'+(d===hojeISO?' style="background:#fffbe6"':'')+'><td style="'+td+'text-align:left"><b>'+fdata(d)+'</b> <span style="color:#999;font-size:10px">'+dow+(d===hojeISO?' · hoje':'')+'</span></td>'+
+        '<td style="'+td+'">'+(x.prev?fmt(x.prev):'<span style="color:#ccc">—</span>')+'</td>'+
+        '<td style="'+td+'color:var(--g)">'+(x.rec?'<b>'+fmt(x.rec)+'</b>':'<span style="color:#ccc">—</span>')+'</td>'+
+        '<td style="'+td+'color:'+(dif<-0.005?'var(--r)':'#666')+'">'+(Math.abs(dif)<0.005?'—':fmt(dif).replace('R$ -','- R$ '))+'</td></tr>';
+    });
+    var dTot = tot.rec - tot.prev;
+    html += '<tr style="background:#f7f5f1"><td style="'+td+'text-align:left"><b>Total</b></td><td style="'+td+'"><b>'+fmt(tot.prev)+'</b></td><td style="'+td+'color:var(--g)"><b>'+fmt(tot.rec)+'</b></td><td style="'+td+'"><b>'+(Math.abs(dTot)<0.005?'—':fmt(dTot).replace('R$ -','- R$ '))+'</b></td></tr>';
+    html += '</tbody></table></div><div style="font-size:10px;color:#999;margin-top:6px">Previsto conta pela data de vencimento; recebido conta pela data em que foi dada a baixa.</div></div>';
+
+    itens.sort(function(a,b){ return a.venc.localeCompare(b.venc) || a.cliente.localeCompare(b.cliente); });
+    html += '<div class="card" style="padding:10px"><div style="font-size:12px;font-weight:700;margin-bottom:8px">Boletos do período ('+itens.length+')</div><div class="rel-scroll" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>'+
+      '<th style="'+th+'text-align:left">Cliente</th><th style="'+th+'">Entrega</th><th style="'+th+'">Vencimento</th><th style="'+th+'">Pago em</th><th style="'+th+'">Valor</th><th style="'+th+'">Recebido</th><th style="'+th+'text-align:left">Situação</th></tr></thead><tbody>';
+    itens.forEach(function(i){
+      html += '<tr><td style="'+td+'text-align:left;white-space:normal;max-width:180px"><b>'+i.cliente+'</b>'+(i.boleto?'<div style="font-size:10px;color:#999">Boleto #'+i.boleto+'</div>':'')+'</td>'+
+        '<td style="'+td+'">'+fdata(i.entrega)+'</td>'+
+        '<td style="'+td+(i.inPrev?'':'color:#999')+'">'+fdata(i.venc)+'</td>'+
+        '<td style="'+td+'">'+(i.pgData?fdata(i.pgData):'<span style="color:#ccc">—</span>')+'</td>'+
+        '<td style="'+td+'">'+fmt(i.valor)+'</td>'+
+        '<td style="'+td+'color:var(--g)">'+(i.pgData?fmt(i.rec):'<span style="color:#ccc">—</span>')+'</td>'+
+        '<td style="'+td+'text-align:left"><span class="badge '+i.cor+'">'+i.sit+'</span></td></tr>';
+    });
+    html += '</tbody></table></div><div style="font-size:10px;color:#999;margin-top:6px">Vencimento em cinza = boleto de outro período que foi pago dentro deste.</div></div>';
+
+    area.innerHTML = html;
+    window._recebData = {titulo:titulo, de:de, ate:ate, dias:dias, porDia:porDia, itens:itens, tot:tot};
+    btnA.style.display = 'block';
+  } catch(err) { relErro(area, btnA, err); }
+}
+document.getElementById('btn-gerar-receb').addEventListener('click', gerarReceb);
+document.querySelectorAll('.rc-atalho').forEach(function(b){
+  b.addEventListener('click', function(){ rcAplicarAtalho(this.getAttribute('data-p')); gerarReceb(); });
+});
+document.getElementById('btn-xls-receb').addEventListener('click', function() {
+  var d = window._recebData; if(!relXlsOk(d)) return;
+  var r2 = function(n){ return Math.round((n||0)*100)/100; };
+  var rowsDia = [['Data','Previsto (vencimentos)','Recebido','Diferença']];
+  d.dias.forEach(function(k){ var x=d.porDia[k]; rowsDia.push([fdata(k), r2(x.prev), r2(x.rec), r2(x.rec-x.prev)]); });
+  rowsDia.push(['TOTAL', r2(d.tot.prev), r2(d.tot.rec), r2(d.tot.rec-d.tot.prev)]);
+  var ws1 = XLSX.utils.aoa_to_sheet(rowsDia); ws1['!cols'] = [{wch:14},{wch:22},{wch:14},{wch:14}];
+  var rowsDet = [['Cliente','Tipo','Boleto','Entrega','Vencimento','Pago em','Valor','Recebido','Situação','Observação']];
+  d.itens.forEach(function(i){ rowsDet.push([i.cliente, i.tipo, i.boleto, fdata(i.entrega), fdata(i.venc), i.pgData?fdata(i.pgData):'', r2(i.valor), i.pgData?r2(i.rec):'', i.sit, i.obs]); });
+  var ws2 = XLSX.utils.aoa_to_sheet(rowsDet); ws2['!cols'] = [{wch:26},{wch:14},{wch:10},{wch:12},{wch:12},{wch:12},{wch:12},{wch:12},{wch:30},{wch:24}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws1, 'Por dia');
+  XLSX.utils.book_append_sheet(wb, ws2, 'Detalhe');
+  XLSX.writeFile(wb, 'Lele_Recebimentos_'+d.de+'_a_'+d.ate+'.xlsx'); toast('Excel gerado!');
+});
+document.getElementById('btn-cob-ir-receb').addEventListener('click', function(){
+  var t = document.querySelector('.tab[data-tab="financeiro"]'); if(t) t.click();
+  var f = document.querySelector('.fin-tab-btn[data-fs="frelat"]'); if(f) f.click();
+  var r = document.querySelector('.relat-sub-btn[data-rs="rreceb"]'); if(r) r.click();
+  window.scrollTo(0,0);
 });
 
 // ===== CLIENTES INATIVOS / EM QUEDA =====

@@ -4039,12 +4039,18 @@ function recNomeMes(ym){ var p=ym.split('-'); return REC_MESES[+p[1]-1]+'/'+p[0]
 function recVencDoMes(r, ym){ var p=ym.split('-'); var dia=Math.min(Math.max(parseInt(r.dia)||1,1), recUltimoDia(+p[0], +p[1])); return ym+'-'+recPad(dia); }
 function recDiasAte(dataStr){ return Math.round((new Date(dataStr+'T12:00:00') - new Date(recHojeStr()+'T12:00:00'))/86400000); }
 function recAtivaNoMes(r, ym){ if(r.pausada) return false; if(r.fim && ym>r.fim) return false; return true; }
+function recNorm(s){ return String(s||'').trim().toLowerCase(); }
 function recBoletoDoMes(r, ym){
-  return D.boletos.find(function(b){
+  var achou = D.boletos.find(function(b){
     if(b.origem!=='recorrente' || !b.venc || b.venc.slice(0,7)!==ym) return false;
     if(b.recorrenteKey) return b.recorrenteKey===r._key;
     if(b.recorrenteId && r.id) return String(b.recorrenteId)===String(r.id);
     return b.fornecedor===r.nome;
+  });
+  if(achou) return achou;
+  // Conta lançada à mão em Boletos a Pagar, com o mesmo nome e no mesmo mês: conta como lançada (evita lançar em dobro)
+  return D.boletos.find(function(b){
+    return b.origem!=='recorrente' && b.origem!=='nf' && b.venc && b.venc.slice(0,7)===ym && recNorm(b.fornecedor)===recNorm(r.nome);
   });
 }
 function recOcorrencia(r, ym){
@@ -4057,11 +4063,26 @@ function recOcorrencia(r, ym){
   else estado = b ? 'lancada' : 'futura';
   return {r:r, ym:ym, venc:venc, boleto:b, dias:dias, estado:estado, valor:(b ? b.valor : r.valor)||0};
 }
+// Meses anteriores (até 3) que passaram sem lançar. Não olha antes do mês em que a recorrente foi cadastrada.
+var REC_MESES_ATRAS = 3;
+function recMesInicio(r){ var t=Number(r.id); return (t>1e12) ? recMesStr(new Date(t)) : ''; }
+function recEsquecidas(r){
+  var ymA = recMesStr(new Date()), ini = recMesInicio(r), out = [];
+  for(var k=REC_MESES_ATRAS; k>=1; k--){
+    var ym = recSomaMes(ymA, -k);
+    if(ini && ym<ini) continue;
+    if(r.ignorados && r.ignorados[ym]) continue;
+    var o = recOcorrencia(r, ym);
+    if(o && !o.boleto) out.push(o);
+  }
+  return out;
+}
 function recPrecisaAtencao(o){ return !!o && (o.estado==='atrasada'||o.estado==='atrasada-nl'||o.estado==='proxima'||o.estado==='proxima-nl'); }
 // Lista de tudo que precisa de atenção: este mês e o começo do próximo (ex: conta do dia 2 avisada no fim do mês)
 function recLembretes(){
   var ymA = recMesStr(new Date()), ymP = recSomaMes(ymA, 1), out = [];
   D.recorrentes.forEach(function(r){
+    recEsquecidas(r).forEach(function(o){ out.push(o); });
     [ymA, ymP].forEach(function(ym){ var o = recOcorrencia(r, ym); if(recPrecisaAtencao(o)) out.push(o); });
   });
   return out.sort(function(a,b){ return a.dias-b.dias; });
@@ -4132,6 +4153,7 @@ document.getElementById('btn-salvar-rc').addEventListener('click', function() {
     var existente = editRecorrenteKey ? D.recorrentes.find(function(x){ return x._key===editRecorrenteKey; }) : null;
     obj.id = (existente && existente.id) ? existente.id : Date.now();
     if(existente && existente.pausada) obj.pausada = true;
+    if(existente && existente.ignorados) obj.ignorados = existente.ignorados;
     salvarRegistro('recorrentes', obj, editRecorrenteKey).then(function(){
       toast('Conta recorrente salva!');
       recLimparForm();
@@ -4150,13 +4172,14 @@ function renderRecorrentes() {
     // Foco: o que precisa de atenção primeiro; se este mês já está pago e o próximo já está perto, mostra o próximo
     var foco = recPrecisaAtencao(oA) ? oA : (recPrecisaAtencao(oP) ? oP : (oA || oP));
     var inativa = r.pausada ? 'Pausada' : (r.fim && r.fim<ymA ? 'Encerrada' : '');
-    var ordem = inativa ? 9000 : (recPrecisaAtencao(foco) ? foco.dias : 1000 + (parseInt(r.dia)||0));
-    return {r:r, oA:oA, foco:foco, inativa:inativa, ordem:ordem};
+    var esq = inativa ? [] : recEsquecidas(r);
+    var ordem = inativa ? 9000 : (esq.length ? esq[0].dias : (recPrecisaAtencao(foco) ? foco.dias : 1000 + (parseInt(r.dia)||0)));
+    return {r:r, oA:oA, foco:foco, inativa:inativa, ordem:ordem, esq:esq};
   }).sort(function(a,b){ return a.ordem-b.ordem; });
 
   el.innerHTML = itens.map(function(it) {
     var r = it.r, o = it.foco;
-    var borda = it.inativa ? 'opacity:.6' : (o && (o.estado==='atrasada'||o.estado==='atrasada-nl') ? 'border:1.5px solid var(--r)' : (recPrecisaAtencao(o) ? 'border:1.5px solid #e0b100' : ''));
+    var borda = it.inativa ? 'opacity:.6' : (it.esq.length || (o && (o.estado==='atrasada'||o.estado==='atrasada-nl')) ? 'border:1.5px solid var(--r)' : (recPrecisaAtencao(o) ? 'border:1.5px solid #e0b100' : ''));
     var linhaVenc = '';
     if(it.inativa) linhaVenc = '<span class="badge badge-y">'+it.inativa+'</span>';
     else if(o) {
@@ -4178,6 +4201,16 @@ function renderRecorrentes() {
       '<div style="font-size:12px;color:#888;margin-top:2px">Todo dia '+r.dia+' · '+(r.forma||'Boleto')+' · avisa '+(parseInt(r.aviso)||3)+' dia(s) antes'+
         (r.variavel?' <span class="badge badge-y" style="margin-left:4px">Valor variável</span>':'')+'</div>'+
       (r.obs||r.fim ? '<div style="font-size:11px;color:#888;margin-top:2px">'+(r.obs||'')+(r.obs&&r.fim?' · ':'')+(r.fim?'até '+recNomeMes(r.fim):'')+'</div>' : '')+
+      (it.esq.length ? '<div style="background:var(--rl);border-radius:8px;padding:8px 10px;margin-top:8px">'+
+        '<div style="font-size:12px;font-weight:700;color:var(--r)">⚠️ Ficou sem lançar:</div>'+
+        it.esq.map(function(e){
+          return '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-top:6px;flex-wrap:wrap">'+
+            '<span style="font-size:12px">'+recNomeMes(e.ym)+' · venceu '+fdata(e.venc)+'</span>'+
+            '<span style="display:flex;gap:6px">'+
+              '<button class="btn btn-sm btn-g" data-lancar="'+r._key+'" data-ym="'+e.ym+'">➕ Lançar '+recNomeMes(e.ym)+'</button>'+
+              '<button class="btn btn-sm btn-o" data-ignrc="'+r._key+'" data-ym="'+e.ym+'" title="Use se nesse mês essa conta não existiu">Não teve</button>'+
+            '</span></div>';
+        }).join('')+'</div>' : '')+
       '<div style="margin-top:8px">'+linhaVenc+'</div>'+hist+
       '<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">'+acao+
       '<button class="btn btn-sm btn-o" data-editrc="'+r._key+'">Editar</button>'+
@@ -4193,6 +4226,14 @@ function renderRecorrentes() {
     if(r.variavel) { abrirLancarRec(r._key, ym); return; }
     btn.disabled = true;
     recLancar(r, ym, r.valor).then(function(ok){ if(ok) toast(r.nome+' lançada em Boletos a Pagar!'); else btn.disabled=false; });
+  });});
+  el.querySelectorAll('[data-ignrc]').forEach(function(btn){ btn.addEventListener('click', function(){
+    var r = D.recorrentes.find(function(x){return x._key===btn.getAttribute('data-ignrc');});
+    var ym = btn.getAttribute('data-ym');
+    if(!r || !ym) return;
+    if(!confirm(r.nome+' não teve conta em '+recNomeMes(ym)+'?\n\nO sistema para de avisar sobre esse mês.')) return;
+    var patch = {}; patch['ignorados/'+ym] = true;
+    atualizarRegistro('recorrentes', r._key, patch).then(function(){ toast(recNomeMes(ym)+' de '+r.nome+' marcado como "não teve"'); });
   });});
   el.querySelectorAll('[data-pagrc]').forEach(function(btn){ btn.addEventListener('click', function(){ abrirPagBol(btn.getAttribute('data-pagrc')); });});
   el.querySelectorAll('[data-editrc]').forEach(function(btn){ btn.addEventListener('click', function(){
@@ -4229,6 +4270,7 @@ function renderResumoRec() {
   var pct = previsto>0 ? Math.round(pago/previsto*100) : 0;
   var fixasPendentes = ocs.filter(function(o){ return !o.boleto && !o.r.variavel; });
   var notifOk = ('Notification' in window) && Notification.permission==='granted';
+  var nEsq = D.recorrentes.reduce(function(s,r){ return s + recEsquecidas(r).length; }, 0);
   el.innerHTML =
     '<div class="card">'+
       '<div style="font-size:11px;color:#888;font-weight:700">RECORRENTES DE '+recNomeMes(ymA).toUpperCase()+'</div>'+
@@ -4238,6 +4280,7 @@ function renderResumoRec() {
       '</div>'+
       '<div style="background:#eee;border-radius:6px;height:8px;margin-top:10px;overflow:hidden"><div style="background:var(--g);height:100%;width:'+pct+'%"></div></div>'+
       '<div style="font-size:11px;color:#888;margin-top:4px">'+pagas.length+' de '+ocs.length+' contas pagas · '+pct+'% do valor</div>'+
+      (nEsq ? '<div class="alert alert-y" style="margin-top:10px">⚠️ '+nEsq+' lançamento'+(nEsq>1?'s':'')+' de meses anteriores ficou sem fazer. Estão marcados em vermelho logo abaixo.</div>' : '')+
       '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">'+
         (fixasPendentes.length ? '<button class="btn btn-sm btn-g" id="btn-rc-lancar-todas">⚡ Lançar as '+fixasPendentes.length+' fixas do mês</button>' : '')+
         '<button class="btn btn-sm btn-o" id="btn-rc-ics">📅 Lembretes na agenda do celular</button>'+
@@ -4284,7 +4327,7 @@ document.getElementById('btn-lancarrec-confirmar').addEventListener('click', fun
   document.getElementById('modal-lancarrec').classList.remove('on');
   recLancar(r, lancarRecMes || recMesStr(new Date()), valor).then(function(ok){
     if(!ok) return;
-    atualizarRegistro('recorrentes', r._key, {valor:valor});
+    if(!lancarRecMes || lancarRecMes>=recMesStr(new Date())) atualizarRegistro('recorrentes', r._key, {valor:valor});
     toast(r.nome+' lançada em Boletos a Pagar!');
   });
 });

@@ -2935,22 +2935,47 @@ document.getElementById('btn-pdf-rel').addEventListener('click', function() {
     doc.text('TOTAL DE PRODUTOS NO PERIODO', m, y); y+=4;
     doc.setDrawColor(224,219,211); doc.setLineWidth(0.3); doc.line(m,y,pw-m,y); y+=6;
 
+    var cComp = m+100, cTroc = m+138, cLiq = pw-m;
     doc.setFontSize(8); doc.setTextColor(120,120,120); doc.setFont('helvetica','bold');
     doc.text('Produto', m, y);
-    doc.text('Comprado', m+110, y, {align:'right'});
-    doc.text('Trocado', pw-m, y, {align:'right'});
+    doc.text('Comprado', cComp, y, {align:'right'});
+    doc.text('Trocado', cTroc, y, {align:'right'});
+    doc.text('Liquido', cLiq, y, {align:'right'});
     y+=5;
     doc.setDrawColor(240,237,232); doc.line(m,y-2,pw-m,y-2);
 
     chaves.forEach(function(k) {
       if(y>270){doc.addPage();y=20;}
+      var comp = prodTotais[k]||0, troc = prodTrocaTotais[k]||0;
       doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(26,26,26);
       doc.text(NOME[k]||k, m, y);
-      doc.text(String(prodTotais[k]||0)+' un', m+110, y, {align:'right'});
-      doc.setTextColor(prodTrocaTotais[k]?133:180, prodTrocaTotais[k]?100:180, prodTrocaTotais[k]?4:180);
-      doc.text(String(prodTrocaTotais[k]||0)+' un', pw-m, y, {align:'right'});
+      doc.text(String(comp)+' un', cComp, y, {align:'right'});
+      doc.setTextColor(troc?133:180, troc?100:180, troc?4:180);
+      doc.text(String(troc)+' un', cTroc, y, {align:'right'});
+      doc.setTextColor(26,26,26); doc.setFont('helvetica','bold');
+      doc.text(String(comp-troc)+' un', cLiq, y, {align:'right'});
       y+=6;
     });
+
+    // Total de sanduiches: Pao Bola + Pao Integral, descontando as trocas
+    var sandComp = (prodTotais.bola||0)+(prodTotais.integral||0);
+    var sandTroc = (prodTrocaTotais.bola||0)+(prodTrocaTotais.integral||0);
+    if(sandComp>0 || sandTroc>0) {
+      if(y>262){doc.addPage();y=20;}
+      y+=1;
+      doc.setFillColor(232,245,236); doc.roundedRect(m,y-5,cw,15,2,2,'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(42,122,59);
+      doc.text('TOTAL SANDUICHES (Bola + Integral)', m+3, y);
+      doc.setTextColor(26,26,26);
+      doc.text(String(sandComp)+' un', cComp, y, {align:'right'});
+      doc.setTextColor(sandTroc?133:180, sandTroc?100:180, sandTroc?4:180);
+      doc.text('- '+String(sandTroc)+' un', cTroc, y, {align:'right'});
+      doc.setTextColor(42,122,59); doc.setFontSize(11);
+      doc.text(String(sandComp-sandTroc)+' un', cLiq, y, {align:'right'});
+      doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(120,120,120);
+      doc.text('Liquido = comprado menos trocas', m+3, y+5);
+      y+=14;
+    }
     y+=4;
   }
 

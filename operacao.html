@@ -219,7 +219,7 @@ function statusCorr(m){
 function movsRota(ent,data){ return MOV.filter(function(m){ return m.ent===ent && m.data===data; }).map(efetivo); }
 function calcRota(ent,data){
   var ms = movsRota(ent,data);
-  var r = {carga:{}, entregue:{}, bonif:{}, trocas:{}, vendas:[], cargas:[], retorno:null, justs:[], formas:{}, total:0, ciente:null, pixOk:null};
+  var r = {carga:{}, entregue:{}, bonif:{}, trocas:{}, vendas:[], cargas:[], retorno:null, justs:[], formas:{}, total:0, ciente:null, pixOk:null, caixa:null, dinRec:null};
   ms.forEach(function(m){
     if(m.tipo==='carga'){ r.carga=soma(r.carga,m.itens); r.cargas.push(m); }
     if(m.tipo==='venda'){ r.entregue=soma(r.entregue,m.prods); r.bonif=soma(r.bonif,m.bonif); r.trocas=soma(r.trocas,m.trocas); r.vendas.push(m); r.formas[m.forma]=(r.formas[m.forma]||0)+(m.valor||0); r.total+=(m.valor||0); }
@@ -227,11 +227,17 @@ function calcRota(ent,data){
     if(m.tipo==='just') r.justs.push(m);
     if(m.tipo==='ciente' && !r.ciente) r.ciente=m;
     if(m.tipo==='pixok' && !r.pixOk) r.pixOk=m;
+    if(m.tipo==='caixa' && !r.caixa) r.caixa=m;
+    if(m.tipo==='dinrec' && !r.dinRec) r.dinRec=m;
   });
   r.vendas.sort(function(a,b){ return (a.tsLocal||0)-(b.tsLocal||0); });
   r.dinEsperado = Math.round((r.formas.vista||0)*100)/100;
-  r.dinContado = r.retorno ? (r.retorno.dinheiro||0) : null;
-  r.difDin = r.retorno ? Math.round((r.dinContado - r.dinEsperado)*100)/100 : 0;
+  // Dinheiro declarado às cegas pelo entregador x vendido em dinheiro
+  r.dinDeclarado = r.caixa ? (r.caixa.valor||0) : null;
+  r.difDin = r.caixa ? Math.round((r.dinDeclarado - r.dinEsperado)*100)/100 : 0;
+  // Dinheiro contado pela gerência x declarado pelo entregador
+  r.dinRecebido = r.dinRec ? (r.dinRec.valor||0) : null;
+  r.difRec = (r.caixa && r.dinRec) ? Math.round((r.dinRecebido - r.dinDeclarado)*100)/100 : 0;
   r.saldo = {}; r.dif = {}; r.difTroca = {}; r.temDif=false; r.temDifTroca=false;
   PRODS.forEach(function(p){ var k=p[0]; r.saldo[k]=(r.carga[k]||0)-(r.entregue[k]||0)-(r.bonif[k]||0); });
   if(r.retorno){
@@ -239,8 +245,9 @@ function calcRota(ent,data){
     PRODS_TROCA.forEach(function(p){ var k=p[0]; r.difTroca[k]=((r.retorno.venc||{})[k]||0)-((r.trocas||{})[k]||0); if(r.difTroca[k]) r.temDifTroca=true; });
   }
   r.fechada = !!r.retorno;
-  r.temDifDin = r.fechada && Math.abs(r.difDin) >= 0.01;
-  r.temQualquerDif = r.temDif || r.temDifTroca || r.temDifDin;
+  r.temDifProd = r.temDif || r.temDifTroca;
+  r.temDifDin = !!r.caixa && (Math.abs(r.difDin) >= 0.01 || Math.abs(r.difRec) >= 0.01);
+  r.temQualquerDif = r.temDifProd || r.temDifDin;
   return r;
 }
 // Rota anterior que ainda trava a carga nova: sem retorno/conferência ou
@@ -249,7 +256,7 @@ function rotaPendente(ent){
   var datas={};
   MOV.forEach(function(m){ if(m.tipo==='carga' && m.ent===ent && m.data<hoje()) datas[m.data]=1; });
   var ds=Object.keys(datas).sort();
-  for(var i=0;i<ds.length;i++){ var r=calcRota(ent,ds[i]); if(!r.fechada || !r.ciente) return {data:ds[i], motivo: !r.fechada ? 'a conferência (retorno e dinheiro) ainda não foi lançada' : nomeEnt(ent)+' ainda não confirmou o resultado com o PIN dele'}; }
+  for(var i=0;i<ds.length;i++){ var r=calcRota(ent,ds[i]); if(!r.fechada || !r.caixa || !r.ciente) return {data:ds[i], motivo: !r.fechada ? 'a conferência (retorno, perda e trocas) ainda não foi lançada' : !r.caixa ? nomeEnt(ent)+' ainda não declarou o dinheiro em mãos' : nomeEnt(ent)+' ainda não confirmou o resultado com o PIN dele'}; }
   return null;
 }
 function dataLocal(ts){ var d=new Date(ts); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -338,12 +345,11 @@ function telaRetorno(){
     h+='<div class="stitle">2. Perda <span style="text-transform:none;letter-spacing:0;font-weight:400">(voltaram estragados, amassados ou sem condição de venda)</span></div>'+gradeQtd('r-p-',PRODS);
     h+='<div class="field hidden" id="r-pm-w" style="margin-top:10px"><label>Justificativa da perda (obrigatória)</label><textarea class="inp" rows="2" id="r-pm" placeholder="Ex.: caixa amassou no transporte; produto esquentou no carro"></textarea></div>';
     h+='<div class="stitle">3. Trocas clientes <span style="text-transform:none;letter-spacing:0;font-weight:400">(vencidos recolhidos nos clientes)</span></div>'+gradeQtd('r-v-',PRODS_TROCA);
-    h+='<div class="stitle">Dinheiro</div><div class="field"><label>Dinheiro contado na frente do entregador (R$)</label><input class="inp" type="number" step="0.01" min="0" inputmode="decimal" id="r-din" placeholder="0,00"></div>';
     h+='<div style="height:6px"></div><button class="btn btn-g" id="r-salvar">Conferir e fechar rota</button></div>';
   }
   // rotas fechadas aguardando o "ciente" do entregador
   MOV.filter(function(m){return m.tipo==='retorno';}).forEach(function(m){ var r=calcRota(m.ent,m.data);
-    if(r.retorno===m && !r.ciente) h+='<div class="alert a-y">Rota de '+fdata(m.data)+': aguardando '+esc(nomeEnt(m.ent))+' confirmar o resultado com o PIN dele (no celular dele ou neste aparelho).</div>'; });
+    if(r.retorno===m && (!r.caixa || !r.ciente)) h+='<div class="alert a-y">Rota de '+fdata(m.data)+': aguardando '+esc(nomeEnt(m.ent))+(r.caixa?' confirmar o resultado':' declarar o dinheiro e confirmar o resultado')+' com o PIN dele.</div>'; });
   // rotas fechadas recentes com diferença sem justificativa
   var pend = rotasFechadasSemJust();
   if(pend.length){
@@ -358,14 +364,11 @@ function telaRetorno(){
       var rt=rotaDoId($('r-rota').value||rotaSel), util=lerQtd('r-u-',PRODS), perda=lerQtd('r-p-',PRODS), venc=lerQtd('r-v-',PRODS_TROCA);
       var perdaMotivo=$('r-pm').value.trim();
       if(totalUn(perda) && perdaMotivo.length<5) return toast('Escreva a justificativa da perda');
-      var dinTxt=$('r-din').value.trim();
-      if(dinTxt==='') return toast('Informe o dinheiro contado (0 se não houve)');
-      var din=Math.round((parseFloat(dinTxt.replace(',','.'))||0)*100)/100;
       var rr=calcRota(rt.ent,rt.data);
       var aviso = (rt.data===hoje() ? '<div class="alert a-r">Esta é a rota de <b>hoje</b>. Só feche se o entregador já voltou e terminou a rota.</div>' : '') +
         (rr.vendas.length ? '' : '<div class="alert a-r">'+esc(nomeEnt(rt.ent))+' ainda não lançou nenhuma entrega desta rota. Depois de fechada, ele não consegue mais lançar.</div>');
-      confirmar('Fechar rota', aviso+'<p><b>'+esc(nomeEnt(rt.ent))+'</b> · carga de '+fdata(rt.data)+'</p><p style="margin-top:8px">Retorno: '+esc(resumoItens(util))+'</p><p>Perda: '+esc(resumoItens(perda))+(totalUn(perda)?' — '+esc(perdaMotivo):'')+'</p><p>Trocas clientes: '+esc(resumoItens(venc))+'</p><p>Dinheiro contado: <b>'+fmt(din)+'</b></p>', function(){
-        var o=base('retorno',rt.ent,rt.data); o.util=util; o.perda=perda; if(totalUn(perda)) o.perdaMotivo=perdaMotivo; o.venc=venc; o.dinheiro=din; gravar(OP+'/mov',o); toast('Rota fechada ✓');
+      confirmar('Fechar rota', aviso+'<p><b>'+esc(nomeEnt(rt.ent))+'</b> · carga de '+fdata(rt.data)+'</p><p style="margin-top:8px">Retorno: '+esc(resumoItens(util))+'</p><p>Perda: '+esc(resumoItens(perda))+(totalUn(perda)?' — '+esc(perdaMotivo):'')+'</p><p>Trocas clientes: '+esc(resumoItens(venc))+'</p>', function(){
+        var o=base('retorno',rt.ent,rt.data); o.util=util; o.perda=perda; if(totalUn(perda)) o.perdaMotivo=perdaMotivo; o.venc=venc; gravar(OP+'/mov',o); toast('Rota fechada ✓');
       }, 'Fechar rota');
     };
   }
@@ -374,7 +377,7 @@ function telaRetorno(){
 function rotasFechadasSemJust(){
   var vistos={}, out=[];
   MOV.forEach(function(m){ if(m.tipo==='retorno' && !vistos[m.ent+m.data]){ vistos[m.ent+m.data]=1;
-    var r=calcRota(m.ent,m.data); if(r.temQualquerDif && !r.justs.length) out.push({ent:m.ent,data:m.data}); } });
+    var r=calcRota(m.ent,m.data); if(r.temDifProd && !r.justs.length) out.push({ent:m.ent,data:m.data}); } });
   return out;
 }
 
@@ -395,9 +398,17 @@ function tabelaConf(r){
     PRODS_TROCA.forEach(function(p){ var k=p[0], t=(r.trocas[k]||0), v=((r.retorno.venc||{})[k]||0); if(!t&&!v) return; var d=v-t;
       linhas+='<tr><td>'+esc(p[1])+'</td><td>'+t+'</td><td>'+v+'</td><td class="'+(d?'neg':'ok')+'">'+(d>0?'+':'')+d+'</td></tr>'; });
     if(linhas) h+='<div class="stitle">Trocas clientes: lançadas na rota × recebidas</div><table><tr><th>Produto</th><th>Lançadas</th><th>Recebidas</th><th>Dif.</th></tr>'+linhas+'</table>';
-    h+='<div class="stitle">Dinheiro</div><table><tr><th></th><th>Esperado</th><th>Contado</th><th>Dif.</th></tr><tr><td>Dinheiro</td><td>'+fmt(r.dinEsperado)+'</td><td>'+fmt(r.dinContado)+'</td><td class="'+(r.difDin<0?'neg':r.difDin>0?'pos':'ok')+'">'+(r.difDin>0?'+':'')+fmt(r.difDin).replace('R$ ','')+'</td></tr></table>';
   }
+  if(r.caixa && U.papel!=='fabrica') h+=tabelaDinheiro(r);
   return h;
+}
+function difTxt(v){ return '<td class="'+(v<0?'neg':v>0?'pos':'ok')+'">'+(v>0?'+':'')+fmt(v).replace('R$ ','')+'</td>'; }
+function tabelaDinheiro(r){
+  var h='<div class="stitle">Dinheiro</div><table><tr><th></th><th>Valor</th><th>Dif.</th></tr>';
+  h+='<tr><td>Vendido em dinheiro</td><td>'+fmt(r.dinEsperado)+'</td><td></td></tr>';
+  h+='<tr><td>Declarado por '+esc(nomeEnt(r.caixa.ent))+' (às cegas)</td><td>'+fmt(r.dinDeclarado)+'</td>'+difTxt(r.difDin)+'</tr>';
+  if(r.dinRec) h+='<tr><td>Contado pela gerência</td><td>'+fmt(r.dinRecebido)+'</td>'+difTxt(r.difRec)+'</tr>';
+  return h+'</table>';
 }
 function cardDiferenca(ent,data,comForm){
   var r=calcRota(ent,data), id='j-'+ent+'-'+data;
@@ -415,11 +426,11 @@ function ligarJust(){
 // ---------- ENTREGADOR: vendas ----------
 function telaRota(){
   var ent = U.papel==='entregador' ? U.ent : null;
-  var abertas = rotasAbertas(ent);
-  var h=cardsCiente(ent);
+  var abertas = rotasAbertas(ent).filter(function(x){ return !calcRota(x.ent,x.data).caixa; });
+  var h=cardsCaixa(ent)+cardsCiente(ent);
   if(!abertas.length){
     $('conteudo').innerHTML=h+'<div class="stitle">Rota</div><div class="card muted">Nenhuma rota aberta. A fábrica precisa lançar a saída da sua carga primeiro.</div>'+ultimasFechadas(ent);
-    ligarCorrecoes(); ligarCiente(); return;
+    ligarCorrecoes(); ligarCiente(); ligarCaixa(); return;
   }
   h+='<div class="stitle">Lançar entregas</div><div class="card">'+seletorRota(abertas,'v-rota');
   var rt=rotaDoId(rotaSel), r=calcRota(rt.ent,rt.data);
@@ -439,9 +450,10 @@ function telaRota(){
     h+='<button class="btn btn-g" id="v-salvar">Conferir e gravar</button>';
   }
   h+='</div>';
-  h+='<div class="stitle">Lançadas nesta rota</div><div class="card">'+(r.vendas.length?r.vendas.map(linhaMov).join('')+'<div class="mov"><b>Total: '+fmt(r.total)+'</b><div class="s">'+Object.keys(r.formas).map(function(f){return esc(nomeForma(f))+': '+fmt(r.formas[f]);}).join(' · ')+'</div></div>':'<div class="muted">Nenhuma ainda.</div>')+'</div>';
+  var totalTxt = U.papel==='entregador' ? '' : '<div class="mov"><b>Total: '+fmt(r.total)+'</b><div class="s">'+Object.keys(r.formas).map(function(f){return esc(nomeForma(f))+': '+fmt(r.formas[f]);}).join(' · ')+'</div></div>';
+  h+='<div class="stitle">Lançadas nesta rota ('+r.vendas.length+')</div><div class="card">'+(r.vendas.length?r.vendas.map(linhaMov).join('')+totalTxt:'<div class="muted">Nenhuma ainda.</div>')+'</div>';
   $('conteudo').innerHTML=h;
-  ligarCorrecoes(); ligarCiente();
+  ligarCorrecoes(); ligarCiente(); ligarCaixa();
   if($('v-rota')) $('v-rota').onchange=function(){ rotaSel=this.value; render(); };
   if(!vendaCli){ ligarBusca(); return; }
   var ass = padAssinatura($('v-ass'));
@@ -507,14 +519,39 @@ function padAssinatura(cv){
   };
 }
 // Resultado da rota para o entregador confirmar com o PIN dele
+// Declaração às cegas: o entregador informa o dinheiro que tem em mãos sem ver
+// quanto vendeu. Fica disponível a partir do fim da rota até ser declarada.
+function cardsCaixa(ent){
+  if(U.papel!=='entregador') return '';
+  var datas={}, h='';
+  MOV.forEach(function(m){ if(m.tipo==='carga' && m.ent===ent) datas[m.data]=1; });
+  Object.keys(datas).sort().forEach(function(d){
+    var r=calcRota(ent,d); if(r.caixa || !r.vendas.length) return;
+    h+='<div class="stitle">Fechar meu caixa — rota de '+fdata(d)+'</div><div class="card">'+
+      '<p class="muted" style="margin-bottom:10px">Conte o dinheiro que está com você e digite o total. Faça isso só quando terminar todas as entregas desta rota: depois de declarar, não dá mais para lançar entregas nela.</p>'+
+      '<div class="field"><label>Dinheiro em mãos (R$)</label><input class="inp" type="number" step="0.01" min="0" inputmode="decimal" id="cx-'+d+'" placeholder="0,00"></div>'+
+      '<button class="btn btn-g cx-btn" data-data="'+d+'">Declarar dinheiro</button></div>';
+  });
+  return h;
+}
+function ligarCaixa(){
+  document.querySelectorAll('.cx-btn').forEach(function(b){ b.onclick=function(){
+    var d=b.getAttribute('data-data'), t=($('cx-'+d)||{}).value; t=(t||'').trim();
+    if(t==='') return toast('Digite o valor (0 se não tem dinheiro)');
+    var v=Math.round((parseFloat(t.replace(',','.'))||0)*100)/100;
+    confirmar('Declarar dinheiro', '<p>Rota de <b>'+fdata(d)+'</b></p><p style="margin-top:8px">Dinheiro em mãos: <b>'+fmt(v)+'</b></p><p class="muted" style="margin-top:6px">Depois disso, a rota não aceita mais entregas.</p>', function(){
+      var o=base('caixa',U.ent,d); o.valor=v; gravar(OP+'/mov',o); toast('Dinheiro declarado ✓');
+    }, 'Declarar');
+  }; });
+}
 function cardsCiente(ent){
   var h='';
   MOV.filter(function(m){ return m.tipo==='retorno' && (!ent||m.ent===ent); }).forEach(function(m){
-    var r=calcRota(m.ent,m.data); if(r.retorno!==m || r.ciente) return;
+    var r=calcRota(m.ent,m.data); if(r.retorno!==m || r.ciente || !r.caixa) return;
     if(U.papel!=='entregador') return;
     h+='<div class="stitle">Resultado da rota de '+fdata(m.data)+'</div><div class="card">'+
       (r.temQualquerDif?'<div class="alert a-r">A conferência encontrou diferença.</div>':'<div class="alert a-g">Tudo bateu ✓</div>')+tabelaConf(r)+
-      '<div class="field" style="margin-top:12px"><label>Comentário (opcional)</label><textarea class="inp" rows="2" id="ci-'+m.data+'" placeholder="Se discorda de algo, explique aqui"></textarea></div>'+
+      '<div class="field" style="margin-top:12px"><label>'+(r.temQualquerDif?'Explique a diferença (obrigatório)':'Comentário (opcional)')+'</label><textarea class="inp" rows="2" id="ci-'+m.data+'" placeholder="Se discorda de algo, explique aqui"></textarea></div>'+
       '<button class="btn btn-g ci-btn" data-ent="'+esc(m.ent)+'" data-data="'+m.data+'">Vi o resultado — confirmar</button>'+
       '<p class="muted" style="margin-top:8px">Sem essa confirmação, a carga de hoje não é liberada.</p></div>';
   });
@@ -522,7 +559,9 @@ function cardsCiente(ent){
 }
 function ligarCiente(){
   document.querySelectorAll('.ci-btn').forEach(function(b){ b.onclick=function(){
-    var d=b.getAttribute('data-data'), o=base('ciente',b.getAttribute('data-ent'),d); o.comentario=($('ci-'+d)||{}).value||'';
+    var d=b.getAttribute('data-data'), com=(($('ci-'+d)||{}).value||'').trim();
+    if(calcRota(b.getAttribute('data-ent'),d).temQualquerDif && com.length<5) return toast('Explique a diferença antes de confirmar');
+    var o=base('ciente',b.getAttribute('data-ent'),d); o.comentario=com;
     gravar(OP+'/mov',o); toast('Confirmado ✓');
   }; });
 }
@@ -547,15 +586,17 @@ function ultimasFechadas(ent){
   var fech = MOV.filter(function(m){ return m.tipo==='retorno' && (!ent||m.ent===ent); }).sort(function(a,b){return a.data<b.data?1:-1;}).slice(0,3);
   if(!fech.length) return '';
   return '<div class="stitle">Rotas fechadas recentes</div>'+fech.map(function(m){ var r=calcRota(m.ent,m.data);
-    return '<div class="card"><b>'+esc(nomeEnt(m.ent))+' — '+fdata(m.data)+'</b><div class="muted">'+r.vendas.length+' entregas · '+fmt(r.total)+'</div>'+r.vendas.map(linhaMov).join('')+'</div>'; }).join('');
+    return '<div class="card"><b>'+esc(nomeEnt(m.ent))+' — '+fdata(m.data)+'</b><div class="muted">'+r.vendas.length+' entregas'+(U.papel==='entregador'?'':' · '+fmt(r.total))+'</div>'+r.vendas.map(linhaMov).join('')+'</div>'; }).join('');
 }
 
 // ---------- linha de lançamento + pedido de correção ----------
 function linhaMov(m){
   var t='', s='';
   if(m.tipo==='carga'){ t='Saída · '+nomeEnt(m.ent); s=resumoItens(m.itens); }
-  if(m.tipo==='venda'){ t=(m.numero?'Nota '+m.numero+' · ':'')+m.cliNome+' · '+fmt(m.valor)+' · '+nomeForma(m.forma); s='Entregue: '+resumoItens(m.prods)+(totalUn(m.trocas)?' | Trocas: '+resumoItens(m.trocas):'')+(totalUn(m.bonif)?' | Bonif.: '+resumoItens(m.bonif):''); }
-  if(m.tipo==='retorno'){ t='Conferência · '+nomeEnt(m.ent); s='Retorno: '+resumoItens(m.util)+' | Perda: '+resumoItens(limpa(m.perda))+(m.perdaMotivo?' ('+m.perdaMotivo+')':'')+' | Trocas clientes: '+resumoItens(m.venc)+' | Dinheiro contado: '+fmt(m.dinheiro); }
+  if(m.tipo==='venda'){ t=(m.numero?'Nota '+m.numero+' · ':'')+m.cliNome+(U.papel==='entregador'?'':' · '+fmt(m.valor))+' · '+nomeForma(m.forma); s='Entregue: '+resumoItens(m.prods)+(totalUn(m.trocas)?' | Trocas: '+resumoItens(m.trocas):'')+(totalUn(m.bonif)?' | Bonif.: '+resumoItens(m.bonif):''); }
+  if(m.tipo==='retorno'){ t='Conferência · '+nomeEnt(m.ent); s='Retorno: '+resumoItens(m.util)+' | Perda: '+resumoItens(limpa(m.perda))+(m.perdaMotivo?' ('+m.perdaMotivo+')':'')+' | Trocas clientes: '+resumoItens(m.venc)+(m.dinheiro!=null?' | Dinheiro: '+fmt(m.dinheiro):''); }
+  if(m.tipo==='caixa'){ t=nomeEnt(m.ent)+' declarou o dinheiro em mãos'; s=U.papel==='fabrica'?'':fmt(m.valor); }
+  if(m.tipo==='dinrec'){ t='Dinheiro contado pela gerência'; s=fmt(m.valor)+(m.obs?' · '+m.obs:''); }
   if(m.tipo==='just'){ t='Justificativa · '+nomeEnt(m.ent); s=m.texto; }
   if(m.tipo==='ciente'){ t=nomeEnt(m.ent)+' confirmou o resultado'; s=m.comentario?('Comentário: '+m.comentario):''; }
   if(m.tipo==='pixok'){ t='Pix conferido com o extrato'; s=fmt(m.valor)+(m.obs?' · '+m.obs:''); }
@@ -572,8 +613,7 @@ function abrirCorrecao(key){
   var orig=MOV.find(function(m){return m._key===key;}); if(!orig) return;
   var m=efetivo(orig), h='<h3>Pedir correção</h3><p class="muted" style="margin-bottom:12px">O lançamento original fica guardado. A gerência aprova ou rejeita.</p>';
   if(m.tipo==='carga') h+='<div class="stitle">Quantidades corretas</div>'+gradeQtd('k-i-',PRODS,m.itens);
-  if(m.tipo==='retorno') h+='<div class="stitle">Sanduíches de retorno</div>'+gradeQtd('k-u-',PRODS,limpa(m.util))+'<div class="stitle">Perda</div>'+gradeQtd('k-p-',PRODS,limpa(m.perda))+'<div class="field" style="margin-top:10px"><label>Justificativa da perda</label><textarea class="inp" rows="2" id="k-pm">'+esc(m.perdaMotivo||'')+'</textarea></div>'+'<div class="stitle">Trocas clientes</div>'+gradeQtd('k-v-',PRODS_TROCA,limpa(m.venc))+
-    '<div class="field" style="margin-top:12px"><label>Dinheiro contado correto (R$)</label><input class="inp" type="number" step="0.01" id="k-din" value="'+(m.dinheiro||0)+'"></div>';
+  if(m.tipo==='retorno') h+='<div class="stitle">Sanduíches de retorno</div>'+gradeQtd('k-u-',PRODS,limpa(m.util))+'<div class="stitle">Perda</div>'+gradeQtd('k-p-',PRODS,limpa(m.perda))+'<div class="field" style="margin-top:10px"><label>Justificativa da perda</label><textarea class="inp" rows="2" id="k-pm">'+esc(m.perdaMotivo||'')+'</textarea></div>'+'<div class="stitle">Trocas clientes</div>'+gradeQtd('k-v-',PRODS_TROCA,limpa(m.venc));
   if(m.tipo==='venda') h+='<p><b>'+esc(m.cliNome)+'</b></p><div class="stitle">Entregue</div>'+gradeQtd('k-q-',PRODS,m.prods)+'<div class="stitle">Trocas</div>'+gradeQtd('k-t-',PRODS_TROCA,m.trocas)+'<div class="stitle">Bonificação</div>'+gradeQtd('k-b-',PRODS,m.bonif)+
     '<div class="stitle">Pagamento</div><select class="inp" id="k-forma">'+FORMAS.map(function(f){return '<option value="'+f[0]+'"'+(f[0]===m.forma?' selected':'')+'>'+esc(f[1])+'</option>';}).join('')+'</select>';
   h+='<div class="field" style="margin-top:12px"><label>Motivo</label><textarea class="inp" rows="3" id="k-motivo" placeholder="Ex.: erro na contagem durante a separação"></textarea></div>';
@@ -583,7 +623,7 @@ function abrirCorrecao(key){
     var mot=$('k-motivo').value.trim(); if(mot.length<5) return toast('Escreva o motivo');
     var novo={};
     if(m.tipo==='carga') novo.itens=lerQtd('k-i-',PRODS);
-    if(m.tipo==='retorno'){ novo.util=lerQtd('k-u-',PRODS); novo.perda=lerQtd('k-p-',PRODS); novo.perdaMotivo=$('k-pm').value.trim(); if(totalUn(novo.perda) && novo.perdaMotivo.length<5) return toast('Escreva a justificativa da perda'); novo.venc=lerQtd('k-v-',PRODS_TROCA); novo.dinheiro=Math.round((parseFloat($('k-din').value)||0)*100)/100; }
+    if(m.tipo==='retorno'){ novo.util=lerQtd('k-u-',PRODS); novo.perda=lerQtd('k-p-',PRODS); novo.perdaMotivo=$('k-pm').value.trim(); if(totalUn(novo.perda) && novo.perdaMotivo.length<5) return toast('Escreva a justificativa da perda'); novo.venc=lerQtd('k-v-',PRODS_TROCA); }
     if(m.tipo==='venda'){
       novo.prods=lerQtd('k-q-',PRODS); novo.trocas=lerQtd('k-t-',PRODS_TROCA); novo.bonif=lerQtd('k-b-',PRODS); novo.forma=$('k-forma').value;
       var cli=CLI.find(function(c){return c.id==m.cliId;}); novo.valor=Math.round(valorVenda(cli,novo.prods,novo.trocas,m.precos)*100)/100;
@@ -616,9 +656,10 @@ function telaGerencia(){
     h+='<div class="stitle">'+esc(e.nome)+' — carga de '+fdata(gerDia)+'</div><div class="card">';
     if(!r.cargas.length){ h+='<div class="muted">Sem saída lançada nesta data.</div></div>'; return; }
     if(!r.fechada) h+='<div class="alert a-y">Rota aberta: a conferência ainda não foi lançada.</div>';
-    else if(r.temQualquerDif) h+='<div class="alert a-r">Diferença na conferência.'+(r.justs.length?'':' Sem justificativa ainda.')+'</div>';
+    else if(r.temQualquerDif) h+='<div class="alert a-r">Diferença na conferência.'+(r.temDifProd && !r.justs.length?' Diferença de produto sem justificativa ainda.':'')+'</div>';
     else h+='<div class="alert a-g">Tudo bateu ✓</div>';
     if(r.fechada) h+=r.ciente?'<div class="alert a-g">'+esc(nomeEnt(e.id))+' confirmou o resultado em '+fhora(r.ciente.ts)+(r.ciente.comentario?' — "'+esc(r.ciente.comentario)+'"':'')+'</div>':'<div class="alert a-y">Aguardando '+esc(nomeEnt(e.id))+' confirmar o resultado.</div>';
+    h+= r.caixa ? '<div class="alert a-g">'+esc(nomeEnt(e.id))+' declarou o dinheiro em mãos em '+fhora(r.caixa.ts)+'.</div>' : '<div class="alert a-y">'+esc(nomeEnt(e.id))+' ainda não declarou o dinheiro em mãos.</div>';
     var tardias=r.vendas.filter(function(v){ return v.tsLocal && dataLocal(v.tsLocal)!==v.data; }).length;
     if(tardias) h+='<div class="alert a-r">'+tardias+' entrega(s) lançada(s) fora do dia da rota. Confira se são reais.</div>';
     h+=tabelaConf(r);
@@ -628,10 +669,11 @@ function telaGerencia(){
       if(r.pixOk) h+='<div class="alert a-g" style="margin-top:10px">Pix conferido com o extrato: '+fmt(r.pixOk.valor)+(Math.abs(r.pixOk.valor-r.formas.pix)>=0.01?' <b>(lançado na rota: '+fmt(r.formas.pix)+')</b>':'')+' · '+fhora(r.pixOk.ts)+'</div>';
       else h+='<div class="card" style="margin-top:10px;background:#faf8f4"><div class="field"><label>Pix que entrou no extrato (R$) — esperado '+fmt(r.formas.pix)+'</label><input class="inp" type="number" step="0.01" id="px-'+e.id+'"></div><button class="btn btn-o px-btn" data-ent="'+e.id+'">Marcar Pix conferido</button></div>';
     }
+    if(r.caixa && !r.dinRec) h+='<div class="card" style="margin-top:10px;background:#faf8f4"><div class="field"><label>Dinheiro que você contou no envelope (R$)</label><input class="inp" type="number" step="0.01" min="0" id="dr-'+e.id+'"></div><button class="btn btn-o dr-btn" data-ent="'+e.id+'">Registrar contagem</button></div>';
     var naoImp=r.vendas.filter(function(v){return !IMP[v._key];});
     h+='<div class="stitle">Entregas ('+r.vendas.length+')</div>'+(r.vendas.map(function(v){ return linhaMov(v).replace('<div class="t">','<div class="t">'+(IMP[v._key]?'<span class="badge b-g" style="margin:0 6px 0 0">no sistema</span>':'')); }).join('')||'<div class="muted">Nenhuma lançada.</div>');
     if(!MODO_TESTE && naoImp.length && r.fechada) h+='<button class="btn btn-o imp-btn" style="margin-top:12px" data-ent="'+e.id+'">Lançar '+naoImp.length+' entrega(s) no Sistema Lelé</button>';
-    h+='<div class="stitle">Movimentos</div>'+r.cargas.concat(r.retorno?[r.retorno]:[]).concat(r.ciente?[r.ciente]:[]).map(linhaMov).join('');
+    h+='<div class="stitle">Movimentos</div>'+r.cargas.concat(r.retorno?[r.retorno]:[]).concat(r.caixa?[r.caixa]:[]).concat(r.dinRec?[r.dinRec]:[]).concat(r.ciente?[r.ciente]:[]).map(linhaMov).join('');
     h+='</div>';
   });
   $('conteudo').innerHTML=h;
@@ -642,6 +684,11 @@ function telaGerencia(){
     db.ref(OP+'/corr/'+k+'/decisao').set({status:s, ts:TS, por:U.email}).then(function(){ toast(s==='aprovada'?'Aprovada ✓':'Rejeitada'); }).catch(function(e){ toast('Erro: '+(e.message||e),5000); });
   }; });
   document.querySelectorAll('.imp-btn').forEach(function(b){ b.onclick=function(){ importarEntregas(b.getAttribute('data-ent'), gerDia, b); }; });
+  document.querySelectorAll('.dr-btn').forEach(function(b){ b.onclick=function(){
+    var ent=b.getAttribute('data-ent'), t=(($('dr-'+ent)||{}).value||'').trim();
+    if(t==='') return toast('Digite o valor que você contou');
+    var o=base('dinrec',ent,gerDia); o.valor=Math.round((parseFloat(t.replace(',','.'))||0)*100)/100; gravar(OP+'/mov',o); toast('Contagem registrada ✓');
+  }; });
   document.querySelectorAll('.px-btn').forEach(function(b){ b.onclick=function(){
     var ent=b.getAttribute('data-ent'), v=parseFloat(($('px-'+ent)||{}).value);
     if(isNaN(v)) return toast('Informe o valor que entrou no extrato');
@@ -655,7 +702,6 @@ function compararCorr(m,novo){
   campos.forEach(function(c){ h+='<tr><td>'+c[1]+'</td><td>'+esc(resumoItens(limpa(m[c[0]])))+'</td><td><b>'+esc(resumoItens(limpa(novo[c[0]])))+'</b></td></tr>'; });
   if(m.tipo==='venda') h+='<tr><td>Pagamento</td><td>'+fmt(m.valor)+' · '+esc(nomeForma(m.forma))+'</td><td><b>'+fmt(novo.valor)+' · '+esc(nomeForma(novo.forma))+'</b></td></tr>';
   if(m.tipo==='retorno' && (m.perdaMotivo||novo.perdaMotivo)!==undefined && (m.perdaMotivo||'')!==(novo.perdaMotivo||'')) h+='<tr><td>Justificativa da perda</td><td>'+esc(m.perdaMotivo||'—')+'</td><td><b>'+esc(novo.perdaMotivo||'—')+'</b></td></tr>';
-  if(m.tipo==='retorno') h+='<tr><td>Dinheiro contado</td><td>'+fmt(m.dinheiro)+'</td><td><b>'+fmt(novo.dinheiro)+'</b></td></tr>';
   return h+'</table>';
 }
 function limpa(o){ var r={}; Object.keys(o||{}).forEach(function(k){ if(k!=='_' && o[k]) r[k]=o[k]; }); return r; }

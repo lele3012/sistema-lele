@@ -319,7 +319,7 @@ function telaCarga(){
     var pend = rotaPendente(ent);
     if(pend && U.papel!=='gerencia') return abrirModal('<h3>Carga bloqueada</h3><div class="alert a-r">A rota de '+fdata(pend.data)+' de '+esc(nomeEnt(ent))+' ainda está aberta: '+esc(pend.motivo)+'.</div><button class="btn btn-o" onclick="fecharModal()">Voltar</button>');
     var r = calcRota(ent, hoje());
-    var aviso = (pend ? '<div class="alert a-r">Liberando com a rota de '+fdata(pend.data)+' ainda aberta ('+esc(pend.motivo)+').</div>' : '') +r.fechada ? '<div class="alert a-r">A rota de hoje deste entregador já foi fechada. Esta saída vai aparecer como diferença.</div>' : (r.cargas.length?'<div class="alert a-y">Já existe saída hoje para '+esc(nomeEnt(ent))+'. Esta será somada (reposição).</div>':'');
+    var aviso = (pend ? '<div class="alert a-r">Liberando com a rota de '+fdata(pend.data)+' ainda aberta ('+esc(pend.motivo)+').</div>' : '') + (r.fechada ? '<div class="alert a-r">A rota de hoje deste entregador já foi fechada. Esta saída vai aparecer como diferença.</div>' : (r.cargas.length?'<div class="alert a-y">Já existe saída hoje para '+esc(nomeEnt(ent))+'. Esta será somada (reposição).</div>':''));
     confirmar('Confirmar saída', aviso+'<p><b>'+esc(nomeEnt(ent))+'</b> · '+fdata(hoje())+'</p><p style="margin-top:8px">'+esc(resumoItens(itens))+'</p><p class="muted" style="margin-top:6px">Total: '+totalUn(itens)+' unidades</p>', function(){
       var o=base('carga',ent,hoje()); o.itens=itens; gravar(OP+'/mov',o); toast('Saída gravada ✓');
     });

@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lelé Operação">
+<meta name="theme-color" content="#2a7a3b">
+<link rel="manifest" href="operacao-manifest.json">
+<link rel="apple-touch-icon" href="operacao-icon-192.png">
 <title>Lelé Operação</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -184,9 +188,24 @@ function salvarFila(f){ try { localStorage.setItem(FILA, JSON.stringify(f)); } c
 function gravar(caminho, obj){
   var key = db.ref(caminho).push().key;
   var f = lerFila(); f[caminho+'/'+key] = obj; salvarFila(f);
+  if(caminho===OP+'/mov' && !MOV.some(function(m){return m._key===key;})){ var c=Object.assign({},obj); c._key=key; c._pendente=true; MOV.push(c); }
   enviar(caminho+'/'+key, obj);
+  // gravar é sempre uma ação da pessoa: limpa o formulário e atualiza a tela
+  setTimeout(render, 0);
   return key;
 }
+// Junta o que veio do banco com o que ainda está só no aparelho (sem internet)
+function comFila(lista){
+  var f=lerFila(), pref=OP+'/mov/', tem={};
+  lista.forEach(function(m){ tem[m._key]=1; });
+  Object.keys(f).forEach(function(path){ if(path.indexOf(pref)!==0) return; var k=path.slice(pref.length); if(tem[k]) return;
+    var c=Object.assign({},f[path]); c._key=k; c._pendente=true; lista.push(c); });
+  return lista;
+}
+// Cópias locais para abrir sem internet (sem as assinaturas, para ocupar pouco espaço)
+var LOCAL_CLI='lk_op_cli', LOCAL_MOV='lk_op_mov_'+OP;
+function guardarLocal(chave, valor){ try{ localStorage.setItem(chave, JSON.stringify(valor)); }catch(e){} }
+function lerLocal(chave){ try{ return JSON.parse(localStorage.getItem(chave)||'null'); }catch(e){ return null; } }
 function enviar(path, obj){
   db.ref(path).set(obj).then(function(){
     var f=lerFila(); delete f[path]; salvarFila(f);
@@ -741,18 +760,23 @@ function montarNav(){
   document.querySelectorAll('.tab').forEach(function(t){ t.onclick=function(){ aba=t.getAttribute('data-a'); vendaCli=null; montarNav(); render(); window.scrollTo(0,0); }; });
 }
 function render(){
+  renderPend=false;
   if(aba==='carga') telaCarga(); else if(aba==='retorno') telaRetorno(); else if(aba==='rota') telaRota(); else telaGerencia();
 }
 var renderPend=false;
-function renderAoMudar(){
-  // Dados chegaram do banco. Se a pessoa estiver no meio de um formulário,
-  // espera ela sair do campo para atualizar a tela.
+// Há algo sendo preenchido na tela? (cliente escolhido, números digitados, assinatura)
+function formEmAndamento(){
+  if(aba==='rota' && vendaCli) return true;
   var el=document.activeElement;
-  if(el && (el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.tagName==='SELECT') && $('conteudo').contains(el)){
-    if(!renderPend){ renderPend=true; el.addEventListener('blur', function f(){ el.removeEventListener('blur',f); renderPend=false; setTimeout(render,50); }); }
-    return;
-  }
+  if(el && (el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.tagName==='SELECT') && $('conteudo').contains(el)) return true;
+  return Array.prototype.some.call(document.querySelectorAll('#conteudo input, #conteudo textarea'), function(i){ return i.type!=='date' && i.tagName!=='SELECT' && String(i.value).trim()!==''; });
+}
+function renderAoMudar(){
+  // Dados chegaram do banco. Se a pessoa estiver preenchendo algo, NÃO redesenha
+  // (perderia números e assinatura): a tela se atualiza na próxima ação dela.
+  if(formEmAndamento()){ renderPend=true; return; }
   if($('modal').className.indexOf('on')>=0){ renderAposModal=true; return; }
+  renderPend=false;
   render();
 }
 
@@ -772,7 +796,8 @@ function assinarMov(){
   var ini = somaDias(hoje(), -DIAS_ROTA); if(gerDia<ini) ini=gerDia;
   subMov = db.ref(OP+'/mov').orderByChild('data').startAt(ini);
   subMov.on('value', function(s){
-    var v=s.val()||{}; MOV=Object.keys(v).map(function(k){ var o=v[k]; o._key=k; return o; });
+    var v=s.val()||{}; MOV=comFila(Object.keys(v).map(function(k){ var o=v[k]; o._key=k; return o; }));
+    guardarLocal(LOCAL_MOV, MOV.filter(function(m){return !m._pendente;}).map(function(m){ var c=Object.assign({},m); delete c.assinatura; return c; }));
     renderAoMudar();
   }, function(e){ toast('Sem acesso aos lançamentos: '+e.message, 6000); });
 }
@@ -781,7 +806,11 @@ function iniciar(){
   // Clientes: a Darling e o Will leem só "op_clientes" (nome + tabela de preço).
   // Quando a gerência abre esta página, essa lista é atualizada a partir do
   // cadastro completo ("clientes"), que só a gerência pode ler.
-  db.ref('op_clientes').on('value', function(s){ var v=s.val()||{}; CLI=Object.keys(v).map(function(k){var o=v[k]; o._key=k; return o;}).sort(function(a,b){return nomeCli(a).localeCompare(nomeCli(b),'pt-BR');}); renderAoMudar(); }, function(e){ toast('Sem acesso aos clientes: '+e.message,6000); });
+  // Abre com as cópias salvas no aparelho; o banco atualiza assim que houver sinal
+  var cliLocal=lerLocal(LOCAL_CLI); if(cliLocal && cliLocal.length) CLI=cliLocal;
+  var movLocal=lerLocal(LOCAL_MOV); MOV=comFila(movLocal||[]);
+  reenviarFila();
+  db.ref('op_clientes').on('value', function(s){ var v=s.val()||{}; CLI=Object.keys(v).map(function(k){var o=v[k]; o._key=k; return o;}).sort(function(a,b){return nomeCli(a).localeCompare(nomeCli(b),'pt-BR');}); guardarLocal(LOCAL_CLI, CLI); renderAoMudar(); }, function(e){ toast('Sem acesso aos clientes: '+e.message,6000); });
   if(U.papel==='gerencia') db.ref('clientes').on('value', function(s){ sincronizarClientes(s.val()||{}); });
   db.ref(OP+'/corr').on('value', function(s){ CORR=s.val()||{}; renderAoMudar(); });
   if(U.papel==='gerencia') db.ref(OP+'/importadas').on('value', function(s){ IMP=s.val()||{}; renderAoMudar(); });
@@ -812,9 +841,17 @@ $('btn-entrar-google').onclick=function(){
   var p=new firebase.auth.GoogleAuthProvider(); p.setCustomParameters({prompt:'select_account'});
   auth.signInWithPopup(p).catch(function(e){ if(e && e.code==='auth/popup-blocked') return auth.signInWithRedirect(p); if(e && e.code!=='auth/popup-closed-by-user') $('login-erro').textContent='Não foi possível entrar: '+(e.message||e); });
 };
-$('btn-sair').onclick=function(){ auth.signOut().then(function(){ location.reload(); }); };
+$('btn-sair').onclick=function(){
+  if(Object.keys(lerFila()).length){ toast('Ainda há lançamentos esperando internet. Conecte antes de sair.', 5000); return; }
+  try{ localStorage.removeItem(LOCAL_MOV); }catch(e){}
+  auth.signOut().then(function(){ location.reload(); });
+};
 $('modal').onclick=function(e){ if(e.target===this) fecharModal(); };
 
+// Funcionamento sem internet: vale só para as páginas "operacao*"
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){ navigator.serviceWorker.register('operacao-sw.js', {scope:'./operacao'}).catch(function(e){ console.warn('Offline indisponível:', e); }); });
+}
 var iniciado=false;
 auth.onAuthStateChanged(function(user){
   if(!user){ $('login').style.display='flex'; return; }

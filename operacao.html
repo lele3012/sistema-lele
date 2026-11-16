@@ -159,6 +159,9 @@ var FORMAS_RECEB = [['vista','Dinheiro'],['pix','PIX']]; // quantos dias para tr
 // ---------- estado ----------
 var U = {email:'', nome:'', papel:'', ent:''};
 var CLI = [], MOV = [], CORR = {}, IMP = {};
+var CLI_OFICIAL = [], CLINOVO = {}, CLI_FULL = {};
+var SEGMENTOS = [['academia','Academia'],['aeroporto','Aeroporto'],['cafeteria','Cafeteria'],['escola','Cantina escolar'],['informal','Cliente informal'],['conveniencia','Conveniência'],['posto','Conveniência de posto'],['empresa','Empresas'],['hotel','Hotel'],['lanchonete','Lanchonete'],['mercado_autonomo','Mercado autônomo'],['mercadinho','Mercadinho'],['sorveteria','Sorveteria'],['supermercado','Supermercado'],['outro','Outro']];
+var VENDEDORES = ['Will','Leonardo','Barbara'];
 var aba = '', gerDia = hoje(), rotaSel = '', vendaCli = null;
 var subMov = null;
 
@@ -205,7 +208,7 @@ function comFila(lista){
   return lista;
 }
 // Cópias locais para abrir sem internet (sem as assinaturas, para ocupar pouco espaço)
-var LOCAL_CLI='lk_op_cli', LOCAL_MOV='lk_op_mov_'+OP;
+var LOCAL_CLI='lk_op_cli', LOCAL_MOV='lk_op_mov_'+OP, LOCAL_NOVO='lk_op_novo_'+OP;
 function guardarLocal(chave, valor){ try{ localStorage.setItem(chave, JSON.stringify(valor)); }catch(e){} }
 function lerLocal(chave){ try{ return JSON.parse(localStorage.getItem(chave)||'null'); }catch(e){ return null; } }
 function enviar(path, obj){
@@ -464,16 +467,17 @@ function telaRota(){
   }
   h+='<div class="stitle">Lançar entregas</div><div class="card">'+seletorRota(abertas,'v-rota');
   var rt=rotaDoId(rotaSel), r=calcRota(rt.ent,rt.data);
-  h+='<div class="muted" style="margin-bottom:12px">No caminhão (pelo sistema): '+esc(resumoItens(r.saldo))+'</div>';
   if(!vendaCli){
     h+='<div class="field"><label>Cliente</label><input class="inp" id="v-busca" placeholder="Buscar cliente…" autocomplete="off"></div><div class="drop" id="v-drop"></div>';
+    if(U.papel==='entregador') h+='<button class="btn btn-o btn-sm" id="v-novocli" style="margin-bottom:6px">+ Novo cliente</button>';
   } else {
-    h+='<div class="sel-cli"><span>'+esc(nomeCli(vendaCli))+'</span><button class="btn btn-o btn-sm" id="v-trocar">Trocar</button></div>';
+    h+='<div class="sel-cli"><span>'+esc(nomeCli(vendaCli))+(vendaCli.novo?' <span class="badge b-y">novo · aguardando aprovação</span>':'')+'</span><button class="btn btn-o btn-sm" id="v-trocar">Trocar</button></div>';
+    if(vendaCli.novo) h+='<div class="alert a-y">Cliente novo: preço padrão e pagamento só à vista ou PIX até a aprovação.</div>';
     h+='<div class="stitle" style="margin-top:0">Entregue (venda)</div>'+gradeQtd('v-q-',PRODS);
     h+='<div id="v-precos-extra"></div>';
     h+='<div class="stitle">Trocas (vencidos recolhidos)</div>'+gradeQtd('v-t-',PRODS_TROCA);
     h+='<details style="margin-top:12px"><summary class="muted" style="cursor:pointer">Bonificação</summary><div style="margin-top:10px">'+gradeQtd('v-b-',PRODS)+'</div></details>';
-    h+='<div class="stitle">Pagamento</div><div class="field"><select class="inp" id="v-forma">'+FORMAS.map(function(f){return '<option value="'+f[0]+'">'+esc(f[1])+'</option>';}).join('')+'</select></div>';
+    h+='<div class="stitle">Pagamento</div><div class="field"><select class="inp" id="v-forma">'+FORMAS.filter(function(f){ return !vendaCli.novo || f[0]==='vista' || f[0]==='pix'; }).map(function(f){return '<option value="'+f[0]+'">'+esc(f[1])+'</option>';}).join('')+'</select></div>';
     h+='<div class="row" style="align-items:center;margin-bottom:12px"><div class="muted">Valor (vendas − trocas)</div><div class="total" id="v-total" style="text-align:right">R$ 0,00</div></div>';
     h+='<div class="stitle">Assinatura do cliente</div><div style="position:relative"><canvas id="v-ass" style="width:100%;height:170px;border:1.5px dashed #bbb;border-radius:10px;background:#fff;touch-action:none;display:block"></canvas>'+
       '<button class="btn btn-o btn-sm" id="v-ass-limpar" style="position:absolute;top:6px;right:6px">Limpar</button></div><div class="muted" style="margin:6px 0 14px">Peça ao cliente para assinar com o dedo depois de conferir os números.</div>';
@@ -489,7 +493,7 @@ function telaRota(){
   if($('v-rota')) $('v-rota').onchange=function(){ rotaSel=this.value; render(); };
   $('v-receb').onclick=function(){ abrirRecebimento(rt); };
   $('v-desp').onclick=function(){ abrirDespesa(rt); };
-  if(!vendaCli){ ligarBusca(); return; }
+  if(!vendaCli){ ligarBusca(); if($('v-novocli')) $('v-novocli').onclick=abrirNovoCliente; return; }
   var ass = padAssinatura($('v-ass'));
   $('v-ass-limpar').onclick=function(){ ass.limpar(); };
   $('v-trocar').onclick=function(){ vendaCli=null; render(); };
@@ -503,14 +507,23 @@ function telaRota(){
   $('v-salvar').onclick=function(){
     var prods=lerQtd('v-q-',PRODS), trocas=lerQtd('v-t-',PRODS_TROCA), bonif=lerQtd('v-b-',PRODS), pd=precosDigitados();
     if(!totalUn(prods)&&!totalUn(trocas)&&!totalUn(bonif)) return toast('Informe as quantidades');
-    var faltou=[]; PRODS.forEach(function(p){ var k=p[0], q=(prods[k]||0)+(bonif[k]||0); if(q>r.saldo[k]) faltou.push(p[1]+' (tem '+Math.max(0,r.saldo[k])+')'); });
-    if(faltou.length) return abrirModal('<h3>Mais do que saiu na carga</h3><div class="alert a-r">'+esc(faltou.join(', '))+'</div><p class="muted">Confira as quantidades. Se a carga estiver errada, a fábrica precisa pedir correção.</p><button class="btn btn-o" onclick="fecharModal()">Voltar</button>');
     for(var k in prods){ if((k==='suco'||k==='salada') && !(pd[k]>0)) return toast('Informe o preço de '+nomeProd(k)); }
     if(ass.vazia()) return toast('Falta a assinatura do cliente');
+    // Passou da carga registrada? NÃO trava: avisa (sem mostrar números) e deixa seguir.
+    // A diferença aparece para a gerência e na conferência.
+    var acima=PRODS.some(function(p){ var k=p[0]; return ((prods[k]||0)+(bonif[k]||0))>0 && ((prods[k]||0)+(bonif[k]||0))>r.saldo[k]; });
+    if(acima && !$('v-salvar')._avisado){
+      abrirModal('<h3>Atenção</h3><div class="alert a-y">Esta quantidade passa da carga registrada. Confira as quantidades e, se estiver certo, siga normalmente.</div>'+
+        '<div class="row"><button class="btn btn-o" id="ac-voltar">Voltar e conferir</button><button class="btn btn-g" id="ac-seguir">Está certo, seguir</button></div>');
+      $('ac-voltar').onclick=fecharModal;
+      $('ac-seguir').onclick=function(){ $('modal').className='modal'; $('v-salvar')._avisado=true; $('v-salvar').click(); };
+      return;
+    }
+    $('v-salvar')._avisado=false;
     var forma=$('v-forma').value, valor=valorVenda(vendaCli,prods,trocas,pd), cli=vendaCli, img=ass.imagem();
     var numero = proximoNumero(rt.ent, rt.data);
     confirmar('Confirmar entrega', '<p><b>Nota '+esc(numero)+'</b></p><p><b>'+esc(nomeCli(cli))+'</b> · rota de '+fdata(rt.data)+'</p><p style="margin-top:8px">Entregue: '+esc(resumoItens(prods))+'</p><p>Trocas: '+esc(resumoItens(trocas))+'</p>'+(totalUn(bonif)?'<p>Bonificação: '+esc(resumoItens(bonif))+'</p>':'')+'<p style="margin-top:8px"><b>'+fmt(valor)+'</b> · '+esc(nomeForma(forma))+'</p>', function(){
-      var o=base('venda',rt.ent,rt.data); o.numero=numero; o.tsLocal=Date.now(); o.cliId=cli.id; o.cliNome=nomeCli(cli); o.prods=prods; o.trocas=trocas; o.bonif=bonif; o.precos=pd; o.forma=forma; o.valor=Math.round(valor*100)/100; o.assinatura=img;
+      var o=base('venda',rt.ent,rt.data); o.numero=numero; o.tsLocal=Date.now(); o.cliId=cli.id; o.cliNome=nomeCli(cli); if(cli.novo) o.cliNovo=true; if(acima) o.acimaCarga=true; o.prods=prods; o.trocas=trocas; o.bonif=bonif; o.precos=pd; o.forma=forma; o.valor=Math.round(valor*100)/100; o.assinatura=img;
       gravar(OP+'/mov',o); vendaCli=null; render();
       abrirModal('<h3>Entrega gravada ✓</h3><p>Nota <b>'+esc(numero)+'</b> · '+esc(o.cliNome)+' · '+fmt(o.valor)+'</p>'+
         '<a class="btn btn-o" style="display:block;text-align:center;text-decoration:none;margin-top:14px" target="_blank" href="https://wa.me/?text='+encodeURIComponent(textoComprovante(o))+'">Enviar comprovante por WhatsApp</a>'+
@@ -654,12 +667,107 @@ function valorVenda(cli, prods, trocas, pd){
   Object.keys(trocas||{}).forEach(function(k){ v-=trocas[k]*precoCli(cli,k); });
   return v;
 }
+// ===== CADASTRO DE CLIENTE NOVO (só o entregador) =====
+// O cliente fica "aguardando aprovação" da gerência, mas já pode comprar
+// (preço padrão, à vista ou PIX). Os dados completos só a gerência vê.
+function soDig(t){ return String(t||'').replace(/\D/g,''); }
+function fmtDoc(d){ d=soDig(d); if(d.length===14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/,'$1.$2.$3/$4-$5'); if(d.length===11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/,'$1.$2.$3-$4'); return d; }
+function fmtFone(t){ t=soDig(t).slice(0,11); if(t.length>10) return '('+t.slice(0,2)+') '+t.slice(2,7)+'-'+t.slice(7); if(t.length>6) return '('+t.slice(0,2)+') '+t.slice(2,6)+'-'+t.slice(6); if(t.length>2) return '('+t.slice(0,2)+') '+t.slice(2); return t; }
+function cnpjOk(c){ if(!/^\d{14}$/.test(c)||/^(\d)\1+$/.test(c)) return false;
+  function dv(b){ var w=b.length===12?[5,4,3,2,9,8,7,6,5,4,3,2]:[6,5,4,3,2,9,8,7,6,5,4,3,2], s=0; for(var i=0;i<b.length;i++) s+=+b[i]*w[i]; var r=s%11; return r<2?0:11-r; }
+  return dv(c.slice(0,12))===+c[12] && dv(c.slice(0,13))===+c[13]; }
+function cpfOk(c){ if(!/^\d{11}$/.test(c)||/^(\d)\1+$/.test(c)) return false;
+  function dv(n){ var s=0; for(var i=0;i<n;i++) s+=+c[i]*(n+1-i); var r=(s*10)%11; return r===10?0:r; }
+  return dv(9)===+c[9] && dv(10)===+c[10]; }
+function buscarJson(url, ms){ var ctl=(typeof AbortController!=='undefined')?new AbortController():null, t=setTimeout(function(){ if(ctl) ctl.abort(); }, ms||8000);
+  return fetch(url, ctl?{signal:ctl.signal}:{}).then(function(r){ clearTimeout(t); if(r.status===404) return {_404:true}; if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }); }
+// Mesmas fontes do sistema principal, uma depois da outra
+function consultarCnpjApp(c){
+  var fontes=[
+    function(){ return buscarJson('https://brasilapi.com.br/api/cnpj/v1/'+c).then(function(j){ return j._404?j:{razao:j.razao_social,fantasia:j.nome_fantasia,end:[j.descricao_tipo_de_logradouro,j.logradouro].filter(Boolean).join(' '),num:j.numero,bairro:j.bairro,cidade:j.municipio,uf:j.uf,cep:j.cep,situacao:j.descricao_situacao_cadastral}; }); },
+    function(){ return buscarJson('https://minhareceita.org/'+c).then(function(j){ return j._404?j:{razao:j.razao_social,fantasia:j.nome_fantasia,end:[j.descricao_tipo_de_logradouro,j.logradouro].filter(Boolean).join(' '),num:j.numero,bairro:j.bairro,cidade:j.municipio,uf:j.uf,cep:j.cep,situacao:j.descricao_situacao_cadastral}; }); },
+    function(){ return buscarJson('https://publica.cnpj.ws/cnpj/'+c).then(function(j){ if(j._404) return j; var e=j.estabelecimento||{}; return {razao:j.razao_social,fantasia:e.nome_fantasia,end:[e.tipo_logradouro,e.logradouro].filter(Boolean).join(' '),num:e.numero,bairro:e.bairro,cidade:(e.cidade||{}).nome,uf:(e.estado||{}).sigla,cep:e.cep,situacao:e.situacao_cadastral}; }); }
+  ];
+  var i=0, n404=0;
+  function prox(){ if(i>=fontes.length) return Promise.resolve(n404>=2?{naoExiste:true}:{falhou:true});
+    return fontes[i++]().then(function(d){ if(d._404){ n404++; return prox(); } if(!d.razao) return prox(); return {dados:d}; }).catch(function(){ return prox(); }); }
+  return prox();
+}
+function abrirNovoCliente(){
+  var h='<h3>Novo cliente</h3><p class="muted" style="margin-bottom:12px">Ele fica aguardando aprovação, mas você já pode entregar (preço padrão, à vista ou PIX).</p>'+
+    '<div class="row" style="margin-bottom:12px"><button class="btn btn-g" id="nc-pj">CNPJ</button><button class="btn btn-o" id="nc-pf">CPF</button></div>'+
+    '<div class="field"><label id="nc-doc-lbl">CNPJ</label><div class="row"><input class="inp" id="nc-doc" inputmode="numeric" style="flex:2"><button class="btn btn-o btn-sm" id="nc-buscar" style="flex:1">Buscar</button></div></div><div id="nc-msg"></div>'+
+    '<div class="field"><label id="nc-nome-lbl">Razão social</label><input class="inp" id="nc-nome"></div>'+
+    '<div class="field" id="nc-fant-w"><label>Nome fantasia</label><input class="inp" id="nc-fant"></div>'+
+    '<div class="field"><label>CEP</label><div class="row"><input class="inp" id="nc-cep" inputmode="numeric" style="flex:2"><button class="btn btn-o btn-sm" id="nc-bcep" style="flex:1">Buscar CEP</button></div></div>'+
+    '<div class="field"><label>Endereço</label><input class="inp" id="nc-end"></div>'+
+    '<div class="row"><div class="field"><label>Número</label><input class="inp" id="nc-num"></div><div class="field"><label>Bairro</label><input class="inp" id="nc-bairro"></div></div>'+
+    '<input type="hidden" id="nc-cidade"><input type="hidden" id="nc-uf">'+
+    '<div class="field"><label>Segmento</label><select class="inp" id="nc-seg"><option value="">Selecione…</option>'+SEGMENTOS.map(function(x){return '<option value="'+x[0]+'">'+x[1]+'</option>';}).join('')+'</select></div>'+
+    '<div class="field hidden" id="nc-segout-w"><label>Qual segmento?</label><input class="inp" id="nc-segout"></div>'+
+    '<div class="field"><label>WhatsApp</label><input class="inp" id="nc-whats" inputmode="tel" placeholder="(82) 90000-0000"></div>'+
+    '<div class="field"><label>Vendedor</label><select class="inp" id="nc-vend"><option value="">Selecione…</option>'+VENDEDORES.map(function(v){return '<option>'+v+'</option>';}).join('')+'<option value="outro">Outro</option></select></div>'+
+    '<div class="field hidden" id="nc-vendout-w"><label>Nome do vendedor</label><input class="inp" id="nc-vendout"></div>'+
+    '<div class="row" style="margin-top:6px"><button class="btn btn-o" onclick="fecharModal()">Cancelar</button><button class="btn btn-g" id="nc-ok">Cadastrar</button></div>';
+  abrirModal(h);
+  var tipo='PJ';
+  function setTipo(t){ tipo=t; $('nc-pj').className='btn '+(t==='PJ'?'btn-g':'btn-o'); $('nc-pf').className='btn '+(t==='PF'?'btn-g':'btn-o');
+    $('nc-doc-lbl').textContent=t==='PJ'?'CNPJ':'CPF'; $('nc-nome-lbl').textContent=t==='PJ'?'Razão social':'Nome completo';
+    $('nc-fant-w').classList.toggle('hidden', t!=='PJ'); $('nc-buscar').classList.toggle('hidden', t!=='PJ'); $('nc-doc').value=''; $('nc-msg').innerHTML=''; }
+  $('nc-pj').onclick=function(){ setTipo('PJ'); }; $('nc-pf').onclick=function(){ setTipo('PF'); };
+  $('nc-doc').oninput=function(){ this.value=fmtDoc(this.value); };
+  $('nc-whats').oninput=function(){ this.value=fmtFone(this.value); };
+  $('nc-seg').onchange=function(){ $('nc-segout-w').classList.toggle('hidden', this.value!=='outro'); };
+  $('nc-vend').onchange=function(){ $('nc-vendout-w').classList.toggle('hidden', this.value!=='outro'); };
+  $('nc-buscar').onclick=function(){
+    var c=soDig($('nc-doc').value), msg=$('nc-msg'), b=this;
+    if(!cnpjOk(c)){ msg.innerHTML='<div class="alert a-r">CNPJ inválido. Confira os números.</div>'; return; }
+    if(!navigator.onLine){ msg.innerHTML='<div class="alert a-y">Sem internet: preencha os dados à mão.</div>'; return; }
+    b.disabled=true; msg.innerHTML='<div class="alert a-y">Buscando…</div>';
+    consultarCnpjApp(c).then(function(res){
+      b.disabled=false;
+      if(!res.dados){ msg.innerHTML='<div class="alert a-r">'+(res.naoExiste?'CNPJ não encontrado na Receita.':'A consulta não respondeu agora.')+' Preencha à mão.</div>'; return; }
+      var d=res.dados; $('nc-nome').value=d.razao||''; $('nc-fant').value=d.fantasia||''; $('nc-end').value=d.end||''; $('nc-num').value=d.num||'';
+      $('nc-bairro').value=d.bairro||''; $('nc-cidade').value=d.cidade||''; $('nc-uf').value=d.uf||''; $('nc-cep').value=soDig(d.cep);
+      var sit=String(d.situacao||'').toUpperCase();
+      msg.innerHTML='<div class="alert a-g">Dados encontrados ✓ Confira e complete segmento, WhatsApp e vendedor.</div>'+(sit&&sit!=='ATIVA'?'<div class="alert a-r">Atenção: situação na Receita = '+esc(d.situacao)+'</div>':'');
+    });
+  };
+  $('nc-bcep').onclick=function(){
+    var c=soDig($('nc-cep').value), b=this; if(c.length!==8) return toast('CEP precisa de 8 números');
+    if(!navigator.onLine) return toast('Sem internet: preencha o endereço à mão');
+    b.disabled=true;
+    buscarJson('https://brasilapi.com.br/api/cep/v1/'+c).then(function(j){ b.disabled=false; if(j._404) return toast('CEP não encontrado');
+      if(j.street) $('nc-end').value=j.street; if(j.neighborhood) $('nc-bairro').value=j.neighborhood; $('nc-cidade').value=j.city||''; $('nc-uf').value=j.state||''; $('nc-num').focus();
+    }).catch(function(){ b.disabled=false; toast('A busca do CEP não respondeu. Preencha à mão.'); });
+  };
+  $('nc-ok').onclick=function(){
+    var doc=soDig($('nc-doc').value), nome=$('nc-nome').value.trim(), seg=$('nc-seg').value, vend=$('nc-vend').value;
+    if(tipo==='PJ' && !cnpjOk(doc)) return toast('CNPJ inválido');
+    if(tipo==='PF' && !cpfOk(doc)) return toast('CPF inválido');
+    if(nome.length<3) return toast(tipo==='PJ'?'Informe a razão social':'Informe o nome');
+    if(!seg) return toast('Escolha o segmento'); if(seg==='outro' && !$('nc-segout').value.trim()) return toast('Digite o segmento');
+    if(soDig($('nc-whats').value).length<10) return toast('Informe o WhatsApp com DDD');
+    if(!vend) return toast('Escolha o vendedor'); if(vend==='outro' && !$('nc-vendout').value.trim()) return toast('Digite o nome do vendedor');
+    var jaTem=Object.keys(CLINOVO).map(function(k){return CLINOVO[k];}).find(function(c){ return c.doc===doc && !(c.decisao && c.decisao.status==='rejeitado'); });
+    if(jaTem) return toast('Esse '+(tipo==='PJ'?'CNPJ':'CPF')+' já foi cadastrado: '+(jaTem.fantasia||jaTem.nome));
+    var o={tipo:'clinovo', ent:U.ent, data:hoje(), ts:TS, tsLocal:Date.now(), por:U.email, porNome:U.nome, id:Date.now(),
+      tipoDoc:tipo, doc:doc, nome:nome, fantasia:tipo==='PJ'?$('nc-fant').value.trim():'', cep:soDig($('nc-cep').value), end:$('nc-end').value.trim(), num:$('nc-num').value.trim(),
+      bairro:$('nc-bairro').value.trim(), cidade:$('nc-cidade').value, uf:$('nc-uf').value, seg:seg, segOutro:seg==='outro'?$('nc-segout').value.trim():'',
+      whats:$('nc-whats').value.trim(), vendedor:vend==='outro'?$('nc-vendout').value.trim():vend};
+    var key=gravar(OP+'/clinovo', o);
+    montarCLI();
+    fecharModal();
+    vendaCli=CLI.find(function(c){ return c._key==='novo_'+key; })||null;
+    render(); toast('Cliente cadastrado ✓ Aguardando aprovação');
+  };
+}
 function ligarBusca(){
   var inp=$('v-busca'), drop=$('v-drop');
   var mostra=function(){
     var t=inp.value.trim().toLowerCase();
     var l=CLI.filter(function(c){ return !t || nomeCli(c).toLowerCase().indexOf(t)>=0 || (c.nome||'').toLowerCase().indexOf(t)>=0; }).slice(0,40);
-    drop.innerHTML=l.map(function(c){return '<div data-k="'+esc(c._key)+'">'+esc(nomeCli(c))+'</div>';}).join('')||'<div class="muted">Nenhum cliente</div>';
+    drop.innerHTML=l.map(function(c){return '<div data-k="'+esc(c._key)+'">'+esc(nomeCli(c))+(c.novo?' <span class="badge b-y">novo</span>':'')+'</div>';}).join('')||'<div class="muted">Nenhum cliente</div>';
     drop.style.display='block';
     drop.querySelectorAll('[data-k]').forEach(function(d){ d.onclick=function(){ vendaCli=CLI.find(function(c){return c._key===d.getAttribute('data-k');}); render(); }; });
   };
@@ -729,6 +837,7 @@ function abrirCorrecao(key){
 function telaGerencia(){
   var h=MODO_TESTE?'<div class="alert a-y"><b>Fase de teste.</b> Nada daqui vai para as Entregas, Cobranças ou Caixa do Sistema Lelé.</div>':'';
   h+='<div class="stitle">Fechamento</div><div class="card"><div class="field"><label>Data da carga</label><input class="inp" type="date" id="g-dia" value="'+gerDia+'"></div><div class="muted">Lista de clientes da operação: '+CLI.length+' (atualizada a partir do cadastro do sistema).</div></div>';
+  h+=cardsClientesNovos();
   var pend=Object.keys(CORR).map(function(k){var c=CORR[k]; c._key=k; return c;}).filter(function(c){return !c.decisao;});
   if(pend.length){
     h+='<div class="stitle">Correções aguardando você ('+pend.length+')</div>';
@@ -750,6 +859,8 @@ function telaGerencia(){
     else h+='<div class="alert a-g">Tudo bateu ✓</div>';
     if(r.fechada) h+=r.ciente?'<div class="alert a-g">'+esc(nomeEnt(e.id))+' confirmou o resultado em '+fhora(r.ciente.ts)+(r.ciente.comentario?' — "'+esc(r.ciente.comentario)+'"':'')+'</div>':'<div class="alert a-y">Aguardando '+esc(nomeEnt(e.id))+' confirmar o resultado.</div>';
     h+= r.caixa ? '<div class="alert a-g">'+esc(nomeEnt(e.id))+' declarou o dinheiro em mãos em '+fhora(r.caixa.ts)+'.</div>' : '<div class="alert a-y">'+esc(nomeEnt(e.id))+' ainda não declarou o dinheiro em mãos.</div>';
+    var excesso=PRODS.map(function(p){ var k=p[0], vend=(r.entregue[k]||0)+(r.bonif[k]||0), c=r.carga[k]||0; return vend>c ? '<b>'+esc(p[1])+'</b>: vendeu '+vend+', saída registrada '+c+' (+'+(vend-c)+')' : ''; }).filter(Boolean);
+    if(excesso.length) h+='<div class="alert a-r"><b>Vendeu mais do que a saída registrada</b> (erro na saída ou na venda — os dois precisam justificar):<br>'+excesso.join('<br>')+'</div>';
     var tardias=r.vendas.filter(function(v){ return v.tsLocal && dataLocal(v.tsLocal)!==v.data; }).length;
     if(tardias) h+='<div class="alert a-r">'+tardias+' entrega(s) lançada(s) fora do dia da rota. Confira se são reais.</div>';
     h+=tabelaConf(r);
@@ -786,7 +897,45 @@ function telaGerencia(){
     if(isNaN(v)) return toast('Informe o valor que entrou no extrato');
     var o=base('pixok',ent,gerDia); o.valor=Math.round(v*100)/100; gravar(OP+'/mov',o); toast('Pix conferido ✓');
   }; });
-  ligarCorrecoes();
+  ligarCorrecoes(); ligarClientesNovos();
+}
+var NOMES_SEG={}; SEGMENTOS.forEach(function(x){ NOMES_SEG[x[0]]=x[1]; });
+function cardsClientesNovos(){
+  var pend=Object.keys(CLINOVO).filter(function(k){ return !CLINOVO[k].decisao; });
+  if(!pend.length) return '';
+  var h='<div class="stitle">Clientes novos para aprovar ('+pend.length+')</div>';
+  pend.forEach(function(k){
+    var c=CLINOVO[k], dup=Object.keys(CLI_FULL).map(function(x){return CLI_FULL[x];}).filter(function(o){ return o && (soDig(o.cnpj)===c.doc || soDig(o.cpf)===c.doc); });
+    var vendas=MOV.filter(function(m){ return m.tipo==='venda' && String(m.cliId)===String(c.id); }).map(efetivo);
+    h+='<div class="card">'+
+      (dup.length?'<div class="alert a-r"><b>Já existe cliente com este '+(c.tipoDoc==='PJ'?'CNPJ':'CPF')+':</b> '+esc(dup.map(function(o){return o.fantasia||o.nome;}).join(', '))+'</div>':'')+
+      '<div style="font-weight:800;font-size:16px">'+esc(c.fantasia||c.nome)+'</div>'+
+      '<div class="s muted">'+(c.fantasia?esc(c.nome)+' · ':'')+(c.tipoDoc==='PJ'?'CNPJ ':'CPF ')+fmtDoc(c.doc)+'</div>'+
+      '<div class="s" style="margin-top:6px">'+esc([c.end,c.num].filter(Boolean).join(', '))+(c.bairro?' — '+esc(c.bairro):'')+(c.cidade?' · '+esc(c.cidade)+'/'+esc(c.uf):'')+(c.cep?' · CEP '+esc(c.cep):'')+'</div>'+
+      '<div class="s">Segmento: '+esc(c.seg==='outro'?c.segOutro:(NOMES_SEG[c.seg]||c.seg))+' · WhatsApp: '+esc(c.whats)+'</div>'+
+      '<div class="s">Vendedor: <b>'+esc(c.vendedor)+'</b> · cadastrado por '+esc(c.porNome)+' em '+fhora(c.tsLocal||c.ts)+'</div>'+
+      '<div class="s" style="margin-top:6px">'+(vendas.length?vendas.length+' entrega(s) já feita(s): '+fmt(vendas.reduce(function(s,v){return s+(v.valor||0);},0)):'Nenhuma entrega ainda')+'</div>'+
+      (MODO_TESTE?'<div class="alert a-y" style="margin-top:8px">Fase de teste: aprovar NÃO cria o cliente no cadastro do sistema.</div>':'')+
+      '<div class="row" style="margin-top:10px"><button class="btn btn-r cn-btn" data-k="'+esc(k)+'" data-s="rejeitado">Rejeitar</button><button class="btn btn-g cn-btn" data-k="'+esc(k)+'" data-s="aprovado">Aprovar</button></div></div>';
+  });
+  return h;
+}
+function ligarClientesNovos(){
+  document.querySelectorAll('.cn-btn').forEach(function(b){ b.onclick=function(){
+    var k=b.getAttribute('data-k'), st=b.getAttribute('data-s'), c=CLINOVO[k]; if(!c) return;
+    if(!confirm(st==='aprovado' ? 'Aprovar '+(c.fantasia||c.nome)+'?'+(MODO_TESTE?'':'\n\nEle entra no cadastro de clientes do sistema (pagamento à vista, preço padrão — ajuste depois se precisar).') : 'Rejeitar '+(c.fantasia||c.nome)+'? As entregas já feitas para ele continuam registradas e marcadas.')) return;
+    var up={}, dec={status:st, ts:TS, por:U.email};
+    if(st==='aprovado' && !MODO_TESTE){
+      var novoKey=db.ref('clientes').push().key;
+      up['clientes/'+novoKey]={ id:c.id, cnpj:c.tipoDoc==='PJ'?fmtDoc(c.doc):'', cpf:c.tipoDoc==='PF'?fmtDoc(c.doc):'', nome:c.nome, fantasia:c.fantasia||'',
+        tel:'', whats:c.whats||'', email:'', pgto:'vista', seg:c.seg||'', segOutro:c.segOutro||'', end:c.end||'', num:c.num||'', comp:'', bairro:c.bairro||'',
+        cidade:c.cidade||'', uf:c.uf||'', cep:c.cep?c.cep.replace(/^(\d{5})(\d{3})$/,'$1-$2'):'', ref:'', resp:'', obs:'Cadastrado pelo app ('+(c.porNome||'')+')', status:'ativo', precos:{},
+        vendedor:c.vendedor||'', cadastradoPor:c.porNome||'', origem:'app', dataCadastro:dataLocal(c.tsLocal||Date.now()), dataAprovacao:hoje() };
+      dec.clienteKey=novoKey;
+    }
+    up[OP+'/clinovo/'+k+'/decisao']=dec;
+    db.ref().update(up).then(function(){ toast(st==='aprovado'?'Cliente aprovado ✓':'Cliente rejeitado'); }).catch(function(e){ toast('Erro: '+(e.message||e),5000); });
+  }; });
 }
 function compararCorr(m,novo){
   if(m.tipo==='receb'||m.tipo==='desp') return '<table><tr><th></th><th>Antes</th><th>Depois</th></tr><tr><td>Valor</td><td>'+fmt(m.valor)+(m.forma?' · '+(m.forma==='pix'?'PIX':'Dinheiro'):'')+'</td><td><b>'+fmt(novo.valor)+(novo.forma?' · '+(novo.forma==='pix'?'PIX':'Dinheiro'):'')+'</b></td></tr></table>';
@@ -855,6 +1004,19 @@ function renderAoMudar(){
 }
 
 // ---------- dados ----------
+function novosComFila(srv){
+  var r=Object.assign({}, srv||{}), f=lerFila(), pref=OP+'/clinovo/';
+  Object.keys(f).forEach(function(p){ if(p.indexOf(pref)===0){ var k=p.slice(pref.length); if(!r[k]) r[k]=f[p]; } });
+  return r;
+}
+function montarCLI(){
+  CLINOVO = novosComFila(CLINOVO_SRV);
+  var ids={}; CLI_OFICIAL.forEach(function(c){ ids[String(c.id)]=1; });
+  var novos=Object.keys(CLINOVO).map(function(k){ var c=CLINOVO[k]; return {_key:'novo_'+k, _novoKey:k, id:c.id, nome:c.nome, fantasia:c.fantasia, novo:!c.decisao, decisao:c.decisao}; })
+    .filter(function(c){ return !ids[String(c.id)] && !(c.decisao && c.decisao.status==='rejeitado'); });
+  CLI = CLI_OFICIAL.concat(novos).sort(function(a,b){return nomeCli(a).localeCompare(nomeCli(b),'pt-BR');});
+}
+var CLINOVO_SRV = {};
 var ultimaSync='';
 function sincronizarClientes(todos){
   var lista={};
@@ -881,11 +1043,13 @@ function iniciar(){
   // Quando a gerência abre esta página, essa lista é atualizada a partir do
   // cadastro completo ("clientes"), que só a gerência pode ler.
   // Abre com as cópias salvas no aparelho; o banco atualiza assim que houver sinal
-  var cliLocal=lerLocal(LOCAL_CLI); if(cliLocal && cliLocal.length) CLI=cliLocal;
+  var cliLocal=lerLocal(LOCAL_CLI); if(cliLocal && cliLocal.length) CLI_OFICIAL=cliLocal;
+  CLINOVO_SRV=lerLocal(LOCAL_NOVO)||{}; montarCLI();
   var movLocal=lerLocal(LOCAL_MOV); MOV=comFila(movLocal||[]);
   reenviarFila();
-  db.ref('op_clientes').on('value', function(s){ var v=s.val()||{}; CLI=Object.keys(v).map(function(k){var o=v[k]; o._key=k; return o;}).sort(function(a,b){return nomeCli(a).localeCompare(nomeCli(b),'pt-BR');}); guardarLocal(LOCAL_CLI, CLI); renderAoMudar(); }, function(e){ toast('Sem acesso aos clientes: '+e.message,6000); });
-  if(U.papel==='gerencia') db.ref('clientes').on('value', function(s){ sincronizarClientes(s.val()||{}); });
+  db.ref('op_clientes').on('value', function(s){ var v=s.val()||{}; CLI_OFICIAL=Object.keys(v).map(function(k){var o=v[k]; o._key=k; return o;}); guardarLocal(LOCAL_CLI, CLI_OFICIAL); montarCLI(); renderAoMudar(); }, function(e){ toast('Sem acesso aos clientes: '+e.message,6000); });
+  db.ref(OP+'/clinovo').on('value', function(s){ CLINOVO_SRV=s.val()||{}; var cp={}; Object.keys(CLINOVO_SRV).forEach(function(k){ cp[k]=CLINOVO_SRV[k]; }); guardarLocal(LOCAL_NOVO, cp); montarCLI(); renderAoMudar(); });
+  if(U.papel==='gerencia') db.ref('clientes').on('value', function(s){ CLI_FULL=s.val()||{}; sincronizarClientes(CLI_FULL); renderAoMudar(); });
   db.ref(OP+'/corr').on('value', function(s){ CORR=s.val()||{}; renderAoMudar(); });
   if(U.papel==='gerencia') db.ref(OP+'/importadas').on('value', function(s){ IMP=s.val()||{}; renderAoMudar(); });
   assinarMov();

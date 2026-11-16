@@ -1193,6 +1193,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
       </select>
     </div>
     <div class="field" id="c-seg-outro-wrap" style="display:none"><label>Qual segmento?</label><input type="text" class="inp" id="c-seg-outro" placeholder="Digite o segmento"></div>
+    <div class="field"><label>Vendedor</label><select class="inp" id="c-vend"><option value="">Selecione...</option><option>Will</option><option>Leonardo</option><option>Barbara</option><option value="outro">Outro</option></select></div>
+    <div class="field" id="c-vend-outro-wrap" style="display:none"><label>Nome do vendedor</label><input type="text" class="inp" id="c-vend-outro"></div>
+    <div id="c-origem-info" style="font-size:11px;color:#888;margin:-6px 0 10px"></div>
 
     <div class="div"></div>
     <div class="stitle" style="margin-top:0">Contato</div>
@@ -1708,6 +1711,7 @@ function abrirModal(idx) {
   document.getElementById('cnpj-msg').innerHTML = '';
   document.getElementById('cep-msg').innerHTML = '';
   document.getElementById('cli-dup-msg').innerHTML = '';
+  document.getElementById('c-vend').value = ''; document.getElementById('c-vend-outro').value = ''; document.getElementById('c-origem-info').textContent = '';
   if(editIdx !== null) {
     var c = D.clientes[editIdx];
     document.getElementById('c-cnpj').value = c.cnpj||'';
@@ -1730,18 +1734,26 @@ function abrirModal(idx) {
     document.getElementById('c-cidade').value = c.cidade||'';
     document.getElementById('c-uf').value = c.uf||'';
     document.getElementById('c-ref').value = c.ref||'';
+    if(c.vendedor) {
+      var vOp = ['Will','Leonardo','Barbara'].indexOf(c.vendedor)>=0;
+      document.getElementById('c-vend').value = vOp ? c.vendedor : 'outro';
+      if(!vOp) document.getElementById('c-vend-outro').value = c.vendedor;
+    }
+    document.getElementById('c-origem-info').textContent = [c.cpf?'CPF: '+c.cpf:'', c.dataCadastro?'Cadastrado em '+fdata(c.dataCadastro)+(c.cadastradoPor?' por '+c.cadastradoPor:''):'', c.dataAprovacao?'aprovado em '+fdata(c.dataAprovacao):''].filter(Boolean).join(' · ');
     if(c.precos) {
       ['bola','integral','las250','las500','mini','suco','salada'].forEach(function(k) {
         if(c.precos[k]) document.getElementById('c-p-'+k).value = c.precos[k];
       });
     }
   }
-  toggleSegOutro();
+  toggleSegOutro(); toggleVendOutro();
   document.getElementById('btn-excluir-cli').style.display = editIdx!==null ? '' : 'none';
   document.getElementById('modal-cli').classList.add('on');
 }
 
 function fecharModal() { document.getElementById('modal-cli').classList.remove('on'); }
+function toggleVendOutro(){ document.getElementById('c-vend-outro-wrap').style.display = document.getElementById('c-vend').value==='outro' ? '' : 'none'; }
+document.getElementById('c-vend').addEventListener('change', toggleVendOutro);
 
 document.getElementById('btn-novo').addEventListener('click', function() { abrirModal(); });
 document.getElementById('btn-mclose').addEventListener('click', fecharModal);
@@ -1829,6 +1841,15 @@ document.getElementById('btn-salvar-cli').addEventListener('click', function() {
     ref: document.getElementById('c-ref').value.trim(),
     precos: precos
   };
+  var vSel = document.getElementById('c-vend').value;
+  cli.vendedor = vSel==='outro' ? document.getElementById('c-vend-outro').value.trim() : vSel;
+  if(editIdx!==null) {
+    // Guarda os dados que não estão no formulário (data de cadastro, aprovação, CPF, origem do app...)
+    var antigo = D.clientes[editIdx];
+    Object.keys(antigo).forEach(function(k){ if(k!=='_key' && !(k in cli)) cli[k] = antigo[k]; });
+  } else {
+    cli.dataCadastro = fdataHoje();
+  }
   var key = editIdx!==null ? D.clientes[editIdx]._key : null;
   if(editIdx!==null) D.clientes[editIdx]=cli; else D.clientes.push(cli);
   salvarRegistro('clientes', cli, key);

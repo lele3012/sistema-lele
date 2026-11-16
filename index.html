@@ -525,7 +525,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fdre">DRE Mensal</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="franking">Rankings</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="frelat">Relatórios</button>
-    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fboletos">Boletos a Pagar</button>
+    <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fboletos">Contas a Pagar</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="fsemana">📅 Contas por Período</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="ffornecedores">Fornecedores</button>
     <button class="btn btn-sm btn-o fin-tab-btn" data-fs="frecor">Recorrentes</button>
@@ -769,17 +769,26 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   </div>
 
   <div class="fin-sub" id="fs-fboletos" style="display:none">
-    <div class="stitle">Nova conta a pagar</div>
+    <div class="stitle">Lançar conta</div>
+    <div class="alert alert-i" style="margin-bottom:10px">Lance aqui <b>todas</b> as contas e despesas: boletos, luz, água, aluguel, combustível, compras pagas na hora. As notas fiscais importadas por XML continuam entrando sozinhas.</div>
     <div class="card">
-      <div class="field"><label>Fornecedor / Conta</label><input type="text" class="inp" id="bp-forn" list="dl-fornecedores" placeholder="Ex: UP Distribuidora"></div>
-      <div class="field"><label>Descrição</label><input type="text" class="inp" id="bp-desc" placeholder="Ex: Compra de insumos"></div>
+      <div class="field"><label>Fornecedor / Conta</label><input type="text" class="inp" id="bp-forn" list="dl-fornecedores" placeholder="Ex: Equatorial, UP Distribuidora, Posto"></div>
+      <div class="field"><label>Descrição</label><input type="text" class="inp" id="bp-desc" placeholder="Ex: Conta de luz de outubro"></div>
       <div class="row2">
         <div class="field"><label>Valor</label><input type="number" step="0.01" class="inp" id="bp-valor"></div>
-        <div class="field"><label>Vencimento</label><input type="date" class="inp" id="bp-venc"></div>
+        <div class="field"><label>Vencimento (ou data, se já paga)</label><input type="date" class="inp" id="bp-venc"></div>
+      </div>
+      <div class="field"><label>Categoria</label><select class="inp" id="bp-cat"></select></div>
+      <div class="field"><label style="display:flex;align-items:center;gap:6px;font-weight:600"><input type="checkbox" id="bp-paga" style="width:auto"> Já está paga</label></div>
+      <div class="row2" id="bp-pag-campos" style="display:none">
+        <div class="field"><label>Data do pagamento</label><input type="date" class="inp" id="bp-dpag"></div>
+        <div class="field"><label>Pago com</label><select class="inp" id="bp-conta"></select></div>
       </div>
       <button class="btn btn-g" id="btn-salvar-bp">✅ Salvar conta</button>
       <button class="btn btn-o" id="btn-cancelar-bp" style="display:none">Cancelar edição</button>
     </div>
+    <div style="margin:-2px 0 12px"><button class="btn btn-sm btn-o" id="btn-ver-duplic">🔎 Verificar possíveis duplicidades</button></div>
+    <div id="duplic-area"></div>
     <div class="stitle">Contas cadastradas</div>
     <div id="bol-resumo" class="rg" style="margin-bottom:10px"></div>
     <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
@@ -3885,23 +3894,74 @@ document.getElementById('btn-xls-notas').addEventListener('click', function() {
   toast('Excel gerado!');
 });
 
-// --- BOLETOS A PAGAR ---
+// --- CONTAS A PAGAR (porta única de lançamento) ---
+// Categoria e "pago com" usam as mesmas listas da aba Despesas.
+(function(){
+  var cat = document.getElementById('bp-cat'), src = document.getElementById('dg-resp');
+  if(cat && src) cat.innerHTML = src.innerHTML;
+  var conta = document.getElementById('bp-conta'), srcB = document.getElementById('dg-banco');
+  if(conta && srcB) conta.innerHTML = srcB.innerHTML;
+  var chk = document.getElementById('bp-paga');
+  if(chk) chk.addEventListener('change', function(){
+    document.getElementById('bp-pag-campos').style.display = this.checked ? '' : 'none';
+    if(this.checked && !document.getElementById('bp-dpag').value) document.getElementById('bp-dpag').value = document.getElementById('bp-venc').value || fdataHoje();
+  });
+})();
+function limparFormConta(){
+  ['bp-forn','bp-desc','bp-valor','bp-venc','bp-dpag'].forEach(function(id){ document.getElementById(id).value=''; });
+  document.getElementById('bp-cat').value=''; document.getElementById('bp-paga').checked=false;
+  document.getElementById('bp-pag-campos').style.display='none';
+}
+function escD(t){ return String(t==null?'':t).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function fdataSeg(d){ return d ? fdata(d) : 'sem data'; }
+function normNome(t){ return String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9 ]/g,' ').replace(/\b(ltda|me|eireli|sa|s a|cia|de|da|do|e)\b/g,' ').replace(/\s+/g,' ').trim(); }
+function nomesParecidos(a,b){
+  a=normNome(a); b=normNome(b); if(!a||!b) return false;
+  if(a===b || a.indexOf(b)>=0 || b.indexOf(a)>=0) return true;
+  var pa=a.split(' ')[0], pb=b.split(' ')[0]; return pa.length>=4 && pa===pb;
+}
+function valoresParecidos(a,b){ a=+a||0; b=+b||0; return Math.abs(a-b) <= Math.max(0.5, Math.max(a,b)*0.01); }
+// Todas as saídas de dinheiro já lançadas, de qualquer origem, num formato só
+function todasAsContas(){
+  var l=[];
+  D.boletos.forEach(function(b){ l.push({key:b._key, nome:b.fornecedor||'', desc:b.desc||'', valor:b.valor||0, data:b.venc||b.dataPagamento||'', onde: b.origem==='nf'?'Contas a Pagar (nota fiscal)':b.origem==='recorrente'?'Contas a Pagar (recorrente)':'Contas a Pagar'}); });
+  D.despesasGerais.forEach(function(d){ l.push({key:d._key, nome:d.desc||'', desc:d.responsavel||'', valor:d.valor||0, data:d.data||'', onde:'Despesas'}); });
+  return l;
+}
+function contasParecidas(nome, valor, data, ignorarKey){
+  var mes=(data||'').slice(0,7);
+  return todasAsContas().filter(function(c){
+    if(c.key===ignorarKey || (c.data||'').slice(0,7)!==mes) return false;
+    if(!valoresParecidos(c.valor, valor)) return false;
+    return nomesParecidos(c.nome, nome) || nomesParecidos(c.desc, nome) || Math.abs(c.valor-valor)<0.005;
+  });
+}
 document.getElementById('btn-salvar-bp').addEventListener('click', function() {
   var forn = document.getElementById('bp-forn').value.trim();
   var venc = document.getElementById('bp-venc').value;
   if(!forn || !venc) { toast('Informe fornecedor e vencimento'); return; }
+  var valor = parseFloat(document.getElementById('bp-valor').value)||0;
+  if(!(valor>0)) { toast('Informe o valor'); return; }
+  var categoria = document.getElementById('bp-cat').value;
+  if(!categoria) { toast('Escolha a categoria'); return; }
+  var paga = document.getElementById('bp-paga').checked;
+  if(paga && !document.getElementById('bp-dpag').value) { toast('Informe a data do pagamento'); return; }
+  // Aviso de duplicidade (só para conta nova)
+  if(!editBoletoKey) {
+    var parecidas = contasParecidas(forn, valor, venc, null);
+    if(parecidas.length && !confirm('Atenção: parece que esta conta já foi lançada este mês:\n\n'+
+      parecidas.slice(0,5).map(function(c){ return '• '+c.nome+' — '+fmt(c.valor)+' — '+fdataSeg(c.data)+' ('+c.onde+')'; }).join('\n')+
+      '\n\nSalvar mesmo assim?')) return;
+  }
   var obj = {
     fornecedor:forn, desc:document.getElementById('bp-desc').value.trim(),
-    valor:parseFloat(document.getElementById('bp-valor').value)||0, venc:venc,
+    valor:valor, venc:venc, categoria:categoria,
     status:'pendente', origem:'manual'
   };
   if(editBoletoKey) {
     var existente = D.boletos.find(function(x){ return x._key===editBoletoKey; });
     if(existente) {
-      obj.status = existente.status;
       obj.origem = existente.origem;
-      if(existente.dataPagamento) obj.dataPagamento = existente.dataPagamento;
-      if(existente.contaPagamento) obj.contaPagamento = existente.contaPagamento;
       if(existente.id) obj.id = existente.id;
       if(existente.recorrenteId) obj.recorrenteId = existente.recorrenteId;
       if(existente.recorrenteKey) obj.recorrenteKey = existente.recorrenteKey;
@@ -3910,16 +3970,41 @@ document.getElementById('btn-salvar-bp').addEventListener('click', function() {
   } else {
     obj.id = Date.now();
   }
+  if(paga) { obj.status='pago'; obj.dataPagamento=document.getElementById('bp-dpag').value; obj.contaPagamento=document.getElementById('bp-conta').value; }
   salvarRegistro('boletos', obj, editBoletoKey).then(function(){
-    toast('Conta salva!');
-    document.getElementById('bp-forn').value=''; document.getElementById('bp-desc').value=''; document.getElementById('bp-valor').value='';
-    document.getElementById('bp-venc').value='';
+    toast(paga ? 'Conta salva como paga!' : 'Conta salva!');
+    limparFormConta();
     editBoletoKey=null; document.getElementById('btn-cancelar-bp').style.display='none';
   });
 });
 document.getElementById('btn-cancelar-bp').addEventListener('click', function(){
-  editBoletoKey=null; this.style.display='none';
-  document.getElementById('bp-forn').value=''; document.getElementById('bp-desc').value=''; document.getElementById('bp-valor').value=''; document.getElementById('bp-venc').value='';
+  editBoletoKey=null; this.style.display='none'; limparFormConta();
+});
+// Verificador de possíveis duplicidades: SÓ MOSTRA, não apaga nada.
+document.getElementById('btn-ver-duplic').addEventListener('click', function(){
+  var area=document.getElementById('duplic-area');
+  if(area.innerHTML){ area.innerHTML=''; this.textContent='🔎 Verificar possíveis duplicidades'; return; }
+  var lim = new Date(); lim.setMonth(lim.getMonth()-12); var limS = lim.toISOString().slice(0,7);
+  var todas = todasAsContas().filter(function(c){ return (c.data||'').slice(0,7)>=limS; });
+  var grupos=[], usados={};
+  todas.forEach(function(a,i){
+    if(usados[a.key]) return;
+    var g=[a];
+    for(var j=i+1;j<todas.length;j++){ var b=todas[j]; if(usados[b.key]) continue;
+      if((a.data||'').slice(0,7)!==(b.data||'').slice(0,7) || !valoresParecidos(a.valor,b.valor)) continue;
+      if(a.onde.indexOf('nota fiscal')>=0 && b.onde.indexOf('nota fiscal')>=0) continue; // parcelas da mesma nota
+      if(nomesParecidos(a.nome,b.nome) || nomesParecidos(a.nome,b.desc) || nomesParecidos(a.desc,b.nome) || (Math.abs(a.valor-b.valor)<0.005 && (a.onde==='Despesas')!==(b.onde==='Despesas'))) g.push(b);
+    }
+    if(g.length>1){ g.forEach(function(x){ usados[x.key]=1; }); grupos.push(g); }
+  });
+  this.textContent='Fechar verificação';
+  if(!grupos.length){ area.innerHTML='<div class="alert alert-i">Nenhuma possível duplicidade encontrada nos últimos 12 meses ✓</div>'; return; }
+  area.innerHTML='<div class="alert alert-i" style="margin-bottom:8px"><b>'+grupos.length+' possível(is) duplicidade(s)</b> nos últimos 12 meses. Isto é só um aviso: confira cada grupo e, se for repetida, exclua uma delas na aba onde ela está. Nada foi alterado.</div>'+
+    grupos.sort(function(a,b){ return (b[0].data||'').localeCompare(a[0].data||''); }).map(function(g){
+      return '<div class="card" style="padding:10px 14px;border-left:4px solid #f0b429">'+g.map(function(c){
+        return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:3px 0"><span><b>'+escD(c.nome)+'</b>'+(c.desc?' <span style="color:#888">· '+escD(c.desc)+'</span>':'')+'<br><span style="font-size:11px;color:#888">'+fdataSeg(c.data)+' · '+c.onde+'</span></span><b>'+fmt(c.valor)+'</b></div>';
+      }).join('')+'</div>';
+    }).join('');
 });
 document.getElementById('btn-xls-boletos').addEventListener('click', function() {
   if(typeof XLSX === 'undefined') { toast('Excel indisponivel. Tente recarregar a pagina.'); return; }
@@ -3968,7 +4053,7 @@ function renderBoletos() {
     var badge = b.status==='pago' ? '<span class="badge badge-g">Pago</span>' : (atrasado ? '<span class="badge badge-r">Atrasado</span>' : '<span class="badge badge-y">Pendente</span>');
     return '<div class="card" style="padding:12px 16px">'+
       '<div style="display:flex;justify-content:space-between"><b>'+b.fornecedor+'</b>'+badge+'</div>'+
-      '<div style="font-size:12px;color:#888;margin-top:2px">'+(b.desc||'')+'</div>'+
+      '<div style="font-size:12px;color:#888;margin-top:2px">'+(b.desc||'')+(b.categoria?' · <b style="color:#555">'+b.categoria+'</b>':'')+(b.origem==='nf'?' · nota fiscal':'')+'</div>'+
       '<div style="display:flex;justify-content:space-between;margin-top:6px"><span>Vence: '+fdata(b.venc)+'</span><span style="font-weight:800">'+fmt(b.valor)+'</span></div>'+
       (b.status==='pago' && b.contaPagamento ? '<div style="font-size:11px;color:#888;margin-top:2px">Pago por: '+b.contaPagamento+'</div>' : '')+
       '<div style="display:flex;gap:6px;margin-top:8px">'+
@@ -3989,6 +4074,11 @@ function renderBoletos() {
     editBoletoKey = b._key;
     document.getElementById('bp-forn').value=b.fornecedor; document.getElementById('bp-desc').value=b.desc||'';
     document.getElementById('bp-valor').value=b.valor; document.getElementById('bp-venc').value=b.venc;
+    document.getElementById('bp-cat').value=b.categoria||'';
+    document.getElementById('bp-paga').checked = b.status==='pago';
+    document.getElementById('bp-pag-campos').style.display = b.status==='pago' ? '' : 'none';
+    document.getElementById('bp-dpag').value = b.dataPagamento||'';
+    if(b.contaPagamento) document.getElementById('bp-conta').value = b.contaPagamento;
     document.getElementById('btn-cancelar-bp').style.display='';
     document.getElementById('bp-forn').scrollIntoView({behavior:'smooth', block:'center'});
     toast('Editando '+b.fornecedor+' — role para cima, ajuste e clique em Salvar conta');

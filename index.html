@@ -839,6 +839,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:#f5f2ed;color:#1a1a1
   </div>
 
   <div class="fin-sub" id="fs-frecor" style="display:none">
+    <div class="alert alert-i" style="margin-bottom:10px">As contas recorrentes são <b>só lembretes</b>: avisam quando uma conta está para vencer ou ficou sem lançar. O botão <b>➕ Lançar</b> abre <b>Contas a Pagar</b> já preenchida para você conferir e salvar.</div>
     <div id="rc-resumo"></div>
     <div class="stitle" id="rc-form-titulo">Nova conta recorrente</div>
     <div class="card" id="rc-form-card">
@@ -3971,6 +3972,14 @@ document.getElementById('btn-salvar-bp').addEventListener('click', function() {
     obj.id = Date.now();
   }
   if(paga) { obj.status='pago'; obj.dataPagamento=document.getElementById('bp-dpag').value; obj.contaPagamento=document.getElementById('bp-conta').value; }
+  var recVinc = (!editBoletoKey && bpRecorrenteKey) ? D.recorrentes.find(function(x){ return x._key===bpRecorrenteKey; }) : null;
+  if(recVinc) {
+    obj.origem='recorrente'; obj.recorrenteKey=recVinc._key; if(recVinc.id) obj.recorrenteId=recVinc.id; if(recVinc.forma) obj.forma=recVinc.forma;
+    // conta de valor variável: guarda o último valor e a categoria como referência para o próximo lembrete
+    var patchRec = {categoria:categoria}; if(recVinc.variavel) patchRec.valor = valor;
+    atualizarRegistro('recorrentes', recVinc._key, patchRec);
+  }
+  bpRecorrenteKey = null;
   salvarRegistro('boletos', obj, editBoletoKey).then(function(){
     toast(paga ? 'Conta salva como paga!' : 'Conta salva!');
     limparFormConta();
@@ -3978,7 +3987,7 @@ document.getElementById('btn-salvar-bp').addEventListener('click', function() {
   });
 });
 document.getElementById('btn-cancelar-bp').addEventListener('click', function(){
-  editBoletoKey=null; this.style.display='none'; limparFormConta();
+  editBoletoKey=null; bpRecorrenteKey=null; this.style.display='none'; limparFormConta();
 });
 // Verificador de possíveis duplicidades: SÓ MOSTRA, não apaga nada.
 document.getElementById('btn-ver-duplic').addEventListener('click', function(){
@@ -4138,7 +4147,7 @@ function recBoletoDoMes(r, ym){
     return b.fornecedor===r.nome;
   });
   if(achou) return achou;
-  // Conta lançada à mão em Boletos a Pagar, com o mesmo nome e no mesmo mês: conta como lançada (evita lançar em dobro)
+  // Conta lançada à mão em Contas a Pagar, com o mesmo nome e no mesmo mês: conta como lançada (evita lançar em dobro)
   return D.boletos.find(function(b){
     return b.origem!=='recorrente' && b.origem!=='nf' && b.venc && b.venc.slice(0,7)===ym && recNorm(b.fornecedor)===recNorm(r.nome);
   });
@@ -4312,10 +4321,7 @@ function renderRecorrentes() {
   el.querySelectorAll('[data-lancar]').forEach(function(btn){ btn.addEventListener('click', function(){
     var r = D.recorrentes.find(function(x){return x._key===btn.getAttribute('data-lancar');});
     if(!r) { toast('Conta não encontrada. Atualize a página.'); return; }
-    var ym = btn.getAttribute('data-ym');
-    if(r.variavel) { abrirLancarRec(r._key, ym); return; }
-    btn.disabled = true;
-    recLancar(r, ym, r.valor).then(function(ok){ if(ok) toast(r.nome+' lançada em Boletos a Pagar!'); else btn.disabled=false; });
+    recAbrirNoForm(r, btn.getAttribute('data-ym'));
   });});
   el.querySelectorAll('[data-ignrc]').forEach(function(btn){ btn.addEventListener('click', function(){
     var r = D.recorrentes.find(function(x){return x._key===btn.getAttribute('data-ignrc');});
@@ -4345,7 +4351,7 @@ function renderRecorrentes() {
     atualizarRegistro('recorrentes', r._key, {pausada: !r.pausada}).then(function(){ toast(r.pausada ? r.nome+' retomada' : r.nome+' pausada — não gera mais lembrete'); });
   });});
   el.querySelectorAll('[data-delrc]').forEach(function(btn){ btn.addEventListener('click', function(){
-    if(confirm('Excluir esta conta recorrente? (Os boletos já lançados continuam em Boletos a Pagar.)\n\nSe for só uma pausa, use o botão Pausar.')) excluirRegistro('recorrentes', btn.getAttribute('data-delrc'));
+    if(confirm('Excluir esta conta recorrente? (As contas já lançadas continuam em Contas a Pagar.)\n\nSe for só uma pausa, use o botão Pausar.')) excluirRegistro('recorrentes', btn.getAttribute('data-delrc'));
   });});
 }
 
@@ -4372,7 +4378,6 @@ function renderResumoRec() {
       '<div style="font-size:11px;color:#888;margin-top:4px">'+pagas.length+' de '+ocs.length+' contas pagas · '+pct+'% do valor</div>'+
       (nEsq ? '<div class="alert alert-y" style="margin-top:10px">⚠️ '+nEsq+' lançamento'+(nEsq>1?'s':'')+' de meses anteriores ficou sem fazer. Estão marcados em vermelho logo abaixo.</div>' : '')+
       '<div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">'+
-        (fixasPendentes.length ? '<button class="btn btn-sm btn-g" id="btn-rc-lancar-todas">⚡ Lançar as '+fixasPendentes.length+' fixas do mês</button>' : '')+
         '<button class="btn btn-sm btn-o" id="btn-rc-ics">📅 Lembretes na agenda do celular</button>'+
         ('Notification' in window ? '<button class="btn btn-sm btn-o" id="btn-rc-notif">'+(notifOk?'🔔 Avisos do navegador ligados':'🔔 Ligar avisos do navegador')+'</button>' : '')+
       '</div>'+
@@ -4395,6 +4400,26 @@ function renderResumoRec() {
   });
 }
 
+// Recorrentes são só LEMBRETES: o "Lançar" abre Contas a Pagar já preenchida.
+// Quem grava é sempre o formulário único (com categoria e aviso de duplicidade).
+var bpRecorrenteKey = null;
+function recAbrirNoForm(r, ym){
+  ym = ym || recMesStr(new Date());
+  if(recBoletoDoMes(r, ym)) { toast(r.nome+' já foi lançada em '+recNomeMes(ym)); return; }
+  var t = document.querySelector('.tab[data-tab="financeiro"]'); if(t) t.click();
+  var b = document.querySelector('.fin-tab-btn[data-fs="fboletos"]'); if(b) b.click();
+  editBoletoKey = null; limparFormConta();
+  var h = recHistorico(r, 1);
+  document.getElementById('bp-forn').value = r.nome;
+  document.getElementById('bp-desc').value = 'Conta recorrente — '+recNomeMes(ym);
+  document.getElementById('bp-valor').value = (r.variavel && h.length ? h[0].valor : r.valor) || '';
+  document.getElementById('bp-venc').value = recVencDoMes(r, ym);
+  if(r.categoria) document.getElementById('bp-cat').value = r.categoria;
+  bpRecorrenteKey = r._key;
+  document.getElementById('btn-cancelar-bp').style.display='';
+  document.getElementById('bp-forn').scrollIntoView({behavior:'smooth', block:'center'});
+  toast((r.variavel ? 'Confira o valor da conta, ' : '')+'escolha a categoria e clique em Salvar conta', 4000);
+}
 function abrirLancarRec(key, ym) {
   var r = D.recorrentes.find(function(x){return x._key===key;});
   if(!r) return;
@@ -4418,7 +4443,7 @@ document.getElementById('btn-lancarrec-confirmar').addEventListener('click', fun
   recLancar(r, lancarRecMes || recMesStr(new Date()), valor).then(function(ok){
     if(!ok) return;
     if(!lancarRecMes || lancarRecMes>=recMesStr(new Date())) atualizarRegistro('recorrentes', r._key, {valor:valor});
-    toast(r.nome+' lançada em Boletos a Pagar!');
+    toast(r.nome+' lançada em Contas a Pagar!');
   });
 });
 

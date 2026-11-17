@@ -159,7 +159,9 @@ var FORMAS_RECEB = [['vista','Dinheiro'],['pix','PIX']]; // quantos dias para tr
 // ---------- estado ----------
 var U = {email:'', nome:'', papel:'', ent:''};
 var CLI = [], MOV = [], CORR = {}, IMP = {};
-var CLI_OFICIAL = [], CLINOVO = {}, CLI_FULL = {};
+var CLI_OFICIAL = [], CLINOVO = {}, CLI_FULL = {}, ENC = {};
+var DECISOES = [['aceito','Aceito / justificado'],['erro','Erro de lançamento (corrigido)'],['descontar','Descontar do responsável'],['investigar','Em investigação']];
+function nomeDecisao(k){ var d=DECISOES.find(function(x){return x[0]===k;}); return d?d[1]:k; }
 var SEGMENTOS = [['academia','Academia'],['aeroporto','Aeroporto'],['cafeteria','Cafeteria'],['escola','Cantina escolar'],['informal','Cliente informal'],['conveniencia','Conveniência'],['posto','Conveniência de posto'],['empresa','Empresas'],['hotel','Hotel'],['lanchonete','Lanchonete'],['mercado_autonomo','Mercado autônomo'],['mercadinho','Mercadinho'],['sorveteria','Sorveteria'],['supermercado','Supermercado'],['outro','Outro']];
 var VENDEDORES = ['Will','Leonardo','Barbara'];
 var aba = '', gerDia = hoje(), rotaSel = '', vendaCli = null;
@@ -794,7 +796,7 @@ function linhaMov(m){
   if(m.tipo==='ciente'){ t=nomeEnt(m.ent)+' confirmou o resultado'; s=m.comentario?('Comentário: '+m.comentario):''; }
   if(m.tipo==='pixok'){ t='Pix conferido com o extrato'; s=fmt(m.valor)+(m.obs?' · '+m.obs:''); }
   var hora = (m.tipo==='venda'||m.tipo==='receb'||m.tipo==='desp') && m.tsLocal ? fhora(m.tsLocal) : fhora(m.ts);
-  var podePedir = ['carga','venda','retorno','receb','desp'].indexOf(m.tipo)>=0 && (U.papel==='gerencia' || m.por===U.email) && !corrsDe(m._key).some(function(c){return !c.decisao;});
+  var podePedir = ['carga','venda','retorno','receb','desp'].indexOf(m.tipo)>=0 && (U.papel==='gerencia' || (m.por===U.email && !ENC[m.ent+'_'+m.data])) && !corrsDe(m._key).some(function(c){return !c.decisao;});
   return '<div class="mov"><div class="t">'+esc(t)+statusCorr(m)+(m.tipo==='venda'?avisosVenda(m):'')+'</div>'+(s?'<div class="s">'+esc(s)+'</div>':'')+'<div class="s">'+esc(m.porNome||m.por)+' · '+hora+'</div>'+
     (m.tipo==='desp' && m.foto && U.papel==='gerencia' ? '<details style="margin-top:4px"><summary class="s" style="cursor:pointer">ver comprovante</summary><img src="'+esc(m.foto)+'" alt="Comprovante" style="max-width:100%;border:1px solid var(--b);border-radius:8px;margin-top:4px"></details>' : '')+
     (m.tipo==='desp' && !m.foto && U.papel==='gerencia' ? '<div class="s"><span class="badge b-y" style="margin:0">sem comprovante</span></div>' : '')+
@@ -834,9 +836,73 @@ function abrirCorrecao(key){
 }
 
 // ---------- GERÊNCIA ----------
+// ===== ENCERRAMENTO DO DIA E ALERTAS =====
+function statusDia(r, ent, data){
+  if(ENC[ent+'_'+data]) return {k:'encerrada', txt:'Encerrada', cls:'b-g'};
+  if(r.ciente) return {k:'confirmada', txt:'Confirmada pelo entregador — aguardando você', cls:'b-y'};
+  if(r.fechada) return {k:'conferida', txt:'Conferida pela fábrica', cls:'b-y'};
+  return {k:'aberta', txt:'Aberta', cls:'b-y'};
+}
+function requisitosEncerrar(r, ent){
+  var l=[['Conferência da fábrica', !!r.fechada], ['Dinheiro declarado por '+nomeEnt(ent), !!r.caixa], ['Confirmação de '+nomeEnt(ent), !!r.ciente], ['Contagem do envelope (você)', !!r.dinRec]];
+  if(r.pixEsperado) l.push(['Pix conferido no extrato (você)', !!r.pixOk]);
+  return l;
+}
+// Alertas dos últimos 30 dias (mesma regra na aba Operação do sistema)
+function calcAlertas(rotas, corrs){
+  var a=[], nDin=0, falta=0, acima=0, fora=0, semFoto=0, saida={}, perda={}, porPessoa={};
+  rotas.forEach(function(r){
+    if(r.caixa && (Math.abs(r.difDin)>=0.01 || Math.abs(r.difRec||0)>=0.01)) nDin++;
+    if(r.caixa){ var fin=(r.dinRec?(r.dinRec.valor||0):(r.caixa.valor||0))-r.dinEsperado; if(fin<0) falta+=fin; }
+    if(PRODS.some(function(p){ var k=p[0]; return ((r.entregue[k]||0)+(r.bonif[k]||0))>(r.carga[k]||0); })) acima++;
+    fora+=r.vendas.filter(function(v){ return v.tsLocal && dataLocal(v.tsLocal)!==v.data; }).length;
+    semFoto+=r.desps.filter(function(d){ return !d.foto; }).length;
+    if(r.retorno) PRODS.forEach(function(p){ var k=p[0]; saida[k]=(saida[k]||0)+(r.carga[k]||0); perda[k]=(perda[k]||0)+((r.retorno.perda||{})[k]||0); });
+  });
+  corrs.forEach(function(c){ var q=c.porNome||c.por; porPessoa[q]=(porPessoa[q]||0)+1; });
+  if(nDin>=3) a.push('Diferença de dinheiro em '+nDin+' dias');
+  if(falta<=-50) a.push('Falta de dinheiro acumulada: '+fmt(-falta));
+  PRODS.forEach(function(p){ var k=p[0]; if((saida[k]||0)>=20 && perda[k]/saida[k]>0.05) a.push('Perda de '+p[1]+' em '+(perda[k]/saida[k]*100).toFixed(1).replace('.',',')+'% da saída ('+perda[k]+' de '+saida[k]+')'); });
+  if(acima>=2) a.push('Venda acima da carga em '+acima+' dias');
+  if(fora>=3) a.push(fora+' entregas lançadas fora do dia');
+  if(semFoto>=3) a.push(semFoto+' despesas sem comprovante');
+  Object.keys(porPessoa).forEach(function(q){ if(porPessoa[q]>=4) a.push(porPessoa[q]+' pedidos de correção de '+q); });
+  return a;
+}
+function rotasPeriodo(ini, fim){
+  var vistos={}, out=[];
+  MOV.forEach(function(m){ if(m.data<ini || m.data>fim) return; var g=m.ent+'|'+m.data; if(vistos[g]) return; vistos[g]=1;
+    var r=calcRota(m.ent,m.data); if(r.cargas.length||r.vendas.length){ r.ent=m.ent; r.data=m.data; out.push(r); } });
+  return out.sort(function(a,b){ return a.data<b.data?1:-1; });
+}
+function blocoAvisosGerencia(){
+  var fim=hoje(), ini=somaDias(fim,-29), rotas=rotasPeriodo(ini, fim), h='';
+  var corrs=Object.keys(CORR).map(function(k){return CORR[k];}).filter(function(c){ return typeof c.ts==='number' && dataLocal(c.ts)>=ini; });
+  var al=calcAlertas(rotas, corrs);
+  if(al.length) h+='<div class="alert a-r"><b>⚠️ Alertas dos últimos 30 dias</b><br>'+al.map(esc).join('<br>')+'</div>';
+  var aguard=rotas.filter(function(r){ return r.ciente && !ENC[r.ent+'_'+r.data]; });
+  var invest=rotas.filter(function(r){ var e=ENC[r.ent+'_'+r.data]; return e && e.decisao==='investigar'; });
+  if(aguard.length) h+='<div class="alert a-y"><b>Dias aguardando você encerrar: '+aguard.length+'</b><br>'+aguard.map(function(r){ return '<a href="#" class="ir-dia" data-d="'+r.data+'" style="color:inherit;font-weight:700">'+fdata(r.data)+' · '+esc(nomeEnt(r.ent))+'</a>'; }).join(' &nbsp; ')+'</div>';
+  if(invest.length) h+='<div class="alert a-y"><b>Em investigação: '+invest.length+'</b><br>'+invest.map(function(r){ return '<a href="#" class="ir-dia" data-d="'+r.data+'" style="color:inherit;font-weight:700">'+fdata(r.data)+' · '+esc(nomeEnt(r.ent))+'</a>'; }).join(' &nbsp; ')+'</div>';
+  return h;
+}
+function blocoEncerrar(r, ent){
+  var enc=ENC[ent+'_'+gerDia];
+  if(enc) return '<div class="alert a-g" style="margin-top:12px"><b>🔒 Dia encerrado</b> por '+esc(enc.porNome||enc.por)+' em '+fhora(enc.ts)+(enc.decisao?'<br>Decisão: <b>'+esc(nomeDecisao(enc.decisao))+'</b>':'')+(enc.comentario?'<br>'+esc(enc.comentario):'')+'</div>';
+  var req=requisitosEncerrar(r, ent), ok=req.every(function(x){return x[1];});
+  var h='<div class="card" style="margin-top:12px;background:#faf8f4"><div style="font-weight:800;margin-bottom:6px">Encerrar o dia</div>'+
+    req.map(function(x){ return '<div class="s" style="font-size:13px">'+(x[1]?'✅':'⬜')+' '+esc(x[0])+'</div>'; }).join('');
+  if(!ok) return h+'<p class="muted" style="margin-top:8px">Falta concluir os itens acima para encerrar.</p></div>';
+  if(r.temQualquerDif) h+='<div class="field" style="margin-top:10px"><label>Decisão sobre a diferença</label><select class="inp" id="enc-dec-'+ent+'"><option value="">Escolha…</option>'+DECISOES.map(function(d){ return '<option value="'+d[0]+'">'+d[1]+'</option>'; }).join('')+'</select></div>';
+  h+='<div class="field" style="margin-top:8px"><label>Comentário (opcional)</label><textarea class="inp" rows="2" id="enc-com-'+ent+'"></textarea></div>'+
+    '<button class="btn btn-g enc-btn" data-ent="'+ent+'" data-dif="'+(r.temQualquerDif?1:0)+'">🔒 Encerrar o dia</button>'+
+    '<p class="muted" style="margin-top:6px">Depois de encerrado, só a gerência pode pedir correção deste dia.</p></div>';
+  return h;
+}
 function telaGerencia(){
   var h=MODO_TESTE?'<div class="alert a-y"><b>Fase de teste.</b> Nada daqui vai para as Entregas, Cobranças ou Caixa do Sistema Lelé.</div>':'';
   h+='<div class="stitle">Fechamento</div><div class="card"><div class="field"><label>Data da carga</label><input class="inp" type="date" id="g-dia" value="'+gerDia+'"></div><div class="muted">Lista de clientes da operação: '+CLI.length+' (atualizada a partir do cadastro do sistema).</div></div>';
+  h+=blocoAvisosGerencia();
   h+=cardsClientesNovos();
   var pend=Object.keys(CORR).map(function(k){var c=CORR[k]; c._key=k; return c;}).filter(function(c){return !c.decisao;});
   if(pend.length){
@@ -854,6 +920,7 @@ function telaGerencia(){
     var r=calcRota(e.id,gerDia);
     h+='<div class="stitle">'+esc(e.nome)+' — carga de '+fdata(gerDia)+'</div><div class="card">';
     if(!r.cargas.length){ h+='<div class="muted">Sem saída lançada nesta data.</div></div>'; return; }
+    var stD=statusDia(r, e.id, gerDia); h+='<div style="margin-bottom:8px"><span class="badge '+stD.cls+'" style="margin:0">'+esc(stD.txt)+'</span></div>';
     if(!r.fechada) h+='<div class="alert a-y">Rota aberta: a conferência ainda não foi lançada.</div>';
     else if(r.temQualquerDif) h+='<div class="alert a-r">Diferença na conferência.'+(r.temDifProd && !r.justs.length?' Diferença de produto sem justificativa ainda.':'')+'</div>';
     else h+='<div class="alert a-g">Tudo bateu ✓</div>';
@@ -877,6 +944,7 @@ function telaGerencia(){
     h+='<div class="stitle">Entregas ('+r.vendas.length+')</div>'+(r.vendas.map(function(v){ return linhaMov(v).replace('<div class="t">','<div class="t">'+(IMP[v._key]?'<span class="badge b-g" style="margin:0 6px 0 0">no sistema</span>':'')); }).join('')||'<div class="muted">Nenhuma lançada.</div>');
     if(!MODO_TESTE && naoImp.length && r.fechada) h+='<button class="btn btn-o imp-btn" style="margin-top:12px" data-ent="'+e.id+'">Lançar '+naoImp.length+' entrega(s) no Sistema Lelé</button>';
     h+='<div class="stitle">Movimentos</div>'+r.cargas.concat(r.retorno?[r.retorno]:[]).concat(r.caixa?[r.caixa]:[]).concat(r.dinRec?[r.dinRec]:[]).concat(r.ciente?[r.ciente]:[]).map(linhaMov).join('');
+    h+=blocoEncerrar(r, e.id);
     h+='</div>';
   });
   $('conteudo').innerHTML=h;
@@ -898,6 +966,15 @@ function telaGerencia(){
     var o=base('pixok',ent,gerDia); o.valor=Math.round(v*100)/100; gravar(OP+'/mov',o); toast('Pix conferido ✓');
   }; });
   ligarCorrecoes(); ligarClientesNovos();
+  document.querySelectorAll('.ir-dia').forEach(function(a){ a.onclick=function(ev){ ev.preventDefault(); gerDia=a.getAttribute('data-d'); render(); window.scrollTo(0,0); }; });
+  document.querySelectorAll('.enc-btn').forEach(function(b){ b.onclick=function(){
+    var ent=b.getAttribute('data-ent'), dec=($('enc-dec-'+ent)||{}).value||'', com=(($('enc-com-'+ent)||{}).value||'').trim();
+    if(b.getAttribute('data-dif')==='1' && !dec) return toast('Escolha a decisão sobre a diferença');
+    if(!confirm('Encerrar o dia '+fdata(gerDia)+' de '+nomeEnt(ent)+'?'+(dec?'\nDecisão: '+nomeDecisao(dec):'')+'\n\nDepois disso, só a gerência pode pedir correção deste dia.')) return;
+    var o={ent:ent, data:gerDia, ts:TS, por:U.email, porNome:U.nome}; if(dec) o.decisao=dec; if(com) o.comentario=com;
+    b.disabled=true;
+    db.ref(OP+'/encerrados/'+ent+'_'+gerDia).set(o).then(function(){ ENC[ent+'_'+gerDia]=Object.assign({},o,{ts:Date.now()}); render(); toast('Dia encerrado 🔒'); }).catch(function(e){ b.disabled=false; toast('Erro: '+(e.message||e),5000); });
+  }; });
 }
 var NOMES_SEG={}; SEGMENTOS.forEach(function(x){ NOMES_SEG[x[0]]=x[1]; });
 function cardsClientesNovos(){
@@ -1029,7 +1106,7 @@ function sincronizarClientes(todos){
 }
 function assinarMov(){
   if(subMov) subMov.off();
-  var ini = somaDias(hoje(), -DIAS_ROTA); if(gerDia<ini) ini=gerDia;
+  var ini = somaDias(hoje(), -(U.papel==='gerencia' ? 31 : DIAS_ROTA)); if(gerDia<ini) ini=gerDia;
   subMov = db.ref(OP+'/mov').orderByChild('data').startAt(ini);
   subMov.on('value', function(s){
     var v=s.val()||{}; MOV=comFila(Object.keys(v).map(function(k){ var o=v[k]; o._key=k; return o; }));
@@ -1051,6 +1128,7 @@ function iniciar(){
   db.ref(OP+'/clinovo').on('value', function(s){ CLINOVO_SRV=s.val()||{}; var cp={}; Object.keys(CLINOVO_SRV).forEach(function(k){ cp[k]=CLINOVO_SRV[k]; }); guardarLocal(LOCAL_NOVO, cp); montarCLI(); renderAoMudar(); });
   if(U.papel==='gerencia') db.ref('clientes').on('value', function(s){ CLI_FULL=s.val()||{}; sincronizarClientes(CLI_FULL); renderAoMudar(); });
   db.ref(OP+'/corr').on('value', function(s){ CORR=s.val()||{}; renderAoMudar(); });
+  db.ref(OP+'/encerrados').on('value', function(s){ ENC=s.val()||{}; renderAoMudar(); });
   if(U.papel==='gerencia') db.ref(OP+'/importadas').on('value', function(s){ IMP=s.val()||{}; renderAoMudar(); });
   assinarMov();
   db.ref('.info/connected').on('value', function(s){ var on=!!s.val(); $('conexao').textContent=on?'online':'sem internet — salvando no aparelho'; $('conexao').className=on?'':'off'; if(on) reenviarFila(); });

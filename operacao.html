@@ -160,6 +160,7 @@ var FORMAS_RECEB = [['vista','Dinheiro'],['pix','PIX']]; // quantos dias para tr
 var U = {email:'', nome:'', papel:'', ent:''};
 var CLI = [], MOV = [], CORR = {}, IMP = {};
 var CLI_OFICIAL = [], CLINOVO = {}, CLI_FULL = {}, ENC = {};
+var gerDiaAuto = true, movCarregado = false, encCarregado = false;
 var DECISOES = [['aceito','Aceito / justificado'],['erro','Erro de lançamento (corrigido)'],['descontar','Descontar do responsável'],['investigar','Em investigação']];
 function nomeDecisao(k){ var d=DECISOES.find(function(x){return x[0]===k;}); return d?d[1]:k; }
 var SEGMENTOS = [['academia','Academia'],['aeroporto','Aeroporto'],['cafeteria','Cafeteria'],['escola','Cantina escolar'],['informal','Cliente informal'],['conveniencia','Conveniência'],['posto','Conveniência de posto'],['empresa','Empresas'],['hotel','Hotel'],['lanchonete','Lanchonete'],['mercado_autonomo','Mercado autônomo'],['mercadinho','Mercadinho'],['sorveteria','Sorveteria'],['supermercado','Supermercado'],['outro','Outro']];
@@ -882,6 +883,7 @@ function blocoAvisosGerencia(){
   if(al.length) h+='<div class="alert a-r"><b>⚠️ Alertas dos últimos 30 dias</b><br>'+al.map(esc).join('<br>')+'</div>';
   var aguard=rotas.filter(function(r){ return r.ciente && !ENC[r.ent+'_'+r.data]; });
   var invest=rotas.filter(function(r){ var e=ENC[r.ent+'_'+r.data]; return e && e.decisao==='investigar'; });
+  if(!aguard.length) h+='<div class="alert a-g">Nenhum dia aguardando você ✓</div>';
   if(aguard.length) h+='<div class="alert a-y"><b>Dias aguardando você encerrar: '+aguard.length+'</b><br>'+aguard.map(function(r){ return '<a href="#" class="ir-dia" data-d="'+r.data+'" style="color:inherit;font-weight:700">'+fdata(r.data)+' · '+esc(nomeEnt(r.ent))+'</a>'; }).join(' &nbsp; ')+'</div>';
   if(invest.length) h+='<div class="alert a-y"><b>Em investigação: '+invest.length+'</b><br>'+invest.map(function(r){ return '<a href="#" class="ir-dia" data-d="'+r.data+'" style="color:inherit;font-weight:700">'+fdata(r.data)+' · '+esc(nomeEnt(r.ent))+'</a>'; }).join(' &nbsp; ')+'</div>';
   return h;
@@ -899,7 +901,16 @@ function blocoEncerrar(r, ent){
     '<p class="muted" style="margin-top:6px">Depois de encerrado, só a gerência pode pedir correção deste dia.</p></div>';
   return h;
 }
+// Ao entrar, a gerência cai no dia mais antigo que espera o encerramento; se não houver, em ontem.
+function escolherDiaGerencia(){
+  var fim=hoje(), aguard=rotasPeriodo(somaDias(fim,-31), fim).filter(function(r){ return r.ciente && !ENC[r.ent+'_'+r.data]; });
+  return aguard.length ? aguard[aguard.length-1].data : somaDias(fim,-1);
+}
 function telaGerencia(){
+  if(gerDiaAuto){
+    if(!movCarregado || !encCarregado){ $('conteudo').innerHTML='<div class="card muted">Carregando…</div>'; return; }
+    gerDiaAuto=false; gerDia=escolherDiaGerencia();
+  }
   var h=MODO_TESTE?'<div class="alert a-y"><b>Fase de teste.</b> Nada daqui vai para as Entregas, Cobranças ou Caixa do Sistema Lelé.</div>':'';
   h+='<div class="stitle">Fechamento</div><div class="card"><div class="field"><label>Data da carga</label><input class="inp" type="date" id="g-dia" value="'+gerDia+'"></div><div class="muted">Lista de clientes da operação: '+CLI.length+' (atualizada a partir do cadastro do sistema).</div></div>';
   h+=blocoAvisosGerencia();
@@ -948,7 +959,7 @@ function telaGerencia(){
     h+='</div>';
   });
   $('conteudo').innerHTML=h;
-  $('g-dia').onchange=function(){ gerDia=this.value||hoje(); assinarMov(); render(); };
+  $('g-dia').onchange=function(){ gerDiaAuto=false; gerDia=this.value||hoje(); assinarMov(); render(); };
   document.querySelectorAll('.cd-btn').forEach(function(b){ b.onclick=function(){
     var s=b.getAttribute('data-s'), k=b.getAttribute('data-k');
     if(!confirm(s==='aprovada'?'Aprovar esta correção? Os números passam a valer o novo valor (o original fica no histórico).':'Rejeitar esta correção?')) return;
@@ -966,7 +977,7 @@ function telaGerencia(){
     var o=base('pixok',ent,gerDia); o.valor=Math.round(v*100)/100; gravar(OP+'/mov',o); toast('Pix conferido ✓');
   }; });
   ligarCorrecoes(); ligarClientesNovos();
-  document.querySelectorAll('.ir-dia').forEach(function(a){ a.onclick=function(ev){ ev.preventDefault(); gerDia=a.getAttribute('data-d'); render(); window.scrollTo(0,0); }; });
+  document.querySelectorAll('.ir-dia').forEach(function(a){ a.onclick=function(ev){ ev.preventDefault(); gerDiaAuto=false; gerDia=a.getAttribute('data-d'); render(); window.scrollTo(0,0); }; });
   document.querySelectorAll('.enc-btn').forEach(function(b){ b.onclick=function(){
     var ent=b.getAttribute('data-ent'), dec=($('enc-dec-'+ent)||{}).value||'', com=(($('enc-com-'+ent)||{}).value||'').trim();
     if(b.getAttribute('data-dif')==='1' && !dec) return toast('Escolha a decisão sobre a diferença');
@@ -1051,7 +1062,7 @@ function importarEntregas(ent, data, btn){
 var ABAS = {
   fabrica:[['retorno','Conferência'],['carga','Saída']],
   entregador:[['rota','Minhas entregas']],
-  gerencia:[['gerencia','Fechamento'],['retorno','Conferência'],['carga','Saída'],['rota','Rota']]
+  gerencia:[['gerencia','Fechamento']]
 };
 function montarNav(){
   var abas=ABAS[U.papel]; if(!aba) aba=abas[0][0];
@@ -1109,7 +1120,7 @@ function assinarMov(){
   var ini = somaDias(hoje(), -(U.papel==='gerencia' ? 31 : DIAS_ROTA)); if(gerDia<ini) ini=gerDia;
   subMov = db.ref(OP+'/mov').orderByChild('data').startAt(ini);
   subMov.on('value', function(s){
-    var v=s.val()||{}; MOV=comFila(Object.keys(v).map(function(k){ var o=v[k]; o._key=k; return o; }));
+    var v=s.val()||{}; MOV=comFila(Object.keys(v).map(function(k){ var o=v[k]; o._key=k; return o; })); movCarregado=true;
     guardarLocal(LOCAL_MOV, MOV.filter(function(m){return !m._pendente;}).map(function(m){ var c=Object.assign({},m); delete c.assinatura; return c; }));
     renderAoMudar();
   }, function(e){ toast('Sem acesso aos lançamentos: '+e.message, 6000); });
@@ -1128,7 +1139,7 @@ function iniciar(){
   db.ref(OP+'/clinovo').on('value', function(s){ CLINOVO_SRV=s.val()||{}; var cp={}; Object.keys(CLINOVO_SRV).forEach(function(k){ cp[k]=CLINOVO_SRV[k]; }); guardarLocal(LOCAL_NOVO, cp); montarCLI(); renderAoMudar(); });
   if(U.papel==='gerencia') db.ref('clientes').on('value', function(s){ CLI_FULL=s.val()||{}; sincronizarClientes(CLI_FULL); renderAoMudar(); });
   db.ref(OP+'/corr').on('value', function(s){ CORR=s.val()||{}; renderAoMudar(); });
-  db.ref(OP+'/encerrados').on('value', function(s){ ENC=s.val()||{}; renderAoMudar(); });
+  db.ref(OP+'/encerrados').on('value', function(s){ ENC=s.val()||{}; encCarregado=true; renderAoMudar(); });
   if(U.papel==='gerencia') db.ref(OP+'/importadas').on('value', function(s){ IMP=s.val()||{}; renderAoMudar(); });
   assinarMov();
   db.ref('.info/connected').on('value', function(s){ var on=!!s.val(); $('conexao').textContent=on?'online':'sem internet — salvando no aparelho'; $('conexao').className=on?'':'off'; if(on) reenviarFila(); });
@@ -1181,7 +1192,7 @@ auth.onAuthStateChanged(function(user){
   $('quem').textContent=U.nome;
   // Link vindo do sistema ("Abrir fechamento do dia"): operacao.html#dia=AAAA-MM-DD
   var mh=(location.hash||'').match(/dia=(\d{4}-\d{2}-\d{2})/);
-  if(mh && U.papel==='gerencia'){ gerDia=mh[1]; aba='gerencia'; }
+  if(mh && U.papel==='gerencia'){ gerDia=mh[1]; aba='gerencia'; gerDiaAuto=false; }
   if(!iniciado){ iniciado=true; iniciar(); }
 });
 </script>

@@ -1101,6 +1101,9 @@ auth.onAuthStateChanged(function(user){
   else { auth.signOut(); $('login').style.display='flex'; $('login-erro').textContent='A conta '+email+' não tem acesso.'; return; }
   $('login').style.display='none';
   $('quem').textContent=U.nome;
+  // Link vindo do sistema ("Abrir fechamento do dia"): operacao.html#dia=AAAA-MM-DD
+  var mh=(location.hash||'').match(/dia=(\d{4}-\d{2}-\d{2})/);
+  if(mh && U.papel==='gerencia'){ gerDia=mh[1]; aba='gerencia'; }
   if(!iniciado){ iniciado=true; iniciar(); }
 });
 </script>

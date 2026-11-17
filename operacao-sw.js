@@ -4,12 +4,13 @@
 // - Página da operação: busca na internet primeiro; sem sinal, usa a cópia salva.
 // - Bibliotecas do Firebase (gstatic.com, com versão fixa): usa a cópia salva.
 // - Banco de dados e login: nunca passam por aqui (o Firebase cuida do offline).
-var CACHE = 'lele-operacao-v1';
+var CACHE = 'lele-operacao-v2';
 var ARQUIVOS = [
   'operacao.html', 'operacao-manifest.json', 'operacao-icon-192.png', 'operacao-icon-512.png',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js',
-  'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js'
+  'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
 ];
 self.addEventListener('install', function(e){
   e.waitUntil(caches.open(CACHE).then(function(c){
@@ -26,7 +27,7 @@ self.addEventListener('fetch', function(e){
   if(req.method !== 'GET') return;
   var url = new URL(req.url);
   // Bibliotecas do Firebase com versão fixa: cópia salva primeiro
-  if(url.hostname === 'www.gstatic.com' && url.pathname.indexOf('/firebasejs/9.23.0/') === 0){
+  if((url.hostname === 'www.gstatic.com' && url.pathname.indexOf('/firebasejs/9.23.0/') === 0) || (url.hostname === 'cdnjs.cloudflare.com' && url.pathname.indexOf('/ajax/libs/jspdf/2.5.1/') === 0)){
     e.respondWith(caches.match(req).then(function(r){ return r || fetch(req).then(function(resp){
       var cp = resp.clone(); caches.open(CACHE).then(function(c){ c.put(req, cp); }); return resp; }); }));
     return;

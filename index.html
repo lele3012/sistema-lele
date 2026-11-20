@@ -1532,7 +1532,7 @@ function carregar() {
 
     db.ref('clientes').on('value', function(snap) {
       D.clientes = snapToArray(snap.val());
-      renderClis(); popSelCli(); pronto();
+      renderClis(); popSelCli(); pronto(); agendarSyncOp();
     }, erroLeitura('clientes'));
     db.ref('entregas').on('value', function(snap) {
       D.entregas = snapToArray(snap.val());
@@ -1541,7 +1541,7 @@ function carregar() {
       if(id==='cobrancas') renderCob();
       if(id==='historico') renderHist();
       if(id==='financeiro') { renderFluxo(); renderSemana(); }
-      pronto();
+      pronto(); agendarSyncOp();
     }, erroLeitura('entregas'));
     db.ref('caixas').on('value', function(snap) {
       D.caixas = snapToArray(snap.val());
@@ -7500,6 +7500,49 @@ function nomeArquivoComprovante(d){
   return (d.tipo==='recibo'?'Recibo_':'Comprovante_')+(d.numero?d.numero+'_':'')+n+'.pdf';
 }
 
+// Lista de clientes que vai para os celulares da operação (op_clientes).
+// Mesmo código no app e no sistema, para os dois gravarem exatamente igual.
+function montarOpClientes(todos){
+  var lista={};
+  Object.keys(todos||{}).forEach(function(k){ var c=todos[k]; if(!c || c.id==null) return;
+    var o={id:c.id, nome:c.nome||''}; if(c.fantasia) o.fantasia=c.fantasia;
+    var docC=String(c.cnpj||c.cpf||'').replace(/\D/g,''); if(docC) o.doc=docC;
+    var endC=[[c.end,c.num].filter(Boolean).join(', '), c.comp, c.bairro, [c.cidade,c.uf].filter(Boolean).join('/'), c.cep?'CEP '+c.cep:''].filter(Boolean).join(' - '); if(endC) o.endereco=endC;
+    if(c.bairro) o.bairro=c.bairro;
+    if(c.whats||c.tel) o.whats=c.whats||c.tel;
+    if(c.seg) o.seg=c.seg==='outro'?(c.segOutro||'outro'):c.seg;
+    if(c.status && c.status!=='ativo') o.status=c.status;
+    if(c.vendedor) o.vendedor=c.vendedor;
+    if(c.precos){ var p={}; Object.keys(c.precos).forEach(function(pk){ var v=parseFloat(c.precos[pk]); if(v>0) p[pk]=v; }); if(Object.keys(p).length) o.precos=p; }
+    lista[k]=o; });
+  return lista;
+}
+
+// Mantém atualizados, para o app da operação: a lista de clientes (op_clientes)
+// e o histórico de compras de cada cliente (op_hist), usado pelo Vendedor.
+// Só grava quando algo mudou. Não altera clientes nem entregas.
+var opSyncT=null;
+function opCanon(o){ if(Array.isArray(o)) return '['+o.map(opCanon).join(',')+']'; if(o && typeof o==='object') return '{'+Object.keys(o).sort().map(function(k){ return JSON.stringify(k)+':'+opCanon(o[k]); }).join(',')+'}'; return JSON.stringify(o); }
+function agendarSyncOp(){ clearTimeout(opSyncT); opSyncT=setTimeout(opSincronizarApp, 2500); }
+function opGravarSeMudou(caminho, valor){
+  return db.ref(caminho).once('value').then(function(s){ if(opCanon(s.val()||{})!==opCanon(valor)) return db.ref(caminho).set(valor); });
+}
+function opSincronizarApp(){
+  if(!D.clientes || !D.clientes.length) return;
+  var todos={}; D.clientes.forEach(function(c){ if(c._key) todos[c._key]=c; });
+  opGravarSeMudou('op_clientes', montarOpClientes(todos)).catch(function(e){ console.warn('op_clientes', e); });
+  var porCli={}, lim=(function(){ var x=new Date(); x.setDate(x.getDate()-90); return isoLocal(x); })();
+  (D.entregas||[]).forEach(function(e){ if(e.clienteId==null || !e.data) return; (porCli[e.clienteId]=porCli[e.clienteId]||[]).push(e); });
+  var hist={};
+  Object.keys(porCli).forEach(function(id){
+    var l=porCli[id].sort(function(a,b){ return a.data<b.data?1:a.data>b.data?-1:0; });
+    var q=function(e){ var p=e.produtos||{}; return Object.keys(p).reduce(function(s,k){ return s+(parseInt(p[k],10)||0); },0); };
+    var r90=l.filter(function(e){ return e.data>=lim; }), base=r90.length?r90:l.slice(0,6);
+    hist[id]={ult:l[0].data, n90:r90.length, med:base.length?Math.round(base.reduce(function(s,e){ return s+q(e); },0)/base.length):0,
+      u:l.slice(0,6).map(function(e){ var p={}; Object.keys(e.produtos||{}).forEach(function(k){ var n=parseInt(e.produtos[k],10)||0; if(n) p[k]=n; }); return {d:e.data, q:q(e), v:Math.round((e.valorTotal||0)*100)/100, p:p}; })};
+  });
+  opGravarSeMudou('op_hist', hist).catch(function(e){ console.warn('op_hist', e); });
+}
 var opDados = null;
 // Comprovante/recibo de uma nota do app, com os dados completos do cadastro
 function opDadosComp(m){
@@ -7633,9 +7676,13 @@ function opGerar(){
     db.ref(OP_HIST+'/mov').orderByChild('data').startAt(qIni).endAt(qFim).once('value'),
     db.ref(OP_HIST+'/corr').once('value'),
     db.ref(OP_HIST+'/clinovo').once('value'),
-    db.ref(OP_HIST+'/encerrados').once('value')
+    db.ref(OP_HIST+'/encerrados').once('value'),
+    db.ref(OP_HIST+'/pedidos').once('value')
   ]).then(function(sn){
-    var movRaw=sn[0].val()||{}, corr=sn[1].val()||{}, clinovo=sn[2].val()||{}, enc=sn[3].val()||{};
+    var movRaw=sn[0].val()||{}, corr=sn[1].val()||{}, clinovo=sn[2].val()||{}, enc=sn[3].val()||{}, pedRaw=sn[4].val()||{};
+    var pedidos=Object.keys(pedRaw).map(function(k){ var p=pedRaw[k]; p._key=k; return p; }).sort(function(a,b){ return (b.tsLocal||0)-(a.tsLocal||0); });
+    var pedPend=pedidos.filter(function(p){ return !p.decisao; });
+    var pedPer=pedidos.filter(function(p){ return p.data>=per.ini && p.data<=per.fim; });
     var todos=Object.keys(movRaw).map(function(k){ var o=movRaw[k]; o._key=k; return o; });
     function montarRotas(lista){
       var grupos={};
@@ -7656,7 +7703,7 @@ function opGerar(){
     var novos=Object.keys(clinovo).map(function(k){ return clinovo[k]; }).filter(function(c){ var d=c.tsLocal?opDataLocal(c.tsLocal):c.data; return d>=per.ini && d<=per.fim; });
     var movPorKey={}; rotas.forEach(function(r){ r.vendas.concat(r.recebs).forEach(function(m){ movPorKey[m._key]=m; }); });
     var novosPorId={}; Object.keys(clinovo).forEach(function(k){ novosPorId[clinovo[k].id]=clinovo[k]; });
-    opDados={per:per, rotas:rotas, corrs:corrs, novos:novos, tot:opTotais(rotas, corrs, novos), alertas:alertas, aguardando:aguardando, investigando:investigando, movPorKey:movPorKey, novosPorId:novosPorId};
+    opDados={per:per, rotas:rotas, corrs:corrs, novos:novos, tot:opTotais(rotas, corrs, novos), alertas:alertas, aguardando:aguardando, investigando:investigando, movPorKey:movPorKey, novosPorId:novosPorId, pedPend:pedPend, pedPer:pedPer};
     opRender();
   }).catch(function(e){ res.innerHTML='<div class="alert alert-r">Não consegui carregar: '+opEsc(e.message||e)+'</div>'; });
 }
@@ -7706,6 +7753,7 @@ function opRender(){
   var topo='';
   if(d.alertas.length) topo+='<div class="alert alert-r" style="margin-bottom:10px"><b>⚠️ Alertas dos últimos 30 dias</b><br>'+d.alertas.map(opEsc).join('<br>')+'</div>';
   if(d.aguardando.length) topo+='<div class="alert alert-y" style="margin-bottom:10px"><b>Dias aguardando você encerrar: '+d.aguardando.length+'</b><br>'+d.aguardando.map(function(r){ return '<a target="_blank" href="operacao.html#dia='+r.data+'" style="color:inherit;font-weight:700">'+fdata(r.data)+' · '+opEsc(opNomeEnt(r.ent))+'</a>'; }).join(' &nbsp; ')+'</div>';
+  if(d.pedPend.length) topo+='<div class="alert alert-y" style="margin-bottom:10px"><b>Pedidos do vendedor aguardando aprovação: '+d.pedPend.length+'</b><br>'+d.pedPend.map(function(p){ return opEsc(p.cliNome)+' · '+fmt(p.valor); }).join('<br>')+'<br><a target="_blank" href="operacao.html" style="color:inherit;font-weight:700">Abrir o app para aprovar →</a></div>';
   if(d.investigando.length) topo+='<div class="alert alert-y" style="margin-bottom:10px"><b>Em investigação: '+d.investigando.length+'</b><br>'+d.investigando.map(function(r){ return fdata(r.data)+' · '+opEsc(opNomeEnt(r.ent))+(r.enc.comentario?' — '+opEsc(r.enc.comentario):''); }).join('<br>')+'</div>';
   if(!d.rotas.length){ res.innerHTML=topo+'<div class="alert alert-i">Nenhuma rota lançada no app neste período ('+d.per.label+').</div>'; return; }
   h+=topo;
@@ -7738,6 +7786,15 @@ function opRender(){
     opLinha('Correções', t.corr.total+' ('+t.corr.aprovadas+' aprovadas, '+t.corr.rejeitadas+' rejeitadas, '+t.corr.pendentes+' pendentes)')+
     opLinha('Clientes novos', t.novos.total+(t.novos.total?' — '+Object.keys(t.novos.porVend).map(function(v){ return opEsc(v)+': '+t.novos.porVend[v]; }).join(', '):''))+
     (t.ocorr.length?'<div style="margin-top:8px">'+t.ocorr.map(function(o){ return '<div style="font-size:12px;padding:5px 0;border-top:1px solid #f0ede8"><b>'+fdata(o[0])+' · '+opEsc(o[2])+'</b> <span style="color:#888">('+opEsc(o[1])+')</span><br>'+opEsc(o[3])+'</div>'; }).join('')+'</div>':'')+'</div>';
+  if(d.pedPer.length){
+    var stP=function(p){ return !p.decisao?'aguardando':p.decisao.status==='aprovado'?(p.decisao.ajustado?'aprovado c/ ajuste':'aprovado'):'recusado'; };
+    var vP=function(p){ return (p.decisao&&p.decisao.valor!=null)?p.decisao.valor:p.valor; };
+    var tP=function(p){ return (p.decisao&&p.decisao.totais)||p.totais||{}; };
+    h+='<div class="stitle">Pedidos do vendedor ('+d.pedPer.length+')</div><div class="card">'+
+      opLinha('Aprovados', d.pedPer.filter(function(p){return p.decisao&&p.decisao.status==='aprovado';}).length+' · '+fmt(d.pedPer.filter(function(p){return p.decisao&&p.decisao.status==='aprovado';}).reduce(function(s,p){return s+vP(p);},0)))+
+      opLinha('Aguardando / recusados', d.pedPer.filter(function(p){return !p.decisao;}).length+' / '+d.pedPer.filter(function(p){return p.decisao&&p.decisao.status==='recusado';}).length)+
+      d.pedPer.map(function(p){ var t=tP(p); return '<div style="font-size:12px;padding:5px 0;border-top:1px solid #f0ede8"><b>'+fdata(p.data)+' · '+opEsc(p.cliNome)+'</b>'+(p.cliNovo?' (novo)':'')+' — '+stP(p)+'<br>'+(t.bola||0)+' Bola · '+(t.integral||0)+' Integral · '+(t.mini||0)+' Mini · '+fmt(vP(p))+(p.decisao&&p.decisao.motivo?'<br><span style="color:#888">'+opEsc(p.decisao.motivo)+'</span>':'')+'</div>'; }).join('')+'</div>';
+  }
   h+='<div class="stitle">Dia a dia</div>'+d.rotas.map(function(r){
     var st = (!r.fechada ? '' : r.temQualquerDif ? '<span class="badge" style="background:var(--rl);color:var(--r)">🔴 diferença</span> ' : '<span class="badge" style="background:var(--gl);color:var(--g)">🟢 bateu</span> ')+'<span class="badge" style="background:'+r.status.bg+';color:'+r.status.cor+'">'+opEsc(r.status.txt)+'</span>';
     var difs=[]; OP_PRODS.forEach(function(p){ if(r.dif[p[0]]) difs.push(p[1]+' '+(r.dif[p[0]]>0?'+':'')+r.dif[p[0]]); });
@@ -7799,6 +7856,13 @@ function opExcel(){
     r.recebs.forEach(function(x){ lr.push([fdata(x.data), opNomeEnt(x.ent), x.cliNome||'', x.forma==='pix'?'PIX':'Dinheiro', opR2(x.valor), x.ref||'', x.pagoPor||'', opHora(x.tsLocal)]); });
   });
   aba('Despesas', ld); aba('Recebimentos', lr);
+  var SAB={frangomilho:'Frango com Milho',frangoperu:'Frango com Peru',frangopalha:'Frango com Palha',frangopassas:'Frango com Passas',frangoricota:'Frango com Ricota',frangoazeitona:'Frango com Azeitona',peru:'Peito de Peru',atum:'Atum',salpicao:'Salpicão'};
+  var nomeIt=function(k){ if(k==='mini') return 'Mini'; var p=k.split('_'); return (p[0]==='bola'?'Bola':'Integral')+' '+(SAB[p[1]]||p[1]); };
+  aba('Pedidos vendedor', [['Data','Cliente','Cliente novo','Situação','Itens por sabor','Bola','Integral','Mini','Valor','Forma','Observação','Comentário da gerência']].concat(d.pedPer.map(function(p){
+    var it=(p.decisao&&p.decisao.itens)||p.itens||{}, t=(p.decisao&&p.decisao.totais)||p.totais||{};
+    return [fdata(p.data), p.cliNome||'', p.cliNovo?'sim':'', !p.decisao?'Aguardando':p.decisao.status==='aprovado'?(p.decisao.ajustado?'Aprovado com ajuste':'Aprovado'):'Recusado',
+      Object.keys(it).map(function(k){ return it[k]+' '+nomeIt(k); }).join(', '), t.bola||0, t.integral||0, t.mini||0, (p.decisao&&p.decisao.valor!=null)?p.decisao.valor:p.valor, opNomeForma(p.forma), p.obs||'', (p.decisao&&p.decisao.motivo)||''];
+  })));
   aba('Alertas 30 dias', [['Alerta (últimos 30 dias a partir de hoje)']].concat(d.alertas.length?d.alertas.map(function(x){return [x];}):[['Nenhum alerta']]));
   aba('Ocorrências', [['Data','Quem','Tipo','Detalhe']].concat(t.ocorr.map(function(o){ return [fdata(o[0]), o[1], o[2], o[3]]; })));
   XLSX.writeFile(wb, 'Lele_Operacao_'+d.per.ini+'_a_'+d.per.fim+(OP_HIST_TESTE?'_TESTE':'')+'.xlsx');
